@@ -8,7 +8,7 @@ npx create-vite@latest annotator-app --template react-ts
 cd annotator-app
 
 # 2. Install dependencies
-npm install @tauri-apps/api@^1.5.0 pdfjs-dist@^3.11.174 pdf-lib@^1.17.5 lucide-react
+npm install @tauri-apps/api@^1.5.0 pdfjs-dist@^3.11.174 pdf-lib@^1.17.1 lucide-react
 npm install --save-dev @tauri-apps/cli@^1.5.0
 
 # 3. Initialize Tauri
