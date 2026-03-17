@@ -1,4 +1,4 @@
-name: Build Teaching PDF Annotator (Windows)
+name: Build Ultimate Native WinUI 3 App
 
 on:
   push:
@@ -6,68 +6,47 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-windows:
+  build-windows-native:
     runs-on: windows-latest
-    
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Setup .NET 8.0
+        uses: actions/setup-dotnet@v4
         with:
-          node-version: '20'
+          dotnet-version: '8.0.x'
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-pc-windows-msvc
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
 
-      # 1. GENERATE THE APP FIRST
-      # We must create the files using your bash script before caching kicks in, 
-      # otherwise the cache won't find the package-lock.json or Cargo.toml.
-      - name: Run Bash Generator Script
+      # 1. RUN BASH GENERATOR
+      - name: Generate Native Codebase
         shell: bash
         run: |
-          chmod +x generate_app.sh
-          ./generate_app.sh
+          chmod +x generate_winui_app.sh
+          ./generate_winui_app.sh
 
-      # 2. CACHE NPM DEPENDENCIES
-      # Saves the node_modules so it doesn't download hundreds of MBs every run.
-      - name: Cache NPM dependencies
-        uses: actions/cache@v4
-        with:
-          path: ~/.npm
-          key: ${{ runner.os }}-node-${{ hashFiles('annotator-app/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
+      # 2. RESTORE DEPENDENCIES
+      - name: Restore NuGet Packages
+        working-directory: ./TeachingAnnotator
+        run: dotnet restore
 
-      # 3. CACHE RUST DEPENDENCIES
-      # Uses a static shared-key so Cargo doesn't get confused by newly generated 
-      # file timestamps from the bash script. This skips the 15-minute Rust compilation.
-      - name: Cache Rust Dependencies
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: "annotator-app/src-tauri -> target"
-          shared-key: "tauri-windows-cache-v1"
+      # 3. COMPILE STANDALONE EXECUTABLE
+      - name: Compile and Publish Native EXE
+        working-directory: ./TeachingAnnotator
+        run: >
+          dotnet publish 
+          -c Release 
+          -r win10-x64 
+          --self-contained true 
+          -p:WindowsPackageType=None 
+          -p:WindowsAppSDKSelfContained=true
 
-      # 4. INSTALL NPM PACKAGES
-      - name: Install NPM Dependencies
-        working-directory: ./annotator-app
-        run: npm install
-
-      # 5. COMPILE THE EXE
-      # We use npx here so we don't have to waste time compiling the Tauri CLI globally.
-      - name: Build Tauri App
-        working-directory: ./annotator-app
-        run: npx tauri build
-
-      # 6. UPLOAD THE DOWNLOADABLE EXECUTABLE
-      # Tauri creates either an MSI or NSIS (exe) installer. This grabs whichever is generated.
-      - name: Upload Windows Artifacts
+      # 4. UPLOAD ARTIFACT
+      - name: Upload Native Windows Executable
         uses: actions/upload-artifact@v4
         with:
-          name: Teaching-Annotator-Windows
-          path: |
-            annotator-app/src-tauri/target/release/bundle/msi/*.msi
-            annotator-app/src-tauri/target/release/bundle/nsis/*.exe
+          name: Apex-Teaching-Annotator-Windows
+          path: TeachingAnnotator/bin/Release/net8.0-windows10.0.19041.0/win10-x64/publish/
