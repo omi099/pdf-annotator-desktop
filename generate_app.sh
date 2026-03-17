@@ -14,7 +14,7 @@ npm install --save-dev @tauri-apps/cli@^1.5.0
 # 3. Initialize Tauri
 npx tauri init --app-name "TeachingAnnotator" --window-title "Teaching PDF Annotator" --dist-dir "../dist" --dev-path "http://localhost:5173" --before-build-command "npm run build" --before-dev-command "npm run dev"
 
-# 4. Configure tauri.conf.json (With Icon and Security Permissions)
+# 4. Configure tauri.conf.json
 cat << 'EOF' > src-tauri/tauri.conf.json
 {
   "build": {
@@ -66,7 +66,7 @@ cat << 'EOF' > src-tauri/tauri.conf.json
 }
 EOF
 
-# 5. Write App.css (Using Native Crosshair Cursor)
+# 5. Write App.css
 cat << 'EOF' > src/App.css
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800&display=swap');
 
@@ -93,7 +93,6 @@ header { background-color: var(--panel-bg); padding: 15px 30px; display: flex; j
 .workspace { display: flex; flex: 1; overflow: hidden; position: relative; background-image: linear-gradient(to right, var(--grid-color) 1px, transparent 1px), linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px); background-size: 40px 40px; }
 .preview-container { flex: 1; overflow: auto; display: flex; justify-content: center; align-items: flex-start; }
 
-/* 🖱️ FIX: Use Native Crosshair for drawing mode, no lag */
 .scroll-wrapper { position: relative; display: flex; flex-direction: column; align-items: center; padding: 40px; touch-action: none; }
 .scroll-wrapper.draw-active, .scroll-wrapper.draw-active * { cursor: crosshair !important; }
 
@@ -111,7 +110,7 @@ header { background-color: var(--panel-bg); padding: 15px 30px; display: flex; j
 .size-badge { font-family: monospace; font-size: 0.9rem; font-weight: bold; color: #00ffcc; min-width: 25px; text-align: center; }
 EOF
 
-# 6. Write App.tsx (Optimized Native React Logic)
+# 6. Write App.tsx (Bulletproof PDF Export & Hardware Eraser Logic)
 cat << 'EOF' > src/App.tsx
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { open, save } from '@tauri-apps/api/dialog';
@@ -146,7 +145,18 @@ export default function App() {
   const strokesRef = useRef<Stroke[]>([]);
   const isDrawingRef = useRef(false);
 
-  // 1. TRUE ERASER MATH
+  // --- HARDWARE ERASER DETECTOR ---
+  const isHardwareEraser = (e: React.PointerEvent) => {
+    return tool === 'eraser' || 
+           e.pointerType === 'eraser' || 
+           (e.nativeEvent as any).pointerType === 'eraser' || 
+           e.button === 5 || 
+           (e.buttons & 32) !== 0 || 
+           e.button === 2 || 
+           (e.buttons & 2) !== 0; // Maps Barrel Button / Right Click to Eraser automatically
+  };
+
+  // --- MATH & DRAWING ENGINE ---
   const distPointToSegment = (px: number, py: number, x1: number, y1: number, x2: number, y2: number) => {
     let l2 = (x2 - x1) ** 2 + (y2 - y1) ** 2;
     if (l2 === 0) return Math.hypot(px - x1, py - y1);
@@ -232,7 +242,7 @@ export default function App() {
     setPages(loadedPages);
   };
 
-  // 2. OPTIMIZED HARDWARE POINTER EVENTS
+  // --- HARDWARE POINTER EVENTS ---
   const handleDown = (e: React.PointerEvent) => {
     if (!isDrawModeOn || e.pointerType === 'mouse') return;
     isDrawingRef.current = true;
@@ -242,9 +252,7 @@ export default function App() {
     const x = (e.clientX - rect.left) / zoom;
     const y = (e.clientY - rect.top) / zoom;
 
-    const currentTool = (e.pointerType as string) === 'eraser' ? 'eraser' : tool;
-
-    if (currentTool === 'eraser') {
+    if (isHardwareEraser(e)) {
       const hitRadius = 20 / zoom;
       const beforeCount = strokesRef.current.length;
       strokesRef.current = strokesRef.current.filter(s => {
@@ -265,9 +273,8 @@ export default function App() {
     const rect = canvasRef.current!.getBoundingClientRect();
     const x = (e.clientX - rect.left) / zoom;
     const y = (e.clientY - rect.top) / zoom;
-    const currentTool = (e.pointerType as string) === 'eraser' ? 'eraser' : tool;
 
-    if (currentTool === 'eraser') {
+    if (isHardwareEraser(e)) {
       const hitRadius = 20 / zoom;
       const beforeCount = strokesRef.current.length;
       strokesRef.current = strokesRef.current.filter(s => {
@@ -285,7 +292,6 @@ export default function App() {
       const newPoint = { x, y, pressure: usePressure ? (e.pressure || -1) : -1 };
       current.points.push(newPoint);
 
-      // PERFECT 60FPS: Draw only the new segment
       const ctx = ctxRef.current;
       if (ctx) {
         ctx.beginPath();
@@ -302,7 +308,7 @@ export default function App() {
 
   const clearCanvas = () => { strokesRef.current = []; redraw(); };
 
-  // 3. STABLE NATIVE EXPORT
+  // --- BUG-FREE PDF EXPORT ---
   const exportPDF = async () => {
     if (!pdfBytes) return;
     const path = await save({ defaultPath: 'Annotated.pdf', filters: [{ name: 'PDF', extensions: ['pdf'] }] });
@@ -315,12 +321,18 @@ export default function App() {
 
       for (let i = 0; i < pages.length; i++) {
         const pData = pages[i];
+        
+        // OPTIMIZATION: Skip generating a PNG if this page has absolutely no strokes on it.
+        const pageTop = pData.startY;
+        const pageBottom = pData.startY + pData.baseHeight;
+        const hasStrokes = strokesRef.current.some(s => s.points.some(p => p.y >= pageTop && p.y <= pageBottom));
+        if (!hasStrokes) continue;
+
         const exportCanvas = document.createElement('canvas');
         exportCanvas.width = pData.baseWidth * 2;
         exportCanvas.height = pData.baseHeight * 2;
         const eCtx = exportCanvas.getContext('2d')!;
         
-        // Match the coordinate systems perfectly
         eCtx.scale(2, 2);
         eCtx.translate(0, -pData.startY);
 
@@ -335,10 +347,17 @@ export default function App() {
           }
         });
 
-        // Generate Base64 to bypass CSP fetch limitations natively in Windows Webview
+        // CRITICAL FIX: Strip the "data:image/png;base64," prefix and convert natively to byte array
         const pngDataUrl = exportCanvas.toDataURL('image/png');
-        const png = await pdfDoc.embedPng(pngDataUrl);
-        
+        const base64Data = pngDataUrl.split(',')[1];
+        const binaryString = atob(base64Data);
+        const len = binaryString.length;
+        const bytes = new Uint8Array(len);
+        for (let j = 0; j < len; j++) {
+            bytes[j] = binaryString.charCodeAt(j);
+        }
+
+        const png = await pdfDoc.embedPng(bytes);
         const { width, height } = pdfPages[i].getSize();
         pdfPages[i].drawImage(png, { x: 0, y: 0, width, height });
       }
@@ -348,11 +367,28 @@ export default function App() {
       alert("Saved Successfully!");
     } catch (err) {
       console.error("Export failed:", err);
-      alert("Failed to export PDF.");
+      alert("Failed to export PDF. Check console for details.");
     } finally {
       setIsExporting(false);
     }
   };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() === 'h') { setIsToolbarHidden(prev => !prev); return; }
+      if (!isDrawModeOn) return;
+      switch(e.key.toLowerCase()) {
+        case 'w': setUsePressure(p => !p); break; 
+        case 'p': setTool('pen'); break;
+        case 'e': setTool('eraser'); break;
+        case 'c': clearCanvas(); break;
+        case ']': setSize(s => Math.min(60, s + 2)); break;
+        case '[': setSize(s => Math.max(1, s - 2)); break;
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isDrawModeOn]);
 
   return (
     <>
@@ -382,6 +418,7 @@ export default function App() {
       <div className="workspace">
         <div className="preview-container">
           <div className={`scroll-wrapper ${isDrawModeOn ? 'draw-active' : ''}`} ref={scrollWrapperRef}
+               onContextMenu={(e) => e.preventDefault()}
                onPointerDown={handleDown} onPointerMove={handleMove} onPointerUp={() => isDrawingRef.current = false} onPointerCancel={() => isDrawingRef.current = false} onPointerOut={() => isDrawingRef.current = false}>
             <canvas id="draw-canvas" ref={canvasRef} />
             <div className="pdf-container">
