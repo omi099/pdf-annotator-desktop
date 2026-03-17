@@ -3,11 +3,11 @@ set -e
 
 echo "🚀 Bootstrapping Native WinUI 3 Teaching Annotator..."
 
-# 1. Install Microsoft's Native Windows App SDK Templates
-dotnet new install Microsoft.WindowsAppSDK.Templates
+# 1. Install Community WinUI CLI Templates (Bypasses Microsoft's VS-only restriction)
+dotnet new install VijayAnand.WinUITemplates
 
-# 2. Create the WinUI 3 Project (Blank App)
-dotnet new winui -n TeachingAnnotator
+# 2. Create the WinUI 3 Project
+dotnet new winui -n TeachingAnnotator -f net8.0
 cd TeachingAnnotator
 
 # 3. Overwrite the .csproj for Unpackaged, Self-Contained .EXE generation
