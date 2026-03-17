@@ -110,7 +110,7 @@ header { background-color: var(--panel-bg); padding: 15px 30px; display: flex; j
 .size-badge { font-family: monospace; font-size: 0.9rem; font-weight: bold; color: #00ffcc; min-width: 25px; text-align: center; }
 EOF
 
-# 6. Write App.tsx (Bulletproof PDF Export & Hardware Eraser Logic)
+# 6. Write App.tsx (Typescript Bug Fixed)
 cat << 'EOF' > src/App.tsx
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { open, save } from '@tauri-apps/api/dialog';
@@ -145,15 +145,15 @@ export default function App() {
   const strokesRef = useRef<Stroke[]>([]);
   const isDrawingRef = useRef(false);
 
-  // --- HARDWARE ERASER DETECTOR ---
+  // --- HARDWARE ERASER DETECTOR (TS ERROR FIXED) ---
   const isHardwareEraser = (e: React.PointerEvent) => {
     return tool === 'eraser' || 
-           e.pointerType === 'eraser' || 
+           (e.pointerType as string) === 'eraser' || 
            (e.nativeEvent as any).pointerType === 'eraser' || 
            e.button === 5 || 
            (e.buttons & 32) !== 0 || 
            e.button === 2 || 
-           (e.buttons & 2) !== 0; // Maps Barrel Button / Right Click to Eraser automatically
+           (e.buttons & 2) !== 0; 
   };
 
   // --- MATH & DRAWING ENGINE ---
@@ -322,7 +322,6 @@ export default function App() {
       for (let i = 0; i < pages.length; i++) {
         const pData = pages[i];
         
-        // OPTIMIZATION: Skip generating a PNG if this page has absolutely no strokes on it.
         const pageTop = pData.startY;
         const pageBottom = pData.startY + pData.baseHeight;
         const hasStrokes = strokesRef.current.some(s => s.points.some(p => p.y >= pageTop && p.y <= pageBottom));
@@ -347,7 +346,6 @@ export default function App() {
           }
         });
 
-        // CRITICAL FIX: Strip the "data:image/png;base64," prefix and convert natively to byte array
         const pngDataUrl = exportCanvas.toDataURL('image/png');
         const base64Data = pngDataUrl.split(',')[1];
         const binaryString = atob(base64Data);
