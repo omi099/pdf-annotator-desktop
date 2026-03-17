@@ -1,14 +1,14 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping Final Hardware-Accurate PDF Annotator..."
+echo "🚀 Bootstrapping Final Crash-Proof PDF Annotator..."
 
 # 1. Create Vite/React/TS project
 npx create-vite@latest annotator-app --template react-ts
 cd annotator-app
 
-# 2. Install dependencies (Pinned versions for guaranteed stability)
-npm install @tauri-apps/api@^1.5.0 pdfjs-dist@^3.11.174 pdf-lib@^1.17.1
+# 2. Install dependencies (Swapped pdf-lib for jspdf)
+npm install @tauri-apps/api@^1.5.0 pdfjs-dist@^3.11.174 jspdf@^2.5.1
 npm install --save-dev @tauri-apps/cli@^1.5.0
 
 # 3. Initialize Tauri
@@ -66,7 +66,7 @@ cat << 'EOF' > src-tauri/tauri.conf.json
 }
 EOF
 
-# 5. Write App.css
+# 5. Write App.css (Native Crosshair Cursor for zero latency)
 cat << 'EOF' > src/App.css
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800&display=swap');
 
@@ -110,13 +110,13 @@ header { background-color: var(--panel-bg); padding: 15px 30px; display: flex; j
 .size-badge { font-family: monospace; font-size: 0.9rem; font-weight: bold; color: #00ffcc; min-width: 25px; text-align: center; }
 EOF
 
-# 6. Write App.tsx (Typescript Bug Fixed)
+# 6. Write App.tsx (Crash-Proof jsPDF Export & Instant Hardware Eraser)
 cat << 'EOF' > src/App.tsx
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { open, save } from '@tauri-apps/api/dialog';
 import { readBinaryFile, writeBinaryFile } from '@tauri-apps/api/fs';
 import * as pdfjsLib from 'pdfjs-dist';
-import { PDFDocument } from 'pdf-lib';
+import { jsPDF } from 'jspdf';
 import './App.css';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
@@ -145,18 +145,12 @@ export default function App() {
   const strokesRef = useRef<Stroke[]>([]);
   const isDrawingRef = useRef(false);
 
-  // --- HARDWARE ERASER DETECTOR (TS ERROR FIXED) ---
-  const isHardwareEraser = (e: React.PointerEvent) => {
-    return tool === 'eraser' || 
-           (e.pointerType as string) === 'eraser' || 
-           (e.nativeEvent as any).pointerType === 'eraser' || 
-           e.button === 5 || 
-           (e.buttons & 32) !== 0 || 
-           e.button === 2 || 
-           (e.buttons & 2) !== 0; 
-  };
+  // Instant Hardware Eraser Refs (Bypasses React State Delay)
+  const activeToolRef = useRef<'pen' | 'eraser'>('pen');
+  const tempToolRevertRef = useRef<'pen' | 'eraser' | null>(null);
 
-  // --- MATH & DRAWING ENGINE ---
+  useEffect(() => { activeToolRef.current = tool; }, [tool]);
+
   const distPointToSegment = (px: number, py: number, x1: number, y1: number, x2: number, y2: number) => {
     let l2 = (x2 - x1) ** 2 + (y2 - y1) ** 2;
     if (l2 === 0) return Math.hypot(px - x1, py - y1);
@@ -242,7 +236,7 @@ export default function App() {
     setPages(loadedPages);
   };
 
-  // --- HARDWARE POINTER EVENTS ---
+  // --- HARDWARE POINTER EVENTS (FIXED ERASER) ---
   const handleDown = (e: React.PointerEvent) => {
     if (!isDrawModeOn || e.pointerType === 'mouse') return;
     isDrawingRef.current = true;
@@ -252,7 +246,14 @@ export default function App() {
     const x = (e.clientX - rect.left) / zoom;
     const y = (e.clientY - rect.top) / zoom;
 
-    if (isHardwareEraser(e)) {
+    // Direct hardware check (Side button = e.button === 2 or e.buttons & 2)
+    if (e.pointerType === 'eraser' || e.button === 5 || (e.buttons & 32) || e.button === 2 || (e.buttons & 2)) {
+      tempToolRevertRef.current = activeToolRef.current;
+      activeToolRef.current = 'eraser';
+      setTool('eraser'); // Update UI
+    }
+
+    if (activeToolRef.current === 'eraser') {
       const hitRadius = 20 / zoom;
       const beforeCount = strokesRef.current.length;
       strokesRef.current = strokesRef.current.filter(s => {
@@ -274,7 +275,7 @@ export default function App() {
     const x = (e.clientX - rect.left) / zoom;
     const y = (e.clientY - rect.top) / zoom;
 
-    if (isHardwareEraser(e)) {
+    if (activeToolRef.current === 'eraser') {
       const hitRadius = 20 / zoom;
       const beforeCount = strokesRef.current.length;
       strokesRef.current = strokesRef.current.filter(s => {
@@ -306,9 +307,18 @@ export default function App() {
     }
   };
 
+  const handleUp = (e: React.PointerEvent) => {
+    isDrawingRef.current = false;
+    if (tempToolRevertRef.current) {
+      activeToolRef.current = tempToolRevertRef.current;
+      setTool(tempToolRevertRef.current);
+      tempToolRevertRef.current = null;
+    }
+  };
+
   const clearCanvas = () => { strokesRef.current = []; redraw(); };
 
-  // --- BUG-FREE PDF EXPORT ---
+  // --- CRASH-PROOF jsPDF EXPORT ---
   const exportPDF = async () => {
     if (!pdfBytes) return;
     const path = await save({ defaultPath: 'Annotated.pdf', filters: [{ name: 'PDF', extensions: ['pdf'] }] });
@@ -316,53 +326,59 @@ export default function App() {
 
     setIsExporting(true);
     try {
-      const pdfDoc = await PDFDocument.load(pdfBytes);
-      const pdfPages = pdfDoc.getPages();
+      const pdf = await pdfjsLib.getDocument({ data: pdfBytes }).promise;
+      let doc: jsPDF | null = null;
 
-      for (let i = 0; i < pages.length; i++) {
-        const pData = pages[i];
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const viewport = page.getViewport({ scale: 2.0 }); // Render crisp at 2x
         
-        const pageTop = pData.startY;
-        const pageBottom = pData.startY + pData.baseHeight;
-        const hasStrokes = strokesRef.current.some(s => s.points.some(p => p.y >= pageTop && p.y <= pageBottom));
-        if (!hasStrokes) continue;
+        const canvas = document.createElement('canvas');
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        const ctx = canvas.getContext('2d')!;
+        
+        // 1. Draw Original PDF Background
+        await page.render({ canvasContext: ctx, viewport }).promise;
 
-        const exportCanvas = document.createElement('canvas');
-        exportCanvas.width = pData.baseWidth * 2;
-        exportCanvas.height = pData.baseHeight * 2;
-        const eCtx = exportCanvas.getContext('2d')!;
-        
-        eCtx.scale(2, 2);
-        eCtx.translate(0, -pData.startY);
+        // 2. Draw Annotations on top
+        const pData = pages[i - 1];
+        ctx.save();
+        ctx.scale(2.0, 2.0);
+        ctx.translate(0, -pData.startY);
 
         strokesRef.current.forEach(s => {
-          eCtx.strokeStyle = s.color;
-          eCtx.lineCap = 'round'; eCtx.lineJoin = 'round';
+          if(s.points.length < 2) return;
+          ctx.strokeStyle = s.color;
+          ctx.lineCap = 'round'; ctx.lineJoin = 'round';
           for (let j = 0; j < s.points.length - 1; j++) {
             const p1 = s.points[j]; const p2 = s.points[j+1];
-            eCtx.beginPath(); eCtx.moveTo(p1.x, p1.y); eCtx.lineTo(p2.x, p2.y);
-            eCtx.lineWidth = s.size * (p1.pressure === -1 ? 1 : Math.pow(p1.pressure, 1.5) * 2);
-            eCtx.stroke();
+            ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y);
+            ctx.lineWidth = s.size * (p1.pressure === -1 ? 1 : Math.pow(p1.pressure, 1.5) * 2);
+            ctx.stroke();
           }
         });
+        ctx.restore();
 
-        const pngDataUrl = exportCanvas.toDataURL('image/png');
-        const base64Data = pngDataUrl.split(',')[1];
-        const binaryString = atob(base64Data);
-        const len = binaryString.length;
-        const bytes = new Uint8Array(len);
-        for (let j = 0; j < len; j++) {
-            bytes[j] = binaryString.charCodeAt(j);
+        // 3. Compress directly to JPEG and add to jsPDF
+        const imgData = canvas.toDataURL('image/jpeg', 0.85);
+        const pdfPageWidth = viewport.width / 2.0;
+        const pdfPageHeight = viewport.height / 2.0;
+
+        if (i === 1) {
+          doc = new jsPDF({ orientation: pdfPageWidth > pdfPageHeight ? 'l' : 'p', unit: 'pt', format: [pdfPageWidth, pdfPageHeight] });
+        } else {
+          doc!.addPage([pdfPageWidth, pdfPageHeight], pdfPageWidth > pdfPageHeight ? 'l' : 'p');
         }
-
-        const png = await pdfDoc.embedPng(bytes);
-        const { width, height } = pdfPages[i].getSize();
-        pdfPages[i].drawImage(png, { x: 0, y: 0, width, height });
+        
+        doc!.addImage(imgData, 'JPEG', 0, 0, pdfPageWidth, pdfPageHeight);
       }
 
-      const savedBytes = await pdfDoc.save();
-      await writeBinaryFile(path, savedBytes);
-      alert("Saved Successfully!");
+      if (doc) {
+        const arrayBuffer = doc.output('arraybuffer');
+        await writeBinaryFile(path, new Uint8Array(arrayBuffer));
+        alert("Export Successful!");
+      }
     } catch (err) {
       console.error("Export failed:", err);
       alert("Failed to export PDF. Check console for details.");
@@ -407,7 +423,7 @@ export default function App() {
           <button className="btn btn-outline" onClick={loadPDF}>📂 Open</button>
           {pages.length > 0 && (
             <button className="btn" style={{background:'#00ffcc', opacity: isExporting ? 0.6 : 1}} onClick={exportPDF} disabled={isExporting}>
-              {isExporting ? '⏳ Saving...' : '💾 Save PDF'}
+              {isExporting ? '⏳ Processing...' : '💾 Save PDF'}
             </button>
           )}
         </div>
@@ -417,7 +433,7 @@ export default function App() {
         <div className="preview-container">
           <div className={`scroll-wrapper ${isDrawModeOn ? 'draw-active' : ''}`} ref={scrollWrapperRef}
                onContextMenu={(e) => e.preventDefault()}
-               onPointerDown={handleDown} onPointerMove={handleMove} onPointerUp={() => isDrawingRef.current = false} onPointerCancel={() => isDrawingRef.current = false} onPointerOut={() => isDrawingRef.current = false}>
+               onPointerDown={handleDown} onPointerMove={handleMove} onPointerUp={handleUp} onPointerCancel={handleUp} onPointerOut={handleUp}>
             <canvas id="draw-canvas" ref={canvasRef} />
             <div className="pdf-container">
               {pages.map((p, i) => (
