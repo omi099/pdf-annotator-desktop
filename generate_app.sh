@@ -1,13 +1,13 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping Crash-Proof, Vector-Accurate PDF Annotator..."
+echo "🚀 Bootstrapping True Vector-Accurate PDF Annotator..."
 
 # 1. Create Vite/React/TS project
 npx create-vite@latest annotator-app --template react-ts
 cd annotator-app
 
-# 2. Install dependencies (Using pdf-lib for vector preservation)
+# 2. Install dependencies (Using pdf-lib for PURE VECTOR paths, no image rasterization)
 npm install @tauri-apps/api@^1.5.0 pdfjs-dist@^3.11.174 pdf-lib@^1.17.1
 npm install --save-dev @tauri-apps/cli@^1.5.0
 
@@ -110,13 +110,13 @@ header { background-color: var(--panel-bg); padding: 15px 30px; display: flex; j
 .size-badge { font-family: monospace; font-size: 0.9rem; font-weight: bold; color: #00ffcc; min-width: 25px; text-align: center; }
 EOF
 
-# 6. Write App.tsx (OOM Fix + Crisp PDF Engine)
+# 6. Write App.tsx (TRUE VECTOR NATIVE EXPORT)
 cat << 'EOF' > src/App.tsx
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { open, save } from '@tauri-apps/api/dialog';
 import { readBinaryFile, writeBinaryFile } from '@tauri-apps/api/fs';
 import * as pdfjsLib from 'pdfjs-dist';
-import { PDFDocument } from 'pdf-lib';
+import { PDFDocument, rgb } from 'pdf-lib';
 import './App.css';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
@@ -217,21 +217,20 @@ export default function App() {
     const loadedPages: PageData[] = [];
     let currentY = 0;
 
-    // Use scale 3.0 to ensure UI pages are perfectly crisp
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);
-      const viewport = page.getViewport({ scale: 3.0 }); 
+      const viewport = page.getViewport({ scale: 2.0 }); 
       const canvas = document.createElement('canvas');
       canvas.width = viewport.width; canvas.height = viewport.height;
       await page.render({ canvasContext: canvas.getContext('2d')!, viewport }).promise;
       
       loadedPages.push({ 
         url: canvas.toDataURL('image/jpeg', 0.9), 
-        baseWidth: viewport.width / 3.0, 
-        baseHeight: viewport.height / 3.0, 
+        baseWidth: viewport.width / 2.0, 
+        baseHeight: viewport.height / 2.0, 
         startY: currentY 
       });
-      currentY += (viewport.height / 3.0) + 30;
+      currentY += (viewport.height / 2.0) + 30;
     }
     setPages(loadedPages);
   };
@@ -316,7 +315,14 @@ export default function App() {
 
   const clearCanvas = () => { strokesRef.current = []; redraw(); };
 
-  // --- CRASH-PROOF, HIGH-RES VECTOR EXPORT ---
+  const hexToRgbObj = (hex: string) => {
+    const r = parseInt(hex.slice(1, 3), 16) / 255;
+    const g = parseInt(hex.slice(3, 5), 16) / 255;
+    const b = parseInt(hex.slice(5, 7), 16) / 255;
+    return rgb(r, g, b);
+  };
+
+  // --- 100% VECTOR, ZERO-CRASH EXPORT ---
   const exportPDF = async () => {
     if (!pdfBytes) return;
     const path = await save({ defaultPath: 'Annotated.pdf', filters: [{ name: 'PDF', extensions: ['pdf'] }] });
@@ -324,58 +330,60 @@ export default function App() {
 
     setIsExporting(true);
     try {
-      // 1. Load Original Vector PDF to keep text selectable
+      // 1. Load the pristine original vector PDF
       const pdfDoc = await PDFDocument.load(pdfBytes);
       const pdfPages = pdfDoc.getPages();
 
-      for (let i = 0; i < pages.length; i++) {
-        const pData = pages[i];
-        
-        // OPTIMIZATION: Check if page even has ink. Skip if empty to save memory.
-        const pageTop = pData.startY;
-        const pageBottom = pData.startY + pData.baseHeight;
-        const hasStrokes = strokesRef.current.some(s => s.points.some(p => p.y >= pageTop && p.y <= pageBottom));
-        if (!hasStrokes) continue;
+      // 2. Loop through our recorded strokes mathematically
+      strokesRef.current.forEach(stroke => {
+        if (stroke.points.length < 2) return;
+        const strokeColor = hexToRgbObj(stroke.color);
 
-        // 2. Draw ink to transparent high-res canvas (4x scale for OneNote crispness)
-        const exportScale = 4.0;
-        const exportCanvas = document.createElement('canvas');
-        exportCanvas.width = pData.baseWidth * exportScale;
-        exportCanvas.height = pData.baseHeight * exportScale;
-        const eCtx = exportCanvas.getContext('2d')!;
-        
-        eCtx.scale(exportScale, exportScale);
-        eCtx.translate(0, -pData.startY);
+        for (let j = 0; j < stroke.points.length - 1; j++) {
+          const p1 = stroke.points[j];
+          const p2 = stroke.points[j + 1];
 
-        strokesRef.current.forEach(s => {
-          eCtx.strokeStyle = s.color;
-          eCtx.lineCap = 'round'; eCtx.lineJoin = 'round';
-          for (let j = 0; j < s.points.length - 1; j++) {
-            const p1 = s.points[j]; const p2 = s.points[j+1];
-            eCtx.beginPath(); eCtx.moveTo(p1.x, p1.y); eCtx.lineTo(p2.x, p2.y);
-            eCtx.lineWidth = s.size * (p1.pressure === -1 ? 1 : Math.pow(p1.pressure, 1.5) * 2);
-            eCtx.stroke();
-          }
-        });
+          // Determine which page this segment falls onto
+          const pageIndex = pages.findIndex(p => p1.y >= p.startY && p1.y <= p.startY + p.baseHeight);
+          if (pageIndex === -1) continue;
 
-        // 3. The Anti-Crash Buffer Fix (bypass toDataURL base64 limits entirely)
-        const blob = await new Promise<Blob | null>(resolve => exportCanvas.toBlob(resolve, 'image/png'));
-        if (blob) {
-            const buffer = await blob.arrayBuffer();
-            const png = await pdfDoc.embedPng(buffer);
-            
-            // 4. Stamp ink safely onto the original PDF page
-            const pdfPage = pdfPages[i];
-            pdfPage.drawImage(png, { x: 0, y: 0, width: pdfPage.getWidth(), height: pdfPage.getHeight() });
+          const pData = pages[pageIndex];
+          const pdfPage = pdfPages[pageIndex];
+          const { width: pdfW, height: pdfH } = pdfPage.getSize();
+
+          // 3. Map screen UI coordinates directly to the Native PDF matrix
+          const x1 = (p1.x / pData.baseWidth) * pdfW;
+          const y1 = pdfH - (((p1.y - pData.startY) / pData.baseHeight) * pdfH);
+          
+          const x2 = (p2.x / pData.baseWidth) * pdfW;
+          const y2 = pdfH - (((p2.y - pData.startY) / pData.baseHeight) * pdfH);
+
+          // Map the pressure thickness
+          const pFactor = p1.pressure === -1 ? 1 : Math.pow(p1.pressure, 1.5) * 2;
+          const pdfThickness = stroke.size * pFactor * (pdfW / pData.baseWidth);
+
+          // 4. Inject as a pure native PDF line (0% Image Rasterization!)
+          pdfPage.drawLine({
+            start: { x: x1, y: y1 },
+            end: { x: x2, y: y2 },
+            thickness: pdfThickness,
+            color: strokeColor,
+          });
+          
+          // Draw a connecting circle to perfectly simulate the HTML 'round' linecap
+          pdfPage.drawCircle({
+            x: x1, y: y1, size: pdfThickness / 2, color: strokeColor, borderWidth: 0
+          });
         }
-      }
+      });
 
-      const savedBytes = await pdfDoc.save();
-      await writeBinaryFile(path, savedBytes);
-      alert("PDF Exported Successfully with Crisp Annotations!");
+      // 5. Save the modified binary directly. File size remains tiny.
+      const finalBytes = await pdfDoc.save();
+      await writeBinaryFile(path, finalBytes);
+      alert("PDF Exported Successfully! 100% Vector Quality.");
     } catch (err) {
       console.error("Export failed:", err);
-      alert("Failed to export PDF. Ensure the file is not currently open in another app.");
+      alert("Failed to export PDF.");
     } finally {
       setIsExporting(false);
     }
@@ -417,7 +425,7 @@ export default function App() {
           <button className="btn btn-outline" onClick={loadPDF}>📂 Open</button>
           {pages.length > 0 && (
             <button className="btn" style={{background:'#00ffcc', opacity: isExporting ? 0.6 : 1}} onClick={exportPDF} disabled={isExporting}>
-              {isExporting ? '⏳ Compiling...' : '💾 Save PDF'}
+              {isExporting ? '⏳ Vectorizing...' : '💾 Save PDF'}
             </button>
           )}
         </div>
@@ -459,4 +467,4 @@ export default function App() {
 }
 EOF
 
-echo "✅ Final app compiled! The Memory Limit crash has been eradicated."
+echo "✅ True Vector Native PDF Export configured successfully!"
