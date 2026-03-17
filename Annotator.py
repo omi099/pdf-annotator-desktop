@@ -1,8 +1,10 @@
 import sys
 import fitz  # PyMuPDF
-from PyQt5.QtWidgets import *
-from PyQt5.QtGui import *
-from PyQt5.QtCore import *
+from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
+                             QHBoxLayout, QPushButton, QScrollArea, QFileDialog, 
+                             QMessageBox)
+from PyQt5.QtGui import QImage, QPixmap, QPainter, QPen, QColor, QTabletEvent
+from PyQt5.QtCore import Qt, QByteArray, QBuffer, QIODevice, QEvent
 
 class PdfPageWidget(QWidget):
     def __init__(self, page_num, fitz_page, parent=None):
@@ -10,7 +12,7 @@ class PdfPageWidget(QWidget):
         self.page_num = page_num
         self.fitz_page = fitz_page
         
-        # Render PDF natively at 2x resolution for high-DPI displays
+        # 2x scaling for high DPI monitors so text stays perfectly crisp
         zoom_matrix = fitz.Matrix(2.0, 2.0)
         pix = self.fitz_page.get_pixmap(matrix=zoom_matrix)
         fmt = QImage.Format_RGBA8888 if pix.alpha else QImage.Format_RGB888
@@ -20,7 +22,7 @@ class PdfPageWidget(QWidget):
         
         self.setFixedSize(pix.width, pix.height)
         
-        # Create a transparent layer for hardware-accelerated drawing
+        # Transparent layer for hardware-accelerated drawing
         self.drawing_layer = QPixmap(self.width(), self.height())
         self.drawing_layer.fill(Qt.transparent)
         
@@ -40,17 +42,12 @@ class PdfPageWidget(QWidget):
         self.drawing_layer.fill(Qt.transparent)
         self.update()
 
-    # --- WACOM HARDWARE EVENT CAPTURE ---
+    # --- NATIVE HARDWARE SUPPORT ---
     def tabletEvent(self, event):
-        self.handle_drawing(
-            event.pos(), 
-            event.pressure(), 
-            event.pointerType() == QTabletEvent.Eraser,
-            event.type()
-        )
+        is_eraser = (event.pointerType() == QTabletEvent.Eraser)
+        self.handle_drawing(event.pos(), event.pressure(), is_eraser, event.type())
         event.accept()
 
-    # --- MOUSE FALLBACK ---
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
             self.handle_drawing(event.pos(), 1.0, False, QEvent.TabletPress)
@@ -75,13 +72,12 @@ class PdfPageWidget(QWidget):
             painter = QPainter(self.drawing_layer)
             painter.setRenderHint(QPainter.Antialiasing)
             
-            # Map logical tool choices
             if is_eraser or app.current_tool == 'eraser':
                 painter.setCompositionMode(QPainter.CompositionMode_Clear)
                 width = app.tool_sizes['eraser']
             else:
                 painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
-                # Dynamic width calculation based on hardware pressure
+                # Pressure curve mapping
                 p_factor = (pressure ** 1.5) * 2.0 if pressure > 0 else 1.0
                 width = app.tool_sizes['pen'] * p_factor
                 painter.setPen(QPen(QColor(app.current_color), width, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
@@ -98,23 +94,16 @@ class PdfPageWidget(QWidget):
 
     def paintEvent(self, event):
         painter = QPainter(self)
-        # 1. Draw PDF Background
         painter.drawImage(0, 0, self.current_pdf_image)
-        # 2. Draw Annotations on top
         painter.drawPixmap(0, 0, self.drawing_layer)
 
 
 class NativePdfAnnotator(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Hardware Accurate Annotator")
+        self.setWindowTitle("Hardware Accurate PDF Annotator")
         self.setGeometry(100, 100, 1200, 800)
         self.setStyleSheet("background-color: #0f1115; color: white;")
-        
-        # Global Drawing State
-        self.current_tool = 'pen'
-        self.current_color = '#ff4757'
-        self.tool_sizes = {'pen': 4, 'eraser': 30}
         
         self.pdf_doc = None
         self.pdf_path = None
@@ -147,7 +136,6 @@ class NativePdfAnnotator(QMainWindow):
         
         toolbar.addStretch()
 
-        # Tools
         btn_pen = QPushButton("🖊️ Pen")
         btn_pen.clicked.connect(lambda: self.set_tool('pen'))
         btn_pen.setStyleSheet(self.btn_style())
@@ -158,7 +146,6 @@ class NativePdfAnnotator(QMainWindow):
         btn_eraser.setStyleSheet(self.btn_style())
         toolbar.addWidget(btn_eraser)
 
-        # Colors
         colors = ['#ff4757', '#1e90ff', '#2ed573', '#eccc68', '#ffffff', '#000000']
         for c in colors:
             btn_color = QPushButton()
@@ -182,23 +169,30 @@ class NativePdfAnnotator(QMainWindow):
         self.scroll_content = QWidget()
         self.scroll_layout = QVBoxLayout(self.scroll_content)
         self.scroll_layout.setAlignment(Qt.AlignHCenter)
+        self.scroll_layout.setSpacing(20) # Add a nice gap between PDF pages
         
         self.scroll_area.setWidget(self.scroll_content)
         layout.addWidget(self.scroll_area)
+        
+        self.statusBar().showMessage("Ready. Click 'Open PDF' to start.")
+        self.statusBar().setStyleSheet("color: #888; padding: 5px;")
 
     def btn_style(self, bg="#1a1c23", color="white"):
         return f"background-color: {bg}; color: {color}; padding: 8px 15px; border-radius: 5px; font-weight: bold; border: 1px solid #3a3f4b;"
 
     def set_tool(self, tool):
-        self.current_tool = tool
+        QApplication.instance().current_tool = tool
+        self.statusBar().showMessage(f"Tool selected: {tool.capitalize()}")
 
     def set_color(self, color):
-        self.current_color = color
+        QApplication.instance().current_color = color
         self.set_tool('pen')
+        self.statusBar().showMessage(f"Color selected: {color}")
 
     def clear_all(self):
         for page in self.pages:
             page.clear_drawings()
+        self.statusBar().showMessage("All drawings cleared.")
 
     def toggle_dark_mode(self):
         for page in self.pages:
@@ -211,48 +205,65 @@ class NativePdfAnnotator(QMainWindow):
             self.load_pdf()
 
     def load_pdf(self):
-        # Clear existing pages
-        for i in reversed(range(self.scroll_layout.count())): 
-            self.scroll_layout.itemAt(i).widget().setParent(None)
-        self.pages.clear()
+        try:
+            # Clear existing pages from the UI
+            for i in reversed(range(self.scroll_layout.count())): 
+                widget_to_remove = self.scroll_layout.itemAt(i).widget()
+                if widget_to_remove:
+                    widget_to_remove.setParent(None)
+            self.pages.clear()
 
-        self.pdf_doc = fitz.open(self.pdf_path)
-        for i in range(len(self.pdf_doc)):
-            page_widget = PdfPageWidget(i, self.pdf_doc.load_page(i))
-            self.scroll_layout.addWidget(page_widget)
-            self.pages.append(page_widget)
+            self.pdf_doc = fitz.open(self.pdf_path)
+            for i in range(len(self.pdf_doc)):
+                page_widget = PdfPageWidget(i, self.pdf_doc.load_page(i))
+                self.scroll_layout.addWidget(page_widget)
+                self.pages.append(page_widget)
+            
+            self.statusBar().showMessage(f"Successfully loaded {len(self.pages)} pages.")
+        except Exception as e:
+            QMessageBox.critical(self, "Error Loading PDF", f"Something went wrong:\n{str(e)}")
 
     def export_pdf(self):
-        if not self.pdf_doc: return
-        
+        if not self.pdf_doc:
+            QMessageBox.warning(self, "No PDF", "Please open a PDF before exporting.")
+            return
+            
         save_path, _ = QFileDialog.getSaveFileName(self, "Save Annotated PDF", "", "PDF Files (*.pdf)")
-        if not save_path: return
+        if not save_path: 
+            return
 
-        # We inject the drawn vectors/pixels natively over the original PDF so text remains selectable
-        for i, page_widget in enumerate(self.pages):
-            fitz_page = self.pdf_doc.load_page(i)
-            
-            # Convert transparent Qt Drawing Layer to raw bytes
-            byte_array = QByteArray()
-            buffer = QBuffer(byte_array)
-            buffer.open(QIODevice.WriteOnly)
-            page_widget.drawing_layer.save(buffer, "PNG")
-            
-            # Overlay image bytes onto PDF Native Page
-            rect = fitz_page.rect
-            fitz_page.insert_image(rect, stream=byte_array.data())
+        self.statusBar().showMessage("Exporting PDF... Please wait.")
+        QApplication.processEvents() # Force UI to show the message
 
-        self.pdf_doc.save(save_path)
-        QMessageBox.information(self, "Success", "PDF Exported Successfully!")
+        try:
+            for i, page_widget in enumerate(self.pages):
+                fitz_page = self.pdf_doc.load_page(i)
+                
+                # Convert the transparent Qt drawing layer into a raw PNG byte stream
+                byte_array = QByteArray()
+                buffer = QBuffer(byte_array)
+                buffer.open(QIODevice.WriteOnly)
+                page_widget.drawing_layer.save(buffer, "PNG")
+                
+                # Stamp the drawing over the exact native dimensions of the original PDF
+                rect = fitz_page.rect
+                fitz_page.insert_image(rect, stream=byte_array.data())
+
+            self.pdf_doc.save(save_path)
+            self.statusBar().showMessage("PDF saved successfully!")
+            QMessageBox.information(self, "Success", "PDF Exported Successfully!")
+        except Exception as e:
+            QMessageBox.critical(self, "Error Saving", f"Failed to save PDF:\n{str(e)}")
+            self.statusBar().showMessage("Export failed.")
 
 if __name__ == '__main__':
-    # Enable High DPI scaling
+    # Force high-resolution rendering
     QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
     QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
     
     app = QApplication(sys.argv)
     
-    # Inject application reference so widgets can grab tool states
+    # Store tools globally so the sub-widgets can read them instantly
     app.current_tool = 'pen'
     app.current_color = '#ff4757'
     app.tool_sizes = {'pen': 4, 'eraser': 30}
