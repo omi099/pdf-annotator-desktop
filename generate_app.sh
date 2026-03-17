@@ -66,7 +66,7 @@ cat << 'EOF' > src-tauri/tauri.conf.json
 }
 EOF
 
-# 5. Write App.css (Strict Cursor Control & UI Styling)
+# 5. Write App.css (Using Native Crosshair Cursor)
 cat << 'EOF' > src/App.css
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800&display=swap');
 
@@ -83,6 +83,7 @@ header { background-color: var(--panel-bg); padding: 15px 30px; display: flex; j
 .btn:active { transform: translate(2px, 2px); }
 .btn-outline { background: transparent; color: #ffffff; border: 1px solid var(--border-color); cursor: pointer; }
 .btn-outline:hover { background: rgba(255,255,255,0.1); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .zoom-controls { display: flex; align-items: center; background: #2c2f33; border-radius: 6px; overflow: hidden; border: 1px solid var(--border-color); }
 .zoom-controls button { background: transparent; color: white; border: none; padding: 8px 12px; cursor: pointer; font-weight: bold; }
@@ -92,21 +93,14 @@ header { background-color: var(--panel-bg); padding: 15px 30px; display: flex; j
 .workspace { display: flex; flex: 1; overflow: hidden; position: relative; background-image: linear-gradient(to right, var(--grid-color) 1px, transparent 1px), linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px); background-size: 40px 40px; }
 .preview-container { flex: 1; overflow: auto; display: flex; justify-content: center; align-items: flex-start; }
 
-/* 🖱️ FIX: Only hide cursor over the scroll wrapper, not the UI */
-.scroll-wrapper.draw-active, .scroll-wrapper.draw-active * { cursor: none !important; }
+/* 🖱️ FIX: Use Native Crosshair for drawing mode, no lag */
 .scroll-wrapper { position: relative; display: flex; flex-direction: column; align-items: center; padding: 40px; touch-action: none; }
+.scroll-wrapper.draw-active, .scroll-wrapper.draw-active * { cursor: crosshair !important; }
 
 .pdf-page { box-shadow: 0 10px 30px rgba(0,0,0,0.5); border-radius: 4px; display: block; background: white; margin-bottom: 30px; }
 .pdf-page.inverted { filter: invert(0.9) hue-rotate(180deg); }
 
 #draw-canvas { position: absolute; top: 0; left: 0; z-index: 50; pointer-events: none; }
-
-#custom-cursor {
-  position: fixed; top: 0; left: 0; width: 24px; height: 24px;
-  pointer-events: none; z-index: 999999; display: none;
-  background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="%23ffffff" stroke="%23000000" stroke-width="1.5" d="M5.5 3.5L18.5 13.5L12.5 14.5L16.5 20.5L13.5 22.5L9.5 16.5L4.5 20.5V3.5Z"/></svg>') no-repeat;
-  transform: translate(-100px, -100px);
-}
 
 .draw-toolbar { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: var(--panel-bg); padding: 12px 20px; border-radius: 50px; display: flex; align-items: center; gap: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.8); border: 1px solid var(--border-color); z-index: 200; }
 .draw-toolbar.force-hide { display: none !important; }
@@ -117,7 +111,7 @@ header { background-color: var(--panel-bg); padding: 15px 30px; display: flex; j
 .size-badge { font-family: monospace; font-size: 0.9rem; font-weight: bold; color: #00ffcc; min-width: 25px; text-align: center; }
 EOF
 
-# 6. Write App.tsx (Optimized, Bulletproof React Logic)
+# 6. Write App.tsx (Optimized Native React Logic)
 cat << 'EOF' > src/App.tsx
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { open, save } from '@tauri-apps/api/dialog';
@@ -149,24 +143,10 @@ export default function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
   const scrollWrapperRef = useRef<HTMLDivElement>(null);
-  const cursorRef = useRef<HTMLDivElement>(null);
   const strokesRef = useRef<Stroke[]>([]);
   const isDrawingRef = useRef(false);
 
-  // 1. CUSTOM CURSOR
-  useEffect(() => {
-    const moveCursor = (e: PointerEvent) => {
-      if (cursorRef.current && isDrawModeOn && e.pointerType !== 'mouse') {
-        cursorRef.current.style.display = 'block';
-        cursorRef.current.style.left = `${e.clientX}px`;
-        cursorRef.current.style.top = `${e.clientY}px`;
-      }
-    };
-    window.addEventListener('pointermove', moveCursor);
-    return () => window.removeEventListener('pointermove', moveCursor);
-  }, [isDrawModeOn]);
-
-  // 2. TRUE ERASER MATH
+  // 1. TRUE ERASER MATH
   const distPointToSegment = (px: number, py: number, x1: number, y1: number, x2: number, y2: number) => {
     let l2 = (x2 - x1) ** 2 + (y2 - y1) ** 2;
     if (l2 === 0) return Math.hypot(px - x1, py - y1);
@@ -228,6 +208,7 @@ export default function App() {
     if (!path || Array.isArray(path)) return;
     const bytes = await readBinaryFile(path);
     setPdfBytes(bytes);
+    strokesRef.current = [];
     
     const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
     const loadedPages: PageData[] = [];
@@ -251,7 +232,7 @@ export default function App() {
     setPages(loadedPages);
   };
 
-  // 3. OPTIMIZED HARDWARE POINTER EVENTS
+  // 2. OPTIMIZED HARDWARE POINTER EVENTS
   const handleDown = (e: React.PointerEvent) => {
     if (!isDrawModeOn || e.pointerType === 'mouse') return;
     isDrawingRef.current = true;
@@ -304,7 +285,7 @@ export default function App() {
       const newPoint = { x, y, pressure: usePressure ? (e.pressure || -1) : -1 };
       current.points.push(newPoint);
 
-      // PERFECT 60FPS: Draw only the new segment, skip full redraw!
+      // PERFECT 60FPS: Draw only the new segment
       const ctx = ctxRef.current;
       if (ctx) {
         ctx.beginPath();
@@ -321,7 +302,7 @@ export default function App() {
 
   const clearCanvas = () => { strokesRef.current = []; redraw(); };
 
-  // 4. STABLE NATIVE EXPORT
+  // 3. STABLE NATIVE EXPORT
   const exportPDF = async () => {
     if (!pdfBytes) return;
     const path = await save({ defaultPath: 'Annotated.pdf', filters: [{ name: 'PDF', extensions: ['pdf'] }] });
@@ -338,6 +319,8 @@ export default function App() {
         exportCanvas.width = pData.baseWidth * 2;
         exportCanvas.height = pData.baseHeight * 2;
         const eCtx = exportCanvas.getContext('2d')!;
+        
+        // Match the coordinate systems perfectly
         eCtx.scale(2, 2);
         eCtx.translate(0, -pData.startY);
 
@@ -352,9 +335,10 @@ export default function App() {
           }
         });
 
-        // FIX: Base64 string bypasses CSP fetch restrictions completely.
+        // Generate Base64 to bypass CSP fetch limitations natively in Windows Webview
         const pngDataUrl = exportCanvas.toDataURL('image/png');
         const png = await pdfDoc.embedPng(pngDataUrl);
+        
         const { width, height } = pdfPages[i].getSize();
         pdfPages[i].drawImage(png, { x: 0, y: 0, width, height });
       }
@@ -372,7 +356,6 @@ export default function App() {
 
   return (
     <>
-      <div id="custom-cursor" ref={cursorRef}></div>
       <header>
         <h2>📝 Teaching Annotator</h2>
         <div className="zoom-controls">
