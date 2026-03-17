@@ -1,25 +1,4 @@
-import os
-import subprocess
-from google.colab import files
-
-def run_command(command, show_output=True):
-    """Runs a shell command and streams the output to the Colab console."""
-    process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-    if show_output:
-        for line in process.stdout:
-            print(line.strip())
-    process.wait()
-    return process.returncode
-
-print("==================================================")
-print(" 🚀 STARTING CLOUD WINDOWS .EXE COMPILER")
-print("==================================================")
-
-# ---------------------------------------------------------
-# STEP 1: WRITE THE NATIVE ANNOTATOR SOURCE CODE
-# ---------------------------------------------------------
-print("\n[1/6] Writing Python Source Code (Annotator.py)...")
-annotator_code = """import sys
+import sys
 import fitz  # PyMuPDF
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import *
@@ -31,6 +10,7 @@ class PdfPageWidget(QWidget):
         self.page_num = page_num
         self.fitz_page = fitz_page
         
+        # Render PDF natively at 2x resolution for high-DPI displays
         zoom_matrix = fitz.Matrix(2.0, 2.0)
         pix = self.fitz_page.get_pixmap(matrix=zoom_matrix)
         fmt = QImage.Format_RGBA8888 if pix.alpha else QImage.Format_RGB888
@@ -40,6 +20,7 @@ class PdfPageWidget(QWidget):
         
         self.setFixedSize(pix.width, pix.height)
         
+        # Create a transparent layer for hardware-accelerated drawing
         self.drawing_layer = QPixmap(self.width(), self.height())
         self.drawing_layer.fill(Qt.transparent)
         
@@ -59,18 +40,28 @@ class PdfPageWidget(QWidget):
         self.drawing_layer.fill(Qt.transparent)
         self.update()
 
+    # --- WACOM HARDWARE EVENT CAPTURE ---
     def tabletEvent(self, event):
-        self.handle_drawing(event.pos(), event.pressure(), event.pointerType() == QTabletEvent.Eraser, event.type())
+        self.handle_drawing(
+            event.pos(), 
+            event.pressure(), 
+            event.pointerType() == QTabletEvent.Eraser,
+            event.type()
+        )
         event.accept()
 
+    # --- MOUSE FALLBACK ---
     def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton: self.handle_drawing(event.pos(), 1.0, False, QEvent.TabletPress)
+        if event.button() == Qt.LeftButton:
+            self.handle_drawing(event.pos(), 1.0, False, QEvent.TabletPress)
 
     def mouseMoveEvent(self, event):
-        if event.buttons() & Qt.LeftButton: self.handle_drawing(event.pos(), 1.0, False, QEvent.TabletMove)
+        if event.buttons() & Qt.LeftButton:
+            self.handle_drawing(event.pos(), 1.0, False, QEvent.TabletMove)
 
     def mouseReleaseEvent(self, event):
-        if event.button() == Qt.LeftButton: self.handle_drawing(event.pos(), 0.0, False, QEvent.TabletRelease)
+        if event.button() == Qt.LeftButton:
+            self.handle_drawing(event.pos(), 0.0, False, QEvent.TabletRelease)
 
     def handle_drawing(self, pos, pressure, is_eraser, event_type):
         app = QApplication.instance()
@@ -84,11 +75,13 @@ class PdfPageWidget(QWidget):
             painter = QPainter(self.drawing_layer)
             painter.setRenderHint(QPainter.Antialiasing)
             
+            # Map logical tool choices
             if is_eraser or app.current_tool == 'eraser':
                 painter.setCompositionMode(QPainter.CompositionMode_Clear)
                 width = app.tool_sizes['eraser']
             else:
                 painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
+                # Dynamic width calculation based on hardware pressure
                 p_factor = (pressure ** 1.5) * 2.0 if pressure > 0 else 1.0
                 width = app.tool_sizes['pen'] * p_factor
                 painter.setPen(QPen(QColor(app.current_color), width, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
@@ -105,8 +98,11 @@ class PdfPageWidget(QWidget):
 
     def paintEvent(self, event):
         painter = QPainter(self)
+        # 1. Draw PDF Background
         painter.drawImage(0, 0, self.current_pdf_image)
+        # 2. Draw Annotations on top
         painter.drawPixmap(0, 0, self.drawing_layer)
+
 
 class NativePdfAnnotator(QMainWindow):
     def __init__(self):
@@ -115,6 +111,7 @@ class NativePdfAnnotator(QMainWindow):
         self.setGeometry(100, 100, 1200, 800)
         self.setStyleSheet("background-color: #0f1115; color: white;")
         
+        # Global Drawing State
         self.current_tool = 'pen'
         self.current_color = '#ff4757'
         self.tool_sizes = {'pen': 4, 'eraser': 30}
@@ -130,6 +127,7 @@ class NativePdfAnnotator(QMainWindow):
         self.setCentralWidget(main_widget)
         layout = QVBoxLayout(main_widget)
         
+        # --- TOOLBAR ---
         toolbar = QHBoxLayout()
         
         btn_open = QPushButton("📂 Open PDF")
@@ -149,6 +147,7 @@ class NativePdfAnnotator(QMainWindow):
         
         toolbar.addStretch()
 
+        # Tools
         btn_pen = QPushButton("🖊️ Pen")
         btn_pen.clicked.connect(lambda: self.set_tool('pen'))
         btn_pen.setStyleSheet(self.btn_style())
@@ -159,6 +158,7 @@ class NativePdfAnnotator(QMainWindow):
         btn_eraser.setStyleSheet(self.btn_style())
         toolbar.addWidget(btn_eraser)
 
+        # Colors
         colors = ['#ff4757', '#1e90ff', '#2ed573', '#eccc68', '#ffffff', '#000000']
         for c in colors:
             btn_color = QPushButton()
@@ -174,6 +174,7 @@ class NativePdfAnnotator(QMainWindow):
 
         layout.addLayout(toolbar)
 
+        # --- SCROLL AREA ---
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setStyleSheet("border: none; background-color: #0f1115;")
@@ -188,10 +189,20 @@ class NativePdfAnnotator(QMainWindow):
     def btn_style(self, bg="#1a1c23", color="white"):
         return f"background-color: {bg}; color: {color}; padding: 8px 15px; border-radius: 5px; font-weight: bold; border: 1px solid #3a3f4b;"
 
-    def set_tool(self, tool): self.current_tool = tool
-    def set_color(self, color): self.current_color = color; self.set_tool('pen')
-    def clear_all(self): [page.clear_drawings() for page in self.pages]
-    def toggle_dark_mode(self): [page.toggle_dark_mode() for page in self.pages]
+    def set_tool(self, tool):
+        self.current_tool = tool
+
+    def set_color(self, color):
+        self.current_color = color
+        self.set_tool('pen')
+
+    def clear_all(self):
+        for page in self.pages:
+            page.clear_drawings()
+
+    def toggle_dark_mode(self):
+        for page in self.pages:
+            page.toggle_dark_mode()
 
     def open_pdf(self):
         path, _ = QFileDialog.getOpenFileName(self, "Open PDF", "", "PDF Files (*.pdf)")
@@ -200,6 +211,7 @@ class NativePdfAnnotator(QMainWindow):
             self.load_pdf()
 
     def load_pdf(self):
+        # Clear existing pages
         for i in reversed(range(self.scroll_layout.count())): 
             self.scroll_layout.itemAt(i).widget().setParent(None)
         self.pages.clear()
@@ -212,25 +224,35 @@ class NativePdfAnnotator(QMainWindow):
 
     def export_pdf(self):
         if not self.pdf_doc: return
+        
         save_path, _ = QFileDialog.getSaveFileName(self, "Save Annotated PDF", "", "PDF Files (*.pdf)")
         if not save_path: return
 
+        # We inject the drawn vectors/pixels natively over the original PDF so text remains selectable
         for i, page_widget in enumerate(self.pages):
             fitz_page = self.pdf_doc.load_page(i)
+            
+            # Convert transparent Qt Drawing Layer to raw bytes
             byte_array = QByteArray()
             buffer = QBuffer(byte_array)
             buffer.open(QIODevice.WriteOnly)
             page_widget.drawing_layer.save(buffer, "PNG")
-            fitz_page.insert_image(fitz_page.rect, stream=byte_array.data())
+            
+            # Overlay image bytes onto PDF Native Page
+            rect = fitz_page.rect
+            fitz_page.insert_image(rect, stream=byte_array.data())
 
         self.pdf_doc.save(save_path)
         QMessageBox.information(self, "Success", "PDF Exported Successfully!")
 
 if __name__ == '__main__':
+    # Enable High DPI scaling
     QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
     QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
     
     app = QApplication(sys.argv)
+    
+    # Inject application reference so widgets can grab tool states
     app.current_tool = 'pen'
     app.current_color = '#ff4757'
     app.tool_sizes = {'pen': 4, 'eraser': 30}
@@ -238,56 +260,3 @@ if __name__ == '__main__':
     window = NativePdfAnnotator()
     window.show()
     sys.exit(app.exec_())
-"""
-
-with open("Annotator.py", "w", encoding="utf-8") as f:
-    f.write(annotator_code)
-
-# ---------------------------------------------------------
-# STEP 2: INSTALL WINE (WINDOWS EMULATOR FOR LINUX)
-# ---------------------------------------------------------
-print("\n[2/6] Installing Windows Emulator (Wine) on Google Cloud... (Please wait)")
-run_command("dpkg --add-architecture i386", show_output=False)
-run_command("apt-get update -qq", show_output=False)
-run_command("DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends wine64 wine32 > /dev/null 2>&1", show_output=False)
-
-# ---------------------------------------------------------
-# STEP 3: DOWNLOAD WINDOWS PYTHON
-# ---------------------------------------------------------
-print("\n[3/6] Downloading Windows Python 3.10...")
-run_command("wget -qnc https://www.python.org/ftp/python/3.10.11/python-3.10.11-amd64.exe", show_output=False)
-
-# ---------------------------------------------------------
-# STEP 4: INSTALL WINDOWS PYTHON INSIDE WINE
-# ---------------------------------------------------------
-print("\n[4/6] Installing Windows Python into the emulator... (This takes about 1-2 minutes)")
-WINE_ENV = "export WINEPREFIX=/content/.wine && export WINEDEBUG=-all && "
-run_command(WINE_ENV + "wine python-3.10.11-amd64.exe /quiet InstallAllUsers=1 PrependPath=1 Include_test=0", show_output=False)
-run_command("wineserver -w", show_output=False)
-
-# ---------------------------------------------------------
-# STEP 5: INSTALL LIBRARIES (PyQt5, PyMuPDF, PyInstaller)
-# ---------------------------------------------------------
-print("\n[5/6] Installing libraries (PyQt5, PyMuPDF) inside Windows Python...")
-WINE_PYTHON = '"/content/.wine/drive_c/Program Files/Python310/python.exe"'
-run_command(f"{WINE_ENV} wine {WINE_PYTHON} -m pip install --upgrade pip > /dev/null 2>&1", show_output=False)
-run_command(f"{WINE_ENV} wine {WINE_PYTHON} -m pip install PyQt5 PyMuPDF pyinstaller > /dev/null 2>&1", show_output=False)
-run_command("wineserver -w", show_output=False)
-
-# ---------------------------------------------------------
-# STEP 6: COMPILE THE .EXE
-# ---------------------------------------------------------
-print("\n[6/6] Compiling Annotator.py into a standalone .exe... (Almost done!)")
-WINE_PYINSTALLER = '"/content/.wine/drive_c/Program Files/Python310/Scripts/pyinstaller.exe"'
-compile_cmd = f"{WINE_ENV} wine {WINE_PYINSTALLER} --noconsole --onefile Annotator.py"
-run_command(compile_cmd, show_output=False)
-run_command("wineserver -w", show_output=False)
-
-# ---------------------------------------------------------
-# FINAL: DOWNLOAD THE EXECUTABLE
-# ---------------------------------------------------------
-if os.path.exists("dist/Annotator.exe"):
-    print("\n✅ SUCCESS! Downloading Annotator.exe to your computer...")
-    files.download("dist/Annotator.exe")
-else:
-    print("\n❌ Compilation failed. Google Colab environment may have interrupted the Wine installation.")
