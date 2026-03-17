@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping True Vector-Accurate PDF Annotator..."
+echo "🚀 Bootstrapping Final Vector-Accurate PDF Annotator..."
 
 # 1. Create Vite/React/TS project
 npx create-vite@latest annotator-app --template react-ts
@@ -110,7 +110,7 @@ header { background-color: var(--panel-bg); padding: 15px 30px; display: flex; j
 .size-badge { font-family: monospace; font-size: 0.9rem; font-weight: bold; color: #00ffcc; min-width: 25px; text-align: center; }
 EOF
 
-# 6. Write App.tsx (TRUE VECTOR NATIVE EXPORT)
+# 6. Write App.tsx (TRUE VECTOR NATIVE EXPORT & TS FIXES)
 cat << 'EOF' > src/App.tsx
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { open, save } from '@tauri-apps/api/dialog';
@@ -236,7 +236,7 @@ export default function App() {
   };
 
   const handleDown = (e: React.PointerEvent) => {
-    if (!isDrawModeOn || e.pointerType === 'mouse') return;
+    if (!isDrawModeOn || (e.pointerType as string) === 'mouse') return;
     isDrawingRef.current = true;
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
 
@@ -244,6 +244,7 @@ export default function App() {
     const x = (e.clientX - rect.left) / zoom;
     const y = (e.clientY - rect.top) / zoom;
 
+    // TypeScript strict string cast fix and mapping hardware buttons
     if ((e.pointerType as string) === 'eraser' || e.button === 5 || (e.buttons & 32) || e.button === 2 || (e.buttons & 2)) {
       tempToolRevertRef.current = activeToolRef.current;
       activeToolRef.current = 'eraser';
