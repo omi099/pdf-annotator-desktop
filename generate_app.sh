@@ -14,7 +14,7 @@ npm install --save-dev @tauri-apps/cli@^1.5.0
 # 3. Initialize Tauri
 npx tauri init --app-name "TeachingAnnotator" --window-title "Teaching PDF Annotator" --dist-dir "../dist" --dev-path "http://localhost:5173" --before-build-command "npm run build" --before-dev-command "npm run dev"
 
-# 4. Configure tauri.conf.json
+# 4. Configure tauri.conf.json (RESTORED ICON ARRAY TO FIX THE WINDOWS BUILD CRASH)
 cat << 'EOF' > src-tauri/tauri.conf.json
 {
   "build": {
@@ -38,6 +38,13 @@ cat << 'EOF' > src-tauri/tauri.conf.json
       "active": true,
       "category": "Education",
       "identifier": "com.teaching.annotator",
+      "icon": [
+        "icons/32x32.png",
+        "icons/128x128.png",
+        "icons/128x128@2x.png",
+        "icons/icon.icns",
+        "icons/icon.ico"
+      ],
       "targets": "all",
       "windows": { "certificateThumbprint": null, "digestAlgorithm": "sha256", "timestampUrl": "" }
     },
@@ -101,7 +108,7 @@ header { background-color: var(--panel-bg); padding: 15px 30px; display: flex; j
 .hide-toolbar-btn { font-size: 0.8rem; background: rgba(255,255,255,0.1); border-radius: 20px; padding: 5px 10px; color: white; border: none; cursor: pointer; margin-left: 10px; }
 EOF
 
-# 6. Write App.tsx (Unused variables removed!)
+# 6. Write App.tsx
 cat << 'EOF' > src/App.tsx
 import { useState, useRef, useEffect } from 'react';
 import { open, save } from '@tauri-apps/api/dialog';
@@ -133,7 +140,6 @@ export default function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
 
-  // Math State
   const zoomRef = useRef(1.0);
   const strokesRef = useRef<Stroke[]>([]);
   const currentStrokeRef = useRef<Stroke | null>(null);
@@ -156,11 +162,10 @@ export default function App() {
   const resizeCanvasToDocument = () => {
     if (!wrapperRef.current || !canvasRef.current || pages.length === 0) return;
     
-    // Calculate total base dimensions
     let totalBaseHeight = 0;
     let maxBaseWidth = 0;
     pages.forEach(p => {
-      totalBaseHeight += p.baseHeight + 30; // 30px gap
+      totalBaseHeight += p.baseHeight + 30; 
       maxBaseWidth = Math.max(maxBaseWidth, p.baseWidth);
     });
 
@@ -178,7 +183,6 @@ export default function App() {
     
     const ctx = canvas.getContext('2d');
     if (ctx) {
-      // Scale context so 1 drawing unit = 1 base PDF pixel
       ctx.setTransform(dpr * currentZoom, 0, 0, dpr * currentZoom, 0, 0);
       ctxRef.current = ctx;
       redrawCanvas();
@@ -220,7 +224,7 @@ export default function App() {
   };
 
   const eraseStrokesAt = (baseX: number, baseY: number) => {
-    let hitRadius = 20 / zoomRef.current; // Scale eraser size inversely to zoom
+    let hitRadius = 20 / zoomRef.current; 
     let beforeCount = strokesRef.current.length;
     strokesRef.current = strokesRef.current.filter(stroke => {
       for (let i = 0; i < stroke.points.length - 1; i++) {
@@ -302,7 +306,6 @@ export default function App() {
       const renderedPages: PageData[] = [];
       let currentY = 0;
 
-      // Render at 2.0 scale internally so zooming in looks crisp
       for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
         const viewport = page.getViewport({ scale: 2.0 });
@@ -310,12 +313,11 @@ export default function App() {
         canvas.width = viewport.width; canvas.height = viewport.height;
         await page.render({ canvasContext: canvas.getContext('2d')!, viewport }).promise;
         
-        // Base width is scale 1.0 equivalent
         const baseWidth = viewport.width / 2.0;
         const baseHeight = viewport.height / 2.0;
         
         renderedPages.push({ url: canvas.toDataURL('image/jpeg', 0.8), baseWidth, baseHeight, startY: currentY });
-        currentY += baseHeight + 30; // 30px gap
+        currentY += baseHeight + 30; 
       }
       setPages(renderedPages);
       setZoom(1.0);
@@ -334,21 +336,19 @@ export default function App() {
 
       const pdfDoc = await PDFDocument.load(pdfBytes);
       const pdfPages = pdfDoc.getPages();
-      const exportScale = 2.0; // Export sharp ink regardless of UI zoom
+      const exportScale = 2.0; 
 
       for (let i = 0; i < pages.length; i++) {
         const page = pages[i];
         
-        // Dynamically create a canvas JUST for this page's annotations
         const exportCanvas = document.createElement('canvas');
         exportCanvas.width = page.baseWidth * exportScale;
         exportCanvas.height = page.baseHeight * exportScale;
         const eCtx = exportCanvas.getContext('2d')!;
         
         eCtx.scale(exportScale, exportScale);
-        eCtx.translate(0, -page.startY); // Shift coordinate system up to match this page
+        eCtx.translate(0, -page.startY); 
 
-        // Draw all strokes (those outside the page bounding box get clipped natively by canvas)
         for (let stroke of strokesRef.current) {
           if (stroke.points.length < 2) continue;
           eCtx.strokeStyle = stroke.color;
