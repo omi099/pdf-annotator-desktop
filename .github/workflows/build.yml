@@ -23,15 +23,17 @@ jobs:
         with:
           targets: x86_64-pc-windows-msvc
 
-      # 1. RUN BASH SCRIPT FIRST
-      # We must create the files so the cache action has something to lock onto.
+      # 1. GENERATE THE APP FIRST
+      # We must create the files using your bash script before caching kicks in, 
+      # otherwise the cache won't find the package-lock.json or Cargo.toml.
       - name: Run Bash Generator Script
         shell: bash
         run: |
           chmod +x generate_app.sh
           ./generate_app.sh
 
-      # 2. EXPLICIT NPM CACHE
+      # 2. CACHE NPM DEPENDENCIES
+      # Saves the node_modules so it doesn't download hundreds of MBs every run.
       - name: Cache NPM dependencies
         uses: actions/cache@v4
         with:
@@ -40,25 +42,28 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-node-
 
-      # 3. BULLETPROOF RUST CACHE
-      # We use a static shared-key here so it NEVER misses the cache, 
-      # even if the bash script generates slightly different file timestamps.
+      # 3. CACHE RUST DEPENDENCIES
+      # Uses a static shared-key so Cargo doesn't get confused by newly generated 
+      # file timestamps from the bash script. This skips the 15-minute Rust compilation.
       - name: Cache Rust Dependencies
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: "annotator-app/src-tauri -> target"
           shared-key: "tauri-windows-cache-v1"
 
-      # 4. INSTALL & BUILD
+      # 4. INSTALL NPM PACKAGES
       - name: Install NPM Dependencies
         working-directory: ./annotator-app
         run: npm install
 
+      # 5. COMPILE THE EXE
+      # We use npx here so we don't have to waste time compiling the Tauri CLI globally.
       - name: Build Tauri App
         working-directory: ./annotator-app
         run: npx tauri build
 
-      # 5. UPLOAD ARTIFACT
+      # 6. UPLOAD THE DOWNLOADABLE EXECUTABLE
+      # Tauri creates either an MSI or NSIS (exe) installer. This grabs whichever is generated.
       - name: Upload Windows Artifacts
         uses: actions/upload-artifact@v4
         with:
