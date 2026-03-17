@@ -3,18 +3,18 @@ set -e
 
 echo "🚀 Bootstrapping Teaching PDF Annotator..."
 
-# 1. Create Vite/React/TS project (avoiding create-tauri-app interactive prompts)
+# 1. Create Vite/React/TS project
 npx create-vite@latest annotator-app --template react-ts
 cd annotator-app
 
-# 2. Install dependencies
+# 2. Install dependencies (fixed pdf-lib version to 1.17.1)
 npm install @tauri-apps/api@^1.5.0 pdfjs-dist@^3.11.174 pdf-lib@^1.17.1 lucide-react
 npm install --save-dev @tauri-apps/cli@^1.5.0
 
 # 3. Initialize Tauri
 npx tauri init --app-name "TeachingAnnotator" --window-title "Teaching PDF Annotator" --dist-dir "../dist" --dev-path "http://localhost:5173" --before-build-command "npm run build" --before-dev-command "npm run dev"
 
-# 4. Configure tauri.conf.json to allow Dialog and FS APIs
+# 4. Configure tauri.conf.json
 cat << 'EOF' > src-tauri/tauri.conf.json
 {
   "build": {
@@ -70,7 +70,7 @@ cat << 'EOF' > src-tauri/tauri.conf.json
 }
 EOF
 
-# 5. Write App.css (Dark Mode + Grid)
+# 5. Write App.css
 cat << 'EOF' > src/App.css
 :root {
   --bg-dark: #0f1115;
@@ -143,7 +143,7 @@ canvas#draw-layer {
 .color-dot.active { transform: scale(1.2); border-color: white; }
 EOF
 
-# 6. Write App.tsx (Core Logic)
+# 6. Write App.tsx (Fixed TypeScript Error)
 cat << 'EOF' > src/App.tsx
 import { useState, useRef, useEffect } from 'react';
 import { open, save } from '@tauri-apps/api/dialog';
@@ -225,8 +225,8 @@ export default function App() {
     if (!ctxRef.current || !drawLayerRef.current) return;
     isDrawing.current = true;
     
-    // Hardware Eraser Map
-    if (e.pointerType === 'eraser' || e.button === 5) {
+    // Fixed TypeScript strict check here by casting to string
+    if ((e.pointerType as string) === 'eraser' || e.button === 5) {
       ctxRef.current.globalCompositeOperation = 'destination-out';
       ctxRef.current.lineWidth = size * 5;
     } else {
@@ -243,7 +243,6 @@ export default function App() {
   const handlePointerMove = (e: React.PointerEvent) => {
     if (!isDrawing.current || !ctxRef.current || !drawLayerRef.current) return;
     
-    // Pressure sensitivity scaling
     const pressureMultiplier = e.pointerType === 'pen' && e.pressure > 0 ? e.pressure * 2 : 1;
     ctxRef.current.lineWidth = size * pressureMultiplier;
 
@@ -268,7 +267,6 @@ export default function App() {
         return;
       }
 
-      // Merge Annotations natively
       const pdfDoc = await PDFDocument.load(pdfBytes);
       const pdfPages = pdfDoc.getPages();
       
@@ -277,7 +275,6 @@ export default function App() {
       for (let i = 0; i < pages.length; i++) {
         const pageData = pages[i];
         
-        // Slice the master canvas for this specific page
         const sliceCanvas = document.createElement('canvas');
         sliceCanvas.width = pageData.width;
         sliceCanvas.height = pageData.height;
@@ -296,7 +293,6 @@ export default function App() {
           }, 'image/png');
         });
 
-        // Embed png natively into pdf-lib
         const embeddedPng = await pdfDoc.embedPng(pngImageBytes);
         const pdfPage = pdfPages[i];
         const { width, height } = pdfPage.getSize();
@@ -306,7 +302,7 @@ export default function App() {
           width: width, height: height,
         });
 
-        currentYOffset += pageData.height + 20; // Move to next slice
+        currentYOffset += pageData.height + 20; 
       }
 
       const finalPdfBytes = await pdfDoc.save();
@@ -371,5 +367,4 @@ export default function App() {
 }
 EOF
 
-# Build routine check (Optional, comment out if strictly running in CI)
-echo "✅ Generation complete. Run 'cd annotator-app && npm install && npm run tauri dev' to test locally."
+echo "✅ Script generation updated successfully!"
