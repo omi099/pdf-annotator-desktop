@@ -34,19 +34,21 @@ jobs:
         run: dotnet restore
 
       # 3. COMPILE STANDALONE EXECUTABLE
+      # Fixed the RID target to win-x64 instead of win10-x64
       - name: Compile and Publish Native EXE
         working-directory: ./TeachingAnnotator
         run: >
           dotnet publish 
           -c Release 
-          -r win10-x64 
+          -r win-x64 
           --self-contained true 
           -p:WindowsPackageType=None 
           -p:WindowsAppSDKSelfContained=true
 
       # 4. UPLOAD ARTIFACT
+      # Adjusted output path to match the new RID
       - name: Upload Native Windows Executable
         uses: actions/upload-artifact@v4
         with:
           name: Apex-Teaching-Annotator-Windows
-          path: TeachingAnnotator/bin/Release/net8.0-windows10.0.19041.0/win10-x64/publish/
+          path: TeachingAnnotator/bin/Release/net8.0-windows10.0.19041.0/win-x64/publish/
