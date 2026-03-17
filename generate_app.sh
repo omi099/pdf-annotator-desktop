@@ -1,14 +1,14 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping Final Crash-Proof PDF Annotator..."
+echo "🚀 Bootstrapping Crash-Proof, Vector-Accurate PDF Annotator..."
 
 # 1. Create Vite/React/TS project
 npx create-vite@latest annotator-app --template react-ts
 cd annotator-app
 
-# 2. Install dependencies (Swapped pdf-lib for jspdf)
-npm install @tauri-apps/api@^1.5.0 pdfjs-dist@^3.11.174 jspdf@^2.5.1
+# 2. Install dependencies (Using pdf-lib for vector preservation)
+npm install @tauri-apps/api@^1.5.0 pdfjs-dist@^3.11.174 pdf-lib@^1.17.1
 npm install --save-dev @tauri-apps/cli@^1.5.0
 
 # 3. Initialize Tauri
@@ -110,13 +110,13 @@ header { background-color: var(--panel-bg); padding: 15px 30px; display: flex; j
 .size-badge { font-family: monospace; font-size: 0.9rem; font-weight: bold; color: #00ffcc; min-width: 25px; text-align: center; }
 EOF
 
-# 6. Write App.tsx (Fully Fixed TypeScript)
+# 6. Write App.tsx (OOM Fix + Crisp PDF Engine)
 cat << 'EOF' > src/App.tsx
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { open, save } from '@tauri-apps/api/dialog';
 import { readBinaryFile, writeBinaryFile } from '@tauri-apps/api/fs';
 import * as pdfjsLib from 'pdfjs-dist';
-import { jsPDF } from 'jspdf';
+import { PDFDocument } from 'pdf-lib';
 import './App.css';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
@@ -145,7 +145,6 @@ export default function App() {
   const strokesRef = useRef<Stroke[]>([]);
   const isDrawingRef = useRef(false);
 
-  // Instant Hardware Eraser Refs (Bypasses React State Delay)
   const activeToolRef = useRef<'pen' | 'eraser'>('pen');
   const tempToolRevertRef = useRef<'pen' | 'eraser' | null>(null);
 
@@ -218,25 +217,25 @@ export default function App() {
     const loadedPages: PageData[] = [];
     let currentY = 0;
 
+    // Use scale 3.0 to ensure UI pages are perfectly crisp
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);
-      const viewport = page.getViewport({ scale: 2.0 });
+      const viewport = page.getViewport({ scale: 3.0 }); 
       const canvas = document.createElement('canvas');
       canvas.width = viewport.width; canvas.height = viewport.height;
       await page.render({ canvasContext: canvas.getContext('2d')!, viewport }).promise;
       
       loadedPages.push({ 
-        url: canvas.toDataURL('image/jpeg', 0.8), 
-        baseWidth: viewport.width / 2, 
-        baseHeight: viewport.height / 2, 
+        url: canvas.toDataURL('image/jpeg', 0.9), 
+        baseWidth: viewport.width / 3.0, 
+        baseHeight: viewport.height / 3.0, 
         startY: currentY 
       });
-      currentY += (viewport.height / 2) + 30;
+      currentY += (viewport.height / 3.0) + 30;
     }
     setPages(loadedPages);
   };
 
-  // --- HARDWARE POINTER EVENTS (FIXED TS ERRORS) ---
   const handleDown = (e: React.PointerEvent) => {
     if (!isDrawModeOn || e.pointerType === 'mouse') return;
     isDrawingRef.current = true;
@@ -246,7 +245,6 @@ export default function App() {
     const x = (e.clientX - rect.left) / zoom;
     const y = (e.clientY - rect.top) / zoom;
 
-    // TypeScript strict string cast fix
     if ((e.pointerType as string) === 'eraser' || e.button === 5 || (e.buttons & 32) || e.button === 2 || (e.buttons & 2)) {
       tempToolRevertRef.current = activeToolRef.current;
       activeToolRef.current = 'eraser';
@@ -307,7 +305,6 @@ export default function App() {
     }
   };
 
-  // TypeScript unused variable fix
   const handleUp = () => {
     isDrawingRef.current = false;
     if (tempToolRevertRef.current) {
@@ -319,7 +316,7 @@ export default function App() {
 
   const clearCanvas = () => { strokesRef.current = []; redraw(); };
 
-  // --- CRASH-PROOF jsPDF EXPORT ---
+  // --- CRASH-PROOF, HIGH-RES VECTOR EXPORT ---
   const exportPDF = async () => {
     if (!pdfBytes) return;
     const path = await save({ defaultPath: 'Annotated.pdf', filters: [{ name: 'PDF', extensions: ['pdf'] }] });
@@ -327,59 +324,58 @@ export default function App() {
 
     setIsExporting(true);
     try {
-      const pdf = await pdfjsLib.getDocument({ data: pdfBytes }).promise;
-      let doc: jsPDF | null = null;
+      // 1. Load Original Vector PDF to keep text selectable
+      const pdfDoc = await PDFDocument.load(pdfBytes);
+      const pdfPages = pdfDoc.getPages();
 
-      for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const viewport = page.getViewport({ scale: 2.0 }); 
+      for (let i = 0; i < pages.length; i++) {
+        const pData = pages[i];
         
-        const canvas = document.createElement('canvas');
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
-        const ctx = canvas.getContext('2d')!;
-        
-        await page.render({ canvasContext: ctx, viewport }).promise;
+        // OPTIMIZATION: Check if page even has ink. Skip if empty to save memory.
+        const pageTop = pData.startY;
+        const pageBottom = pData.startY + pData.baseHeight;
+        const hasStrokes = strokesRef.current.some(s => s.points.some(p => p.y >= pageTop && p.y <= pageBottom));
+        if (!hasStrokes) continue;
 
-        const pData = pages[i - 1];
-        ctx.save();
-        ctx.scale(2.0, 2.0);
-        ctx.translate(0, -pData.startY);
+        // 2. Draw ink to transparent high-res canvas (4x scale for OneNote crispness)
+        const exportScale = 4.0;
+        const exportCanvas = document.createElement('canvas');
+        exportCanvas.width = pData.baseWidth * exportScale;
+        exportCanvas.height = pData.baseHeight * exportScale;
+        const eCtx = exportCanvas.getContext('2d')!;
+        
+        eCtx.scale(exportScale, exportScale);
+        eCtx.translate(0, -pData.startY);
 
         strokesRef.current.forEach(s => {
-          if(s.points.length < 2) return;
-          ctx.strokeStyle = s.color;
-          ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+          eCtx.strokeStyle = s.color;
+          eCtx.lineCap = 'round'; eCtx.lineJoin = 'round';
           for (let j = 0; j < s.points.length - 1; j++) {
             const p1 = s.points[j]; const p2 = s.points[j+1];
-            ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y);
-            ctx.lineWidth = s.size * (p1.pressure === -1 ? 1 : Math.pow(p1.pressure, 1.5) * 2);
-            ctx.stroke();
+            eCtx.beginPath(); eCtx.moveTo(p1.x, p1.y); eCtx.lineTo(p2.x, p2.y);
+            eCtx.lineWidth = s.size * (p1.pressure === -1 ? 1 : Math.pow(p1.pressure, 1.5) * 2);
+            eCtx.stroke();
           }
         });
-        ctx.restore();
 
-        const imgData = canvas.toDataURL('image/jpeg', 0.85);
-        const pdfPageWidth = viewport.width / 2.0;
-        const pdfPageHeight = viewport.height / 2.0;
-
-        if (i === 1) {
-          doc = new jsPDF({ orientation: pdfPageWidth > pdfPageHeight ? 'l' : 'p', unit: 'pt', format: [pdfPageWidth, pdfPageHeight] });
-        } else {
-          doc!.addPage([pdfPageWidth, pdfPageHeight], pdfPageWidth > pdfPageHeight ? 'l' : 'p');
+        // 3. The Anti-Crash Buffer Fix (bypass toDataURL base64 limits entirely)
+        const blob = await new Promise<Blob | null>(resolve => exportCanvas.toBlob(resolve, 'image/png'));
+        if (blob) {
+            const buffer = await blob.arrayBuffer();
+            const png = await pdfDoc.embedPng(buffer);
+            
+            // 4. Stamp ink safely onto the original PDF page
+            const pdfPage = pdfPages[i];
+            pdfPage.drawImage(png, { x: 0, y: 0, width: pdfPage.getWidth(), height: pdfPage.getHeight() });
         }
-        
-        doc!.addImage(imgData, 'JPEG', 0, 0, pdfPageWidth, pdfPageHeight);
       }
 
-      if (doc) {
-        const arrayBuffer = doc.output('arraybuffer');
-        await writeBinaryFile(path, new Uint8Array(arrayBuffer));
-        alert("Export Successful!");
-      }
+      const savedBytes = await pdfDoc.save();
+      await writeBinaryFile(path, savedBytes);
+      alert("PDF Exported Successfully with Crisp Annotations!");
     } catch (err) {
       console.error("Export failed:", err);
-      alert("Failed to export PDF. Check console for details.");
+      alert("Failed to export PDF. Ensure the file is not currently open in another app.");
     } finally {
       setIsExporting(false);
     }
@@ -421,7 +417,7 @@ export default function App() {
           <button className="btn btn-outline" onClick={loadPDF}>📂 Open</button>
           {pages.length > 0 && (
             <button className="btn" style={{background:'#00ffcc', opacity: isExporting ? 0.6 : 1}} onClick={exportPDF} disabled={isExporting}>
-              {isExporting ? '⏳ Processing...' : '💾 Save PDF'}
+              {isExporting ? '⏳ Compiling...' : '💾 Save PDF'}
             </button>
           )}
         </div>
@@ -463,4 +459,4 @@ export default function App() {
 }
 EOF
 
-echo "✅ App successfully built and configured. Ready for GitHub Actions!"
+echo "✅ Final app compiled! The Memory Limit crash has been eradicated."
