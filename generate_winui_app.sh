@@ -6,11 +6,14 @@ echo "🚀 Bootstrapping Native WinUI 3 Teaching Annotator..."
 # 1. Install Community WinUI CLI Templates (Bypasses Microsoft's VS-only restriction)
 dotnet new install VijayAnand.WinUITemplates
 
-# 2. Create the WinUI 3 Project
-dotnet new winui -n TeachingAnnotator -f net8.0
+# 2. Explicitly create the project directory and move into it
+mkdir -p TeachingAnnotator
 cd TeachingAnnotator
 
-# 3. Overwrite the .csproj for Unpackaged, Self-Contained .EXE generation
+# 3. Create the WinUI 3 Project inside the current folder
+dotnet new winui -n TeachingAnnotator -f net8.0 --force
+
+# 4. Overwrite the .csproj for Unpackaged, Self-Contained .EXE generation
 cat << 'EOF' > TeachingAnnotator.csproj
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
@@ -35,7 +38,7 @@ cat << 'EOF' > TeachingAnnotator.csproj
 </Project>
 EOF
 
-# 4. Overwrite MainWindow.xaml (Native Hardware-Accelerated UI)
+# 5. Overwrite MainWindow.xaml (Native Hardware-Accelerated UI)
 cat << 'EOF' > MainWindow.xaml
 <Window
     x:Class="TeachingAnnotator.MainWindow"
@@ -91,7 +94,7 @@ cat << 'EOF' > MainWindow.xaml
 </Window>
 EOF
 
-# 5. Overwrite MainWindow.xaml.cs (C# Kernel-Level Logic)
+# 6. Overwrite MainWindow.xaml.cs (C# Kernel-Level Logic)
 cat << 'EOF' > MainWindow.xaml.cs
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
