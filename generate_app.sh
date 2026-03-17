@@ -101,7 +101,7 @@ header { background-color: var(--panel-bg); padding: 15px 30px; display: flex; j
 .hide-toolbar-btn { font-size: 0.8rem; background: rgba(255,255,255,0.1); border-radius: 20px; padding: 5px 10px; color: white; border: none; cursor: pointer; margin-left: 10px; }
 EOF
 
-# 6. Write App.tsx
+# 6. Write App.tsx (Unused variables removed!)
 cat << 'EOF' > src/App.tsx
 import { useState, useRef, useEffect } from 'react';
 import { open, save } from '@tauri-apps/api/dialog';
@@ -189,9 +189,6 @@ export default function App() {
     const canvas = canvasRef.current;
     const ctx = ctxRef.current;
     if (!canvas || !ctx) return;
-
-    const dpr = window.devicePixelRatio || 1;
-    const z = zoomRef.current;
     
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
