@@ -1,17 +1,16 @@
-name: Build Teaching PDF Annotator
+name: Build Teaching PDF Annotator (Windows)
 
 on:
   push:
-    branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
+    branches: [ "main" ]
   workflow_dispatch:
 
 jobs:
-  build:
+  build-windows:
     runs-on: windows-latest
+    
     steps:
-      - name: Checkout code
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
       - name: Setup Node.js
@@ -19,30 +18,32 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install Rust stable
+      - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
-
-      - name: Rust cache
-        uses: Swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
+          targets: x86_64-pc-windows-msvc
 
-      - name: Run build script
+      - name: Install Tauri Dependencies (Windows)
+        run: |
+          # WebView2 is usually pre-installed on windows-latest, but ensuring core tools are present
+          cargo install tauri-cli --version "^1.5.0"
+
+      - name: Run Bash Generator Script
         shell: bash
         run: |
-          chmod +x ./build.sh
-          ./build.sh
+          chmod +x generate_app.sh
+          ./generate_app.sh
 
-      - name: Upload EXE artifact
+      - name: Install NPM Dependencies
+        working-directory: ./annotator-app
+        run: npm install
+
+      - name: Build Tauri App
+        working-directory: ./annotator-app
+        run: npm run tauri build
+
+      - name: Upload Windows EXE Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: TeachingPDFAnnotator-windows
-          path: src-tauri/target/release/bundle/nsis/*.exe
-          if-no-files-found: warn
-
-      - name: Upload MSI artifact (fallback)
-        uses: actions/upload-artifact@v4
-        with:
-          name: TeachingPDFAnnotator-windows-msi
-          path: src-tauri/target/release/bundle/msi/*.msi
-          if-no-files-found: warn
+          name: Teaching-Annotator-Windows
+          path: annotator-app/src-tauri/target/release/bundle/msi/*.msi # Tauri outputs MSI by default for Windows
