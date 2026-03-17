@@ -66,7 +66,7 @@ cat << 'EOF' > src-tauri/tauri.conf.json
 }
 EOF
 
-# 5. Write App.css (Native Crosshair Cursor for zero latency)
+# 5. Write App.css
 cat << 'EOF' > src/App.css
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800&display=swap');
 
@@ -110,7 +110,7 @@ header { background-color: var(--panel-bg); padding: 15px 30px; display: flex; j
 .size-badge { font-family: monospace; font-size: 0.9rem; font-weight: bold; color: #00ffcc; min-width: 25px; text-align: center; }
 EOF
 
-# 6. Write App.tsx (Crash-Proof jsPDF Export & Instant Hardware Eraser)
+# 6. Write App.tsx (Fully Fixed TypeScript)
 cat << 'EOF' > src/App.tsx
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { open, save } from '@tauri-apps/api/dialog';
@@ -236,7 +236,7 @@ export default function App() {
     setPages(loadedPages);
   };
 
-  // --- HARDWARE POINTER EVENTS (FIXED ERASER) ---
+  // --- HARDWARE POINTER EVENTS (FIXED TS ERRORS) ---
   const handleDown = (e: React.PointerEvent) => {
     if (!isDrawModeOn || e.pointerType === 'mouse') return;
     isDrawingRef.current = true;
@@ -246,11 +246,11 @@ export default function App() {
     const x = (e.clientX - rect.left) / zoom;
     const y = (e.clientY - rect.top) / zoom;
 
-    // Direct hardware check (Side button = e.button === 2 or e.buttons & 2)
-    if (e.pointerType === 'eraser' || e.button === 5 || (e.buttons & 32) || e.button === 2 || (e.buttons & 2)) {
+    // TypeScript strict string cast fix
+    if ((e.pointerType as string) === 'eraser' || e.button === 5 || (e.buttons & 32) || e.button === 2 || (e.buttons & 2)) {
       tempToolRevertRef.current = activeToolRef.current;
       activeToolRef.current = 'eraser';
-      setTool('eraser'); // Update UI
+      setTool('eraser'); 
     }
 
     if (activeToolRef.current === 'eraser') {
@@ -307,7 +307,8 @@ export default function App() {
     }
   };
 
-  const handleUp = (e: React.PointerEvent) => {
+  // TypeScript unused variable fix
+  const handleUp = () => {
     isDrawingRef.current = false;
     if (tempToolRevertRef.current) {
       activeToolRef.current = tempToolRevertRef.current;
@@ -331,17 +332,15 @@ export default function App() {
 
       for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
-        const viewport = page.getViewport({ scale: 2.0 }); // Render crisp at 2x
+        const viewport = page.getViewport({ scale: 2.0 }); 
         
         const canvas = document.createElement('canvas');
         canvas.width = viewport.width;
         canvas.height = viewport.height;
         const ctx = canvas.getContext('2d')!;
         
-        // 1. Draw Original PDF Background
         await page.render({ canvasContext: ctx, viewport }).promise;
 
-        // 2. Draw Annotations on top
         const pData = pages[i - 1];
         ctx.save();
         ctx.scale(2.0, 2.0);
@@ -360,7 +359,6 @@ export default function App() {
         });
         ctx.restore();
 
-        // 3. Compress directly to JPEG and add to jsPDF
         const imgData = canvas.toDataURL('image/jpeg', 0.85);
         const pdfPageWidth = viewport.width / 2.0;
         const pdfPageHeight = viewport.height / 2.0;
