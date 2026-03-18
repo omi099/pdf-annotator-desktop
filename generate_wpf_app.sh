@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping the Native WPF Annotator (Zero-Error Reflection Edition)..."
+echo "🚀 Bootstrapping the Native WPF Annotator (True Yellow Adorner Edition)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -30,7 +30,7 @@ cat << 'EOF' > TeachingAnnotator.csproj
 </Project>
 EOF
 
-# 4. Overwrite MainWindow.xaml (FIXED: Removed invalid Foreground property)
+# 4. Overwrite MainWindow.xaml
 cat << 'EOF' > MainWindow.xaml
 <Window x:Class="TeachingAnnotator.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -119,14 +119,6 @@ cat << 'EOF' > MainWindow.xaml
                 </ItemsControl>
 
                 <AdornerDecorator>
-                    <AdornerDecorator.Resources>
-                        <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#FFFF00"/>
-                        <SolidColorBrush x:Key="{x:Static SystemColors.ControlTextBrushKey}" Color="#FFFF00"/>
-                        <SolidColorBrush x:Key="{x:Static SystemColors.WindowTextBrushKey}" Color="#FFFF00"/>
-                        <SolidColorBrush x:Key="{x:Static SystemColors.ActiveBorderBrushKey}" Color="#FFFF00"/>
-                        <SolidColorBrush x:Key="{x:Static SystemColors.WindowFrameBrushKey}" Color="#FFFF00"/>
-                    </AdornerDecorator.Resources>
-                    
                     <Grid x:Name="CanvasContainer" HorizontalAlignment="Left" VerticalAlignment="Top">
                         <InkCanvas x:Name="MainInkCanvas" Background="Transparent" UseCustomCursor="True" Cursor="Arrow" Focusable="True"
                                    PreviewMouseLeftButtonDown="MainInkCanvas_PreviewMouseLeftButtonDown"
@@ -154,7 +146,7 @@ cat << 'EOF' > MainWindow.xaml
 </Window>
 EOF
 
-# 5. Overwrite MainWindow.xaml.cs 
+# 5. Overwrite MainWindow.xaml.cs
 cat << 'EOF' > MainWindow.xaml.cs
 using System;
 using System.Collections.Generic;
@@ -244,49 +236,72 @@ namespace TeachingAnnotator
             ApplyTheme();
         }
 
-        // --- SURGICAL REFLECTION OVERRIDE FOR WPF ADORNER (The Yellow Box Fix) ---
+        // --- SURGICAL VISUAL TREE REFLECTION (The True Yellow Box Fix) ---
         private void MainInkCanvas_SelectionChanged(object sender, EventArgs e)
         {
-            Dispatcher.BeginInvoke(new Action(() => ForceYellowSelectionBox()), DispatcherPriority.Loaded);
+            // Delay injection until the render thread has built the hidden InnerCanvas layer
+            Dispatcher.BeginInvoke(new Action(() => ForceYellowSelectionBox(MainInkCanvas)), DispatcherPriority.Render);
         }
 
-        private void ForceYellowSelectionBox()
+        private void ForceYellowSelectionBox(DependencyObject parent)
         {
-            var layer = System.Windows.Documents.AdornerLayer.GetAdornerLayer(MainInkCanvas);
-            if (layer == null) return;
-            
-            var adorners = layer.GetAdorners(MainInkCanvas);
-            if (adorners == null) return;
+            if (parent == null) return;
 
-            foreach (var adorner in adorners)
+            // Search every visual child deep inside the InkCanvas wrapper
+            int childrenCount = VisualTreeHelper.GetChildrenCount(parent);
+            for (int i = 0; i < childrenCount; i++)
             {
-                if (adorner.GetType().Name == "InkCanvasSelectionAdorner")
+                var child = VisualTreeHelper.GetChild(parent, i);
+                
+                if (child is UIElement uiElement)
                 {
-                    var flags = BindingFlags.NonPublic | BindingFlags.Instance;
-                    
-                    var hatchPenField = adorner.GetType().GetField("_hatchPen", flags);
-                    if (hatchPenField != null)
+                    var layer = System.Windows.Documents.AdornerLayer.GetAdornerLayer(uiElement);
+                    if (layer != null)
                     {
-                        Pen yellowDash = new Pen(Brushes.Yellow, 1.5) { DashStyle = DashStyles.Dash };
-                        hatchPenField.SetValue(adorner, yellowDash);
+                        var adorners = layer.GetAdorners(uiElement);
+                        if (adorners != null)
+                        {
+                            foreach (var adorner in adorners)
+                            {
+                                if (adorner.GetType().Name == "InkCanvasSelectionAdorner")
+                                {
+                                    ModifyAdorner(adorner);
+                                }
+                            }
+                        }
                     }
-
-                    var elementsPenField = adorner.GetType().GetField("_elementsPen", flags);
-                    if (elementsPenField != null)
-                    {
-                        Pen yellowSolid = new Pen(Brushes.Yellow, 1.5);
-                        elementsPenField.SetValue(adorner, yellowSolid);
-                    }
-
-                    var elementsFillBrushField = adorner.GetType().GetField("_elementsFillBrush", flags);
-                    if (elementsFillBrushField != null)
-                    {
-                        elementsFillBrushField.SetValue(adorner, Brushes.Yellow);
-                    }
-                    
-                    adorner.InvalidateVisual(); 
                 }
+                
+                // Recursively drill deeper
+                ForceYellowSelectionBox(child);
             }
+        }
+
+        private void ModifyAdorner(System.Windows.Documents.Adorner adorner)
+        {
+            var flags = BindingFlags.NonPublic | BindingFlags.Instance;
+            
+            var hatchPenField = adorner.GetType().GetField("_hatchPen", flags);
+            if (hatchPenField != null)
+            {
+                Pen yellowDash = new Pen(Brushes.Yellow, 1.5) { DashStyle = DashStyles.Dash };
+                hatchPenField.SetValue(adorner, yellowDash);
+            }
+
+            var elementsPenField = adorner.GetType().GetField("_elementsPen", flags);
+            if (elementsPenField != null)
+            {
+                Pen yellowSolid = new Pen(Brushes.Yellow, 1.5);
+                elementsPenField.SetValue(adorner, yellowSolid);
+            }
+
+            var elementsFillBrushField = adorner.GetType().GetField("_elementsFillBrush", flags);
+            if (elementsFillBrushField != null)
+            {
+                elementsFillBrushField.SetValue(adorner, Brushes.Yellow);
+            }
+            
+            adorner.InvalidateVisual(); // Force the GPU to redraw it immediately
         }
 
         private void Theme_Click(object sender, RoutedEventArgs e)
@@ -680,7 +695,6 @@ namespace TeachingAnnotator
         {
             if (_laserStrokes.Count == 0) return;
 
-            // ARCHITECT UPGRADE: Increased duration to 3.5 seconds
             if ((DateTime.Now - _lastLaserActivityTime).TotalSeconds > 3.5)
             {
                 _isUpdatingUI = true;
@@ -826,11 +840,11 @@ namespace TeachingAnnotator
                             }
                         }
                         wbDoc.Save(wbdlg.FileName);
-                        MessageBox.Show("Whiteboard Vector Exported Successfully!");
+                        MessageBox.Show("Multi-Page Theme Whiteboard Exported!");
                     }
                     catch (Exception ex) { MessageBox.Show("Export failed: " + ex.Message); }
                 }
-                return; 
+                return;
             }
 
             SaveFileDialog dlg = new SaveFileDialog { Filter = "PDF (*.pdf)|*.pdf", FileName = "Annotated_Document.pdf" };
