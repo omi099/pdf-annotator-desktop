@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping the Native WPF Annotator (Ultimate Yellow Bounding Box Edition)..."
+echo "🚀 Bootstrapping the Native WPF Annotator (Ghost Overlay Edition)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -40,6 +40,12 @@ cat << 'EOF' > MainWindow.xaml
         Background="#0f1115" WindowStartupLocation="CenterScreen"
         KeyDown="Window_KeyDown">
 
+    <Window.Resources>
+        <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#FFFF00"/>
+        <SolidColorBrush x:Key="{x:Static SystemColors.WindowFrameBrushKey}" Color="#FFFF00"/>
+        <SolidColorBrush x:Key="{x:Static SystemColors.ActiveBorderBrushKey}" Color="#FFFF00"/>
+    </Window.Resources>
+
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -50,7 +56,6 @@ cat << 'EOF' > MainWindow.xaml
             <Border.Resources>
                 <SolidColorBrush x:Key="{x:Static SystemColors.WindowTextBrushKey}" Color="Black"/>
                 <SolidColorBrush x:Key="{x:Static SystemColors.ControlTextBrushKey}" Color="Black"/>
-                <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#0078D7"/>
             </Border.Resources>
             
             <WrapPanel Orientation="Horizontal">
@@ -127,8 +132,6 @@ cat << 'EOF' > MainWindow.xaml
                 <Grid x:Name="CanvasContainer" HorizontalAlignment="Left" VerticalAlignment="Top">
                     <InkCanvas x:Name="MainInkCanvas" Background="Transparent" UseCustomCursor="True" Cursor="Arrow" Focusable="True"
                                PreviewMouseLeftButtonDown="MainInkCanvas_PreviewMouseLeftButtonDown"
-                               PreviewMouseMove="MainInkCanvas_PreviewMouseMove"
-                               PreviewMouseLeftButtonUp="MainInkCanvas_PreviewMouseLeftButtonUp"
                                MouseMove="MainInkCanvas_MouseMove" MouseLeave="MainInkCanvas_MouseLeave" MouseEnter="MainInkCanvas_MouseEnter">
                     </InkCanvas>
                     
@@ -136,11 +139,21 @@ cat << 'EOF' > MainWindow.xaml
                                MouseMove="MainInkCanvas_MouseMove" MouseLeave="MainInkCanvas_MouseLeave" MouseEnter="MainInkCanvas_MouseEnter"
                                StrokeCollected="LaserInkCanvas_StrokeCollected">
                     </InkCanvas>
+                    
+                    <Canvas x:Name="SelectionOverlay" IsHitTestVisible="False" Visibility="Hidden" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+                        <Rectangle x:Name="CustomSelectionRect" Stroke="#FFFF00" StrokeThickness="1.5" StrokeDashArray="4 4" Fill="Transparent" />
+                        <Rectangle x:Name="H_TL" Width="9" Height="9" Stroke="#FFFF00" StrokeThickness="1.5" Fill="#1a1c23" />
+                        <Rectangle x:Name="H_TC" Width="9" Height="9" Stroke="#FFFF00" StrokeThickness="1.5" Fill="#1a1c23" />
+                        <Rectangle x:Name="H_TR" Width="9" Height="9" Stroke="#FFFF00" StrokeThickness="1.5" Fill="#1a1c23" />
+                        <Rectangle x:Name="H_ML" Width="9" Height="9" Stroke="#FFFF00" StrokeThickness="1.5" Fill="#1a1c23" />
+                        <Rectangle x:Name="H_MR" Width="9" Height="9" Stroke="#FFFF00" StrokeThickness="1.5" Fill="#1a1c23" />
+                        <Rectangle x:Name="H_BL" Width="9" Height="9" Stroke="#FFFF00" StrokeThickness="1.5" Fill="#1a1c23" />
+                        <Rectangle x:Name="H_BC" Width="9" Height="9" Stroke="#FFFF00" StrokeThickness="1.5" Fill="#1a1c23" />
+                        <Rectangle x:Name="H_BR" Width="9" Height="9" Stroke="#FFFF00" StrokeThickness="1.5" Fill="#1a1c23" />
+                    </Canvas>
                 </Grid>
                 
                 <Canvas x:Name="CursorCanvas" IsHitTestVisible="False" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Panel.ZIndex="999">
-                    <Polygon x:Name="CustomLassoPolygon" Visibility="Hidden" Stroke="#FFFF00" StrokeThickness="2" StrokeDashArray="4,4" Fill="#33FFFF00" IsHitTestVisible="False" />
-                    
                     <Ellipse x:Name="CustomDotCursor" Visibility="Hidden" IsHitTestVisible="False">
                         <Ellipse.Effect>
                             <DropShadowEffect x:Name="CursorGlow" BlurRadius="4" ShadowDepth="1" Opacity="0.6" />
@@ -160,7 +173,6 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -220,9 +232,6 @@ namespace TeachingAnnotator
 
         private bool _isDarkTheme = true;
 
-        private PointCollection _lassoPoints = new PointCollection();
-        private bool _isLassoing = false;
-
         public MainWindow()
         {
             InitializeComponent();
@@ -237,8 +246,12 @@ namespace TeachingAnnotator
             LaserInkCanvas.Width = 3840; LaserInkCanvas.Height = 2160;
             CursorCanvas.Width = 3840; CursorCanvas.Height = 2160;
 
-            // THE SILVER BULLET: Hook into the deepest rendering cycle
-            // This prevents WPF from EVER drawing the hardcoded black bounding box.
+            // Wire up the Custom Bounding Box Physics
+            MainInkCanvas.SelectionChanged += MainInkCanvas_SelectionChanged;
+            MainInkCanvas.SelectionMoving += MainInkCanvas_SelectionMoving;
+            MainInkCanvas.SelectionResizing += MainInkCanvas_SelectionResizing;
+            MainInkCanvas.SelectionMoved += MainInkCanvas_SelectionMoved;
+            MainInkCanvas.SelectionResized += MainInkCanvas_SelectionResized;
             MainInkCanvas.LayoutUpdated += MainInkCanvas_LayoutUpdated;
 
             _laserTimer = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(33) };
@@ -250,78 +263,82 @@ namespace TeachingAnnotator
             ApplyTheme();
         }
 
-        // --- AGGRESSIVE RENDER HOOK FOR TRUE YELLOW BOUNDING BOX ---
+        // --- GHOST OVERLAY ENGINE ---
+        // Dynamically tracks the invisible native box and projects our pure yellow box over it.
+        private void UpdateOverlay(Rect bounds)
+        {
+            if (bounds.IsEmpty || bounds.Width == 0 || bounds.Height == 0)
+            {
+                SelectionOverlay.Visibility = Visibility.Hidden;
+                return;
+            }
+
+            SelectionOverlay.Visibility = Visibility.Visible;
+
+            // Native Adorner adds about 2 pixels of padding around the raw stroke bounds
+            double pad = 2;
+            double left = bounds.Left - pad;
+            double top = bounds.Top - pad;
+            double width = bounds.Width + (pad * 2);
+            double height = bounds.Height + (pad * 2);
+
+            CustomSelectionRect.Width = width;
+            CustomSelectionRect.Height = height;
+            Canvas.SetLeft(CustomSelectionRect, left);
+            Canvas.SetTop(CustomSelectionRect, top);
+
+            // Position the 8 Resize Handles exactly over the invisible native hit-boxes
+            double halfW = width / 2;
+            double halfH = height / 2;
+            double hw = 4.5; // Half of our 9px handle
+
+            Canvas.SetLeft(H_TL, left - hw); Canvas.SetTop(H_TL, top - hw);
+            Canvas.SetLeft(H_TC, left + halfW - hw); Canvas.SetTop(H_TC, top - hw);
+            Canvas.SetLeft(H_TR, left + width - hw); Canvas.SetTop(H_TR, top - hw);
+            
+            Canvas.SetLeft(H_ML, left - hw); Canvas.SetTop(H_ML, top + halfH - hw);
+            Canvas.SetLeft(H_MR, left + width - hw); Canvas.SetTop(H_MR, top + halfH - hw);
+            
+            Canvas.SetLeft(H_BL, left - hw); Canvas.SetTop(H_BL, top + height - hw);
+            Canvas.SetLeft(H_BC, left + halfW - hw); Canvas.SetTop(H_BC, top + height - hw);
+            Canvas.SetLeft(H_BR, left + width - hw); Canvas.SetTop(H_BR, top + height - hw);
+        }
+
+        private void MainInkCanvas_SelectionChanged(object sender, EventArgs e) => UpdateOverlay(MainInkCanvas.GetSelectionBounds());
+        private void MainInkCanvas_SelectionMoved(object sender, EventArgs e) => UpdateOverlay(MainInkCanvas.GetSelectionBounds());
+        private void MainInkCanvas_SelectionResized(object sender, EventArgs e) => UpdateOverlay(MainInkCanvas.GetSelectionBounds());
+        private void MainInkCanvas_SelectionMoving(object sender, InkCanvasSelectionEditingEventArgs e) => UpdateOverlay(e.NewRectangle);
+        private void MainInkCanvas_SelectionResizing(object sender, InkCanvasSelectionEditingEventArgs e) => UpdateOverlay(e.NewRectangle);
+
         private void MainInkCanvas_LayoutUpdated(object? sender, EventArgs e)
         {
             if (MainInkCanvas.GetSelectedStrokes().Count > 0)
             {
-                ForceYellowSelectionBox();
-            }
-        }
-
-        private void ForceYellowSelectionBox()
-        {
-            // Drill down to the hidden InkCanvasInnerCanvas
-            if (VisualTreeHelper.GetChildrenCount(MainInkCanvas) > 0)
-            {
-                var innerCanvas = VisualTreeHelper.GetChild(MainInkCanvas, 0) as UIElement;
-                if (innerCanvas != null)
+                // Force the hardcoded black native Adorner to become virtually invisible (0.01)
+                // This hides the black lines but keeps the physics/hit-testing completely active!
+                if (VisualTreeHelper.GetChildrenCount(MainInkCanvas) > 0)
                 {
-                    var layer = System.Windows.Documents.AdornerLayer.GetAdornerLayer(innerCanvas);
-                    if (layer != null)
+                    var innerCanvas = VisualTreeHelper.GetChild(MainInkCanvas, 0) as UIElement;
+                    if (innerCanvas != null)
                     {
-                        var adorners = layer.GetAdorners(innerCanvas);
-                        if (adorners != null)
+                        var layer = System.Windows.Documents.AdornerLayer.GetAdornerLayer(innerCanvas);
+                        if (layer != null)
                         {
-                            foreach (var adorner in adorners)
+                            var adorners = layer.GetAdorners(innerCanvas);
+                            if (adorners != null)
                             {
-                                if (adorner.GetType().Name == "InkCanvasSelectionAdorner")
+                                foreach (var adorner in adorners)
                                 {
-                                    ModifyAdorner(adorner);
+                                    if (adorner.GetType().Name == "InkCanvasSelectionAdorner")
+                                    {
+                                        adorner.Opacity = 0.01;
+                                    }
                                 }
                             }
                         }
                     }
                 }
             }
-        }
-
-        private void ModifyAdorner(System.Windows.Documents.Adorner adorner)
-        {
-            var flags = BindingFlags.NonPublic | BindingFlags.Instance;
-            
-            // 1. The Dashed Rectangle Outline
-            var hatchPenField = adorner.GetType().GetField("_hatchPen", flags);
-            if (hatchPenField != null)
-            {
-                Pen? currentPen = hatchPenField.GetValue(adorner) as Pen;
-                
-                // CRITICAL SAFETY CHECK: Stop infinite loop if it's already yellow
-                if (currentPen != null && currentPen.Brush == Brushes.Yellow) return;
-
-                Pen yellowDash = new Pen(Brushes.Yellow, 1.5) { DashStyle = DashStyles.Dash };
-                yellowDash.Freeze();
-                hatchPenField.SetValue(adorner, yellowDash);
-            }
-
-            // 2. The Border of the Expanding Dots
-            var elementsPenField = adorner.GetType().GetField("_elementsPen", flags);
-            if (elementsPenField != null)
-            {
-                Pen yellowSolid = new Pen(Brushes.Yellow, 1.5);
-                yellowSolid.Freeze();
-                elementsPenField.SetValue(adorner, yellowSolid);
-            }
-
-            // 3. The Fill of the Expanding Dots
-            var elementsFillBrushField = adorner.GetType().GetField("_elementsFillBrush", flags);
-            if (elementsFillBrushField != null)
-            {
-                elementsFillBrushField.SetValue(adorner, Brushes.Yellow);
-            }
-            
-            // Force the GPU to redraw the Yellow box immediately
-            adorner.InvalidateVisual(); 
         }
 
         private void Theme_Click(object? sender, RoutedEventArgs? e)
@@ -440,6 +457,7 @@ namespace TeachingAnnotator
                 _redoStack.Push(MainInkCanvas.Strokes.Clone());
                 MainInkCanvas.Strokes = _undoStack.Pop();
                 _isUpdatingUI = false;
+                UpdateOverlay(MainInkCanvas.GetSelectionBounds());
             }
         }
 
@@ -451,6 +469,7 @@ namespace TeachingAnnotator
                 _undoStack.Push(MainInkCanvas.Strokes.Clone());
                 MainInkCanvas.Strokes = _redoStack.Pop();
                 _isUpdatingUI = false;
+                UpdateOverlay(MainInkCanvas.GetSelectionBounds());
             }
         }
 
@@ -459,53 +478,6 @@ namespace TeachingAnnotator
             if (MainInkCanvas.EditingMode != InkCanvasEditingMode.None && MainInkCanvas.EditingMode != InkCanvasEditingMode.Select)
             {
                 SaveUndoState();
-            }
-
-            if (SelectBtn.IsChecked == true)
-            {
-                var hitResult = MainInkCanvas.HitTestSelection(e.GetPosition(MainInkCanvas));
-                if (hitResult == InkCanvasSelectionHitResult.None)
-                {
-                    MainInkCanvas.EditingMode = InkCanvasEditingMode.None; 
-                    _isLassoing = true;
-                    _lassoPoints.Clear();
-                    _lassoPoints.Add(e.GetPosition(CursorCanvas));
-                    CustomLassoPolygon.Points = _lassoPoints;
-                    CustomLassoPolygon.Visibility = Visibility.Visible;
-                    MainInkCanvas.CaptureMouse();
-                    e.Handled = true;
-                }
-                else
-                {
-                    MainInkCanvas.EditingMode = InkCanvasEditingMode.Select;
-                }
-            }
-        }
-
-        private void MainInkCanvas_PreviewMouseMove(object sender, MouseEventArgs e)
-        {
-            if (_isLassoing && e.LeftButton == MouseButtonState.Pressed)
-            {
-                _lassoPoints.Add(e.GetPosition(CursorCanvas));
-            }
-        }
-
-        private void MainInkCanvas_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
-        {
-            if (_isLassoing)
-            {
-                _isLassoing = false;
-                MainInkCanvas.ReleaseMouseCapture();
-                CustomLassoPolygon.Visibility = Visibility.Hidden;
-
-                if (_lassoPoints.Count > 3)
-                {
-                    var selected = MainInkCanvas.Strokes.HitTest(_lassoPoints, 50); 
-                    MainInkCanvas.Select(selected);
-                }
-                
-                MainInkCanvas.EditingMode = InkCanvasEditingMode.Select;
-                e.Handled = true;
             }
         }
 
@@ -537,6 +509,7 @@ namespace TeachingAnnotator
                 {
                     SaveUndoState();
                     MainInkCanvas.Strokes.Remove(selectedStrokes);
+                    UpdateOverlay(Rect.Empty); // Hide box after deletion
                     return;
                 }
             }
@@ -781,6 +754,7 @@ namespace TeachingAnnotator
                 LaserInkCanvas.Strokes.Clear();
                 _undoStack.Clear();
                 _redoStack.Clear();
+                UpdateOverlay(Rect.Empty);
 
                 try 
                 {
@@ -982,6 +956,7 @@ namespace TeachingAnnotator
             SaveUndoState();
             MainInkCanvas.Strokes.Clear();
             LaserInkCanvas.Strokes.Clear();
+            UpdateOverlay(Rect.Empty);
         }
 
         private void PerformZoomIn() { _zoom += 0.25; ZoomTransform.ScaleX = _zoom; ZoomTransform.ScaleY = _zoom; }
