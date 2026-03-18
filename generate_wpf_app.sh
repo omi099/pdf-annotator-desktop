@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping the Native WPF Annotator (Immersive Fullscreen Edition)..."
+echo "🚀 Bootstrapping the Native WPF Annotator (Perfect Highlighter Edition)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -20,6 +20,8 @@ cat << 'EOF' > TeachingAnnotator.csproj
     <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
     <Nullable>enable</Nullable>
     <UseWPF>true</UseWPF>
+    <TieredCompilation>true</TieredCompilation>
+    <Optimize>true</Optimize>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="PdfSharp" Version="6.1.1" />
@@ -28,12 +30,12 @@ cat << 'EOF' > TeachingAnnotator.csproj
 </Project>
 EOF
 
-# 4. Overwrite MainWindow.xaml (FIXED: Removed invalid Foreground property)
+# 4. Overwrite MainWindow.xaml
 cat << 'EOF' > MainWindow.xaml
 <Window x:Class="TeachingAnnotator.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Apex Native Annotator - Ultimate Edition" 
+        Title="Apex Native Annotator - Zero Lag Edition" 
         WindowState="Maximized" 
         Background="#0f1115" WindowStartupLocation="CenterScreen"
         KeyDown="Window_KeyDown">
@@ -112,7 +114,7 @@ cat << 'EOF' > MainWindow.xaml
                     </InkCanvas.Resources>
                 </InkCanvas>
                 
-                <Canvas x:Name="CursorCanvas" IsHitTestVisible="False" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+                <Canvas x:Name="CursorCanvas" IsHitTestVisible="False" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Panel.ZIndex="999">
                     
                     <Ellipse x:Name="CustomDotCursor" Visibility="Hidden" IsHitTestVisible="False"/>
                     
@@ -131,7 +133,7 @@ cat << 'EOF' > MainWindow.xaml
 </Window>
 EOF
 
-# 5. Overwrite MainWindow.xaml.cs 
+# 5. Overwrite MainWindow.xaml.cs (Perfected PDF Vector Path Logic)
 cat << 'EOF' > MainWindow.xaml.cs
 using System;
 using System.Collections.Generic;
@@ -196,7 +198,7 @@ namespace TeachingAnnotator
 
             MainInkCanvas.Cursor = Cursors.None;
 
-            _laserTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(33) };
+            _laserTimer = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(33) };
             _laserTimer.Tick += LaserTimer_Tick;
             _laserTimer.Start();
 
@@ -240,29 +242,29 @@ namespace TeachingAnnotator
 
             if (SizeInput.IsFocused) return;
 
-            // Fullscreen Toggle (F)
             if (e.Key == Key.F)
             {
                 if (this.WindowStyle == WindowStyle.None)
                 {
                     this.WindowStyle = WindowStyle.SingleBorderWindow;
                     this.WindowState = WindowState.Normal;
+                    this.Topmost = false;
                 }
                 else
                 {
                     this.WindowStyle = WindowStyle.None;
                     this.WindowState = WindowState.Maximized;
+                    this.Topmost = true; 
                 }
             }
 
-            // Hide Toolbar Toggle (H)
             if (e.Key == Key.H)
             {
                 MainToolbar.Visibility = MainToolbar.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
             }
 
             if (e.Key == Key.P) PenBtn.IsChecked = true;
-            else if (e.Key == Key.M) HighlightBtn.IsChecked = true; // Remapped to M for Marker
+            else if (e.Key == Key.M) HighlightBtn.IsChecked = true; 
             else if (e.Key == Key.E) EraserBtn.IsChecked = true;
             else if (e.Key == Key.S) SelectBtn.IsChecked = true;
             else if (e.Key == Key.L) LaserBtn.IsChecked = true;
@@ -575,19 +577,43 @@ namespace TeachingAnnotator
                             {
                                 XColor color = XColor.FromArgb(stroke.DrawingAttributes.Color.A, stroke.DrawingAttributes.Color.R, stroke.DrawingAttributes.Color.G, stroke.DrawingAttributes.Color.B);
                                 double baseThickness = stroke.DrawingAttributes.Width * scaleX;
-
                                 StylusPointCollection points = stroke.StylusPoints;
+
                                 if (points.Count > 1)
                                 {
-                                    for (int j = 0; j < points.Count - 1; j++)
+                                    // CRITICAL HIGHLIGHTER FIX: 
+                                    // Highlighters (or strokes with no pressure) are rendered as a single continuous XGraphicsPath.
+                                    // This prevents the semi-transparent alpha channel from stacking up and turning black/opaque at the joints.
+                                    if (stroke.DrawingAttributes.IsHighlighter || stroke.DrawingAttributes.IgnorePressure)
                                     {
-                                        var p1 = points[j]; var p2 = points[j + 1];
-                                        double x1 = p1.X * scaleX; double y1 = (p1.Y - uiPage.StartY) * scaleY;
-                                        double x2 = p2.X * scaleX; double y2 = (p2.Y - uiPage.StartY) * scaleY;
-                                        double pFactor = stroke.DrawingAttributes.IgnorePressure ? 1.0 : p1.PressureFactor * 2.0;
+                                        XGraphicsPath path = new XGraphicsPath();
+                                        XPoint[] xPoints = new XPoint[points.Count];
                                         
-                                        XPen segmentPen = new XPen(color, baseThickness * pFactor) { LineCap = XLineCap.Round };
-                                        gfx.DrawLine(segmentPen, x1, y1, x2, y2);
+                                        for (int j = 0; j < points.Count; j++)
+                                        {
+                                            xPoints[j] = new XPoint(points[j].X * scaleX, (points[j].Y - uiPage.StartY) * scaleY);
+                                        }
+                                        
+                                        path.AddLines(xPoints);
+                                        
+                                        XLineCap cap = stroke.DrawingAttributes.IsHighlighter ? XLineCap.Square : XLineCap.Round;
+                                        XPen pathPen = new XPen(color, baseThickness) { LineCap = cap, LineJoin = XLineJoin.Round };
+                                        
+                                        gfx.DrawPath(pathPen, path);
+                                    }
+                                    else
+                                    {
+                                        // Standard pressure-sensitive pens must be drawn segment by segment to adjust width dynamically
+                                        for (int j = 0; j < points.Count - 1; j++)
+                                        {
+                                            var p1 = points[j]; var p2 = points[j + 1];
+                                            double x1 = p1.X * scaleX; double y1 = (p1.Y - uiPage.StartY) * scaleY;
+                                            double x2 = p2.X * scaleX; double y2 = (p2.Y - uiPage.StartY) * scaleY;
+                                            double pFactor = p1.PressureFactor * 2.0;
+                                            
+                                            XPen segmentPen = new XPen(color, baseThickness * pFactor) { LineCap = XLineCap.Round };
+                                            gfx.DrawLine(segmentPen, x1, y1, x2, y2);
+                                        }
                                     }
                                 }
                             }
@@ -611,4 +637,4 @@ namespace TeachingAnnotator
 }
 EOF
 
-echo "✅ App Polished to Perfection!"
+echo "✅ Highlighter Physics and Export Engine Polished to Perfection!"
