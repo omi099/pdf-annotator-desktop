@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping the Native WPF Annotator (Perfect Highlighter Edition)..."
+echo "🚀 Bootstrapping the Native WPF Annotator (Default Cursor + Precision Dot Edition)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -30,7 +30,7 @@ cat << 'EOF' > TeachingAnnotator.csproj
 </Project>
 EOF
 
-# 4. Overwrite MainWindow.xaml
+# 4. Overwrite MainWindow.xaml (Restored Default System Cursor & Kept the Footprint Dot)
 cat << 'EOF' > MainWindow.xaml
 <Window x:Class="TeachingAnnotator.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -106,7 +106,7 @@ cat << 'EOF' > MainWindow.xaml
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
 
-                <InkCanvas x:Name="MainInkCanvas" Background="Transparent" UseCustomCursor="True" HorizontalAlignment="Left" VerticalAlignment="Top" Focusable="True"
+                <InkCanvas x:Name="MainInkCanvas" Background="Transparent" UseCustomCursor="True" Cursor="Arrow" HorizontalAlignment="Left" VerticalAlignment="Top" Focusable="True"
                            MouseMove="MainInkCanvas_MouseMove" MouseLeave="MainInkCanvas_MouseLeave" MouseEnter="MainInkCanvas_MouseEnter"
                            StrokeCollected="MainInkCanvas_StrokeCollected">
                     <InkCanvas.Resources>
@@ -116,15 +116,11 @@ cat << 'EOF' > MainWindow.xaml
                 
                 <Canvas x:Name="CursorCanvas" IsHitTestVisible="False" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Panel.ZIndex="999">
                     
-                    <Ellipse x:Name="CustomDotCursor" Visibility="Hidden" IsHitTestVisible="False"/>
-                    
-                    <Path x:Name="CustomArrowCursor" Visibility="Hidden" IsHitTestVisible="False" 
-                          Data="M0,0 L0,16 L4,12 L7,17 L9,16 L6,11 L12,11 Z" 
-                          Stroke="White" StrokeThickness="1.5">
-                        <Path.Effect>
+                    <Ellipse x:Name="CustomDotCursor" Visibility="Hidden" IsHitTestVisible="False">
+                        <Ellipse.Effect>
                             <DropShadowEffect x:Name="CursorGlow" BlurRadius="4" ShadowDepth="1" Opacity="0.6" />
-                        </Path.Effect>
-                    </Path>
+                        </Ellipse.Effect>
+                    </Ellipse>
                     
                 </Canvas>
             </Grid>
@@ -133,7 +129,7 @@ cat << 'EOF' > MainWindow.xaml
 </Window>
 EOF
 
-# 5. Overwrite MainWindow.xaml.cs (Perfected PDF Vector Path Logic)
+# 5. Overwrite MainWindow.xaml.cs (Cleaned C# Logic to support default Arrow + Dot)
 cat << 'EOF' > MainWindow.xaml.cs
 using System;
 using System.Collections.Generic;
@@ -196,7 +192,8 @@ namespace TeachingAnnotator
             PdfItemsControl.ItemsSource = PdfPages;
             System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
 
-            MainInkCanvas.Cursor = Cursors.None;
+            // Force Default System Arrow natively
+            MainInkCanvas.Cursor = Cursors.Arrow;
 
             _laserTimer = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(33) };
             _laserTimer.Tick += LaserTimer_Tick;
@@ -351,25 +348,25 @@ namespace TeachingAnnotator
             if (PenBtn.IsChecked == true)
             {
                 MainInkCanvas.EditingMode = InkCanvasEditingMode.Ink;
-                MainInkCanvas.Cursor = Cursors.None;
+                MainInkCanvas.Cursor = Cursors.Arrow;
                 MainInkCanvas.DefaultDrawingAttributes = new DrawingAttributes { Color = activeColor, Width = activeSize, Height = activeSize, FitToCurve = true, IgnorePressure = ignorePressure };
             }
             else if (HighlightBtn.IsChecked == true)
             {
                 MainInkCanvas.EditingMode = InkCanvasEditingMode.Ink;
-                MainInkCanvas.Cursor = Cursors.None;
+                MainInkCanvas.Cursor = Cursors.Arrow;
                 MainInkCanvas.DefaultDrawingAttributes = new DrawingAttributes { Color = Color.FromArgb(120, activeColor.R, activeColor.G, activeColor.B), Width = activeSize * 4, Height = activeSize * 4, StylusTip = StylusTip.Rectangle, IsHighlighter = true, IgnorePressure = true };
             }
             else if (LaserBtn.IsChecked == true)
             {
                 MainInkCanvas.EditingMode = InkCanvasEditingMode.Ink;
-                MainInkCanvas.Cursor = Cursors.None;
+                MainInkCanvas.Cursor = Cursors.Arrow;
                 MainInkCanvas.DefaultDrawingAttributes = new DrawingAttributes { Color = activeColor, Width = activeSize, Height = activeSize, FitToCurve = true, IgnorePressure = true };
             }
             else if (EraserBtn.IsChecked == true)
             {
                 MainInkCanvas.EditingMode = InkCanvasEditingMode.EraseByStroke;
-                MainInkCanvas.Cursor = Cursors.None;
+                MainInkCanvas.Cursor = Cursors.Arrow;
             }
             else if (SelectBtn.IsChecked == true)
             {
@@ -382,10 +379,9 @@ namespace TeachingAnnotator
 
         private void UpdateCustomCursorAppearance()
         {
-            if (CustomArrowCursor == null || CustomDotCursor == null) return;
+            if (CustomDotCursor == null) return;
 
             if (SelectBtn.IsChecked == true) {
-                CustomArrowCursor.Visibility = Visibility.Hidden;
                 CustomDotCursor.Visibility = Visibility.Hidden;
                 return;
             }
@@ -402,12 +398,11 @@ namespace TeachingAnnotator
                 CustomDotCursor.Fill = new SolidColorBrush(Color.FromArgb(100, 255, 255, 255));
             } else { 
                 CustomDotCursor.Stroke = new SolidColorBrush(c);
-                CustomDotCursor.Fill = new SolidColorBrush(Color.FromArgb(50, c.R, c.G, c.B)); 
+                CustomDotCursor.Fill = new SolidColorBrush(Color.FromArgb(150, c.R, c.G, c.B)); 
             }
 
             CustomDotCursor.Width = size; 
             CustomDotCursor.Height = size;
-            CustomArrowCursor.Fill = new SolidColorBrush(c);
 
             if (LaserBtn.IsChecked == true) {
                 CursorGlow.Color = c; CursorGlow.Opacity = 1.0; CursorGlow.BlurRadius = 15; CursorGlow.ShadowDepth = 0;
@@ -425,21 +420,17 @@ namespace TeachingAnnotator
 
             if (SelectBtn.IsChecked == true) return;
             
-            CustomArrowCursor.Visibility = Visibility.Visible;
             CustomDotCursor.Visibility = Visibility.Visible;
             
             Point p = e.GetPosition(CursorCanvas);
             
-            Canvas.SetLeft(CustomArrowCursor, p.X);
-            Canvas.SetTop(CustomArrowCursor, p.Y);
-            
+            // Orbits the exact tip of the Windows system arrow pointer
             Canvas.SetLeft(CustomDotCursor, p.X - (CustomDotCursor.Width / 2));
             Canvas.SetTop(CustomDotCursor, p.Y - (CustomDotCursor.Height / 2));
         }
 
         private void MainInkCanvas_MouseLeave(object sender, MouseEventArgs e) 
         { 
-            CustomArrowCursor.Visibility = Visibility.Hidden;
             CustomDotCursor.Visibility = Visibility.Hidden; 
         }
 
@@ -447,7 +438,6 @@ namespace TeachingAnnotator
         { 
             if (SelectBtn.IsChecked != true) 
             {
-                CustomArrowCursor.Visibility = Visibility.Visible;
                 CustomDotCursor.Visibility = Visibility.Visible; 
             }
         }
@@ -577,33 +567,23 @@ namespace TeachingAnnotator
                             {
                                 XColor color = XColor.FromArgb(stroke.DrawingAttributes.Color.A, stroke.DrawingAttributes.Color.R, stroke.DrawingAttributes.Color.G, stroke.DrawingAttributes.Color.B);
                                 double baseThickness = stroke.DrawingAttributes.Width * scaleX;
-                                StylusPointCollection points = stroke.StylusPoints;
 
+                                StylusPointCollection points = stroke.StylusPoints;
                                 if (points.Count > 1)
                                 {
-                                    // CRITICAL HIGHLIGHTER FIX: 
-                                    // Highlighters (or strokes with no pressure) are rendered as a single continuous XGraphicsPath.
-                                    // This prevents the semi-transparent alpha channel from stacking up and turning black/opaque at the joints.
                                     if (stroke.DrawingAttributes.IsHighlighter || stroke.DrawingAttributes.IgnorePressure)
                                     {
                                         XGraphicsPath path = new XGraphicsPath();
                                         XPoint[] xPoints = new XPoint[points.Count];
-                                        
-                                        for (int j = 0; j < points.Count; j++)
-                                        {
-                                            xPoints[j] = new XPoint(points[j].X * scaleX, (points[j].Y - uiPage.StartY) * scaleY);
-                                        }
-                                        
+                                        for (int j = 0; j < points.Count; j++) { xPoints[j] = new XPoint(points[j].X * scaleX, (points[j].Y - uiPage.StartY) * scaleY); }
                                         path.AddLines(xPoints);
                                         
                                         XLineCap cap = stroke.DrawingAttributes.IsHighlighter ? XLineCap.Square : XLineCap.Round;
                                         XPen pathPen = new XPen(color, baseThickness) { LineCap = cap, LineJoin = XLineJoin.Round };
-                                        
                                         gfx.DrawPath(pathPen, path);
                                     }
                                     else
                                     {
-                                        // Standard pressure-sensitive pens must be drawn segment by segment to adjust width dynamically
                                         for (int j = 0; j < points.Count - 1; j++)
                                         {
                                             var p1 = points[j]; var p2 = points[j + 1];
@@ -637,4 +617,4 @@ namespace TeachingAnnotator
 }
 EOF
 
-echo "✅ Highlighter Physics and Export Engine Polished to Perfection!"
+echo "✅ App Polished to Perfection!"
