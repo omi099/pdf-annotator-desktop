@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping the Ultimate GoodNotes-Level Annotator..."
+echo "🚀 Bootstrapping the Ultimate Native WPF Annotator (Gold Master Edition)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -28,7 +28,7 @@ cat << 'EOF' > TeachingAnnotator.csproj
 </Project>
 EOF
 
-# 4. Overwrite MainWindow.xaml (Added PreviewMouseWheel for Scroll Physics)
+# 4. Overwrite MainWindow.xaml
 cat << 'EOF' > MainWindow.xaml
 <Window x:Class="TeachingAnnotator.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -104,7 +104,7 @@ cat << 'EOF' > MainWindow.xaml
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
 
-                <InkCanvas x:Name="MainInkCanvas" Background="Transparent" UseCustomCursor="True" HorizontalAlignment="Left" VerticalAlignment="Top"
+                <InkCanvas x:Name="MainInkCanvas" Background="Transparent" UseCustomCursor="True" HorizontalAlignment="Left" VerticalAlignment="Top" Focusable="True"
                            MouseMove="MainInkCanvas_MouseMove" MouseLeave="MainInkCanvas_MouseLeave" MouseEnter="MainInkCanvas_MouseEnter"
                            StrokeCollected="MainInkCanvas_StrokeCollected"/>
                 
@@ -121,7 +121,7 @@ cat << 'EOF' > MainWindow.xaml
 </Window>
 EOF
 
-# 5. Overwrite MainWindow.xaml.cs (Advanced Scroll & Laser Physics)
+# 5. Overwrite MainWindow.xaml.cs (Advanced Scroll, Laser Physics, & Bulletproof Selection)
 cat << 'EOF' > MainWindow.xaml.cs
 using System;
 using System.Collections.Generic;
@@ -193,20 +193,17 @@ namespace TeachingAnnotator
             SyncToolToUI();
         }
 
-        // --- CUSTOM SCROLL PHYSICS ---
         private void MainScroll_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
         {
-            e.Handled = true; // Block default aggressive scrolling
+            e.Handled = true; 
             
             if (Keyboard.Modifiers == ModifierKeys.Control)
             {
-                // Smooth CTRL+Scroll Zooming
-                if (e.Delta > 0) ZoomIn_Click(null, null);
-                else ZoomOut_Click(null, null);
+                if (e.Delta > 0) PerformZoomIn();
+                else PerformZoomOut();
             }
             else
             {
-                // Smooth dampening factor (0.3 = 30% of normal scroll speed)
                 double scrollFactor = 0.3; 
                 if (Keyboard.Modifiers == ModifierKeys.Shift)
                 {
@@ -219,8 +216,21 @@ namespace TeachingAnnotator
             }
         }
 
+        // --- GLOBAL KEYBOARD HOOKS (Bulletproof Delete & Shortcuts) ---
         private void Window_KeyDown(object sender, KeyEventArgs e)
         {
+            // If the user has lasso-selected strokes and presses Delete, destroy them.
+            if (e.Key == Key.Delete)
+            {
+                var selectedStrokes = MainInkCanvas.GetSelectedStrokes();
+                if (selectedStrokes.Count > 0)
+                {
+                    MainInkCanvas.Strokes.Remove(selectedStrokes);
+                    return;
+                }
+            }
+
+            // Do not trigger shortcuts if typing a decimal size
             if (SizeInput.IsFocused) return;
 
             if (e.Key == Key.P) PenBtn.IsChecked = true;
@@ -258,14 +268,14 @@ namespace TeachingAnnotator
             else if (c == Colors.Magenta) search = "Magenta";
 
             foreach (ComboBoxItem item in ColorPicker.Items) {
-                if (item.Content.ToString() == search) { ColorPicker.SelectedItem = item; break; }
+                if (item.Content?.ToString() == search) { ColorPicker.SelectedItem = item; break; }
             }
         }
 
         private Color GetComboColor()
         {
             var item = ColorPicker.SelectedItem as ComboBoxItem;
-            string c = item?.Content.ToString() ?? "Red";
+            string c = item?.Content?.ToString() ?? "Red";
             switch (c) {
                 case "Blue": return Colors.Blue;
                 case "Green": return Colors.Green;
@@ -370,7 +380,6 @@ namespace TeachingAnnotator
 
         private void MainInkCanvas_MouseMove(object sender, MouseEventArgs e)
         {
-            // Reset Laser fade timer if drawing
             if (LaserBtn.IsChecked == true && e.LeftButton == MouseButtonState.Pressed)
             {
                 _lastLaserActivityTime = DateTime.Now;
@@ -386,27 +395,25 @@ namespace TeachingAnnotator
         private void MainInkCanvas_MouseLeave(object sender, MouseEventArgs e) => CustomDotCursor.Visibility = Visibility.Hidden;
         private void MainInkCanvas_MouseEnter(object sender, MouseEventArgs e) { if (SelectBtn.IsChecked != true) CustomDotCursor.Visibility = Visibility.Visible; }
 
-        // --- 1.5s DELAY LASER PHYSICS ---
         private void MainInkCanvas_StrokeCollected(object sender, InkCanvasStrokeCollectedEventArgs e)
         {
             if (LaserBtn.IsChecked == true)
             {
                 _laserStrokes.Add(new LaserStrokeData(e.Stroke));
-                _lastLaserActivityTime = DateTime.Now; // Reset the 1.5s timer
+                _lastLaserActivityTime = DateTime.Now; 
             }
         }
 
-        private void LaserTimer_Tick(object sender, EventArgs e)
+        private void LaserTimer_Tick(object? sender, EventArgs e)
         {
             if (_laserStrokes.Count == 0) return;
 
-            // Wait 1.5 seconds after pen stops moving before fading
             if ((DateTime.Now - _lastLaserActivityTime).TotalSeconds > 1.5)
             {
                 for (int i = _laserStrokes.Count - 1; i >= 0; i--)
                 {
                     var ls = _laserStrokes[i];
-                    ls.Life -= 15; // Fast fade once the timer hits
+                    ls.Life -= 15; 
 
                     if (ls.Life <= 0)
                     {
@@ -539,8 +546,12 @@ namespace TeachingAnnotator
         }
 
         private void ClearInk_Click(object sender, RoutedEventArgs e) => MainInkCanvas.Strokes.Clear();
-        private void ZoomIn_Click(object sender, RoutedEventArgs e) { _zoom += 0.25; ZoomTransform.ScaleX = _zoom; ZoomTransform.ScaleY = _zoom; }
-        private void ZoomOut_Click(object sender, RoutedEventArgs e) { _zoom = Math.Max(0.25, _zoom - 0.25); ZoomTransform.ScaleX = _zoom; ZoomTransform.ScaleY = _zoom; }
+
+        private void PerformZoomIn() { _zoom += 0.25; ZoomTransform.ScaleX = _zoom; ZoomTransform.ScaleY = _zoom; }
+        private void PerformZoomOut() { _zoom = Math.Max(0.25, _zoom - 0.25); ZoomTransform.ScaleX = _zoom; ZoomTransform.ScaleY = _zoom; }
+
+        private void ZoomIn_Click(object sender, RoutedEventArgs e) => PerformZoomIn();
+        private void ZoomOut_Click(object sender, RoutedEventArgs e) => PerformZoomOut();
     }
 }
 EOF
