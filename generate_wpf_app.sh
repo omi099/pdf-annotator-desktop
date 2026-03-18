@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping the Native WPF Annotator (Default Cursor + Precision Dot Edition)..."
+echo "🚀 Bootstrapping the Native WPF Annotator (Platinum Master Edition)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -30,12 +30,12 @@ cat << 'EOF' > TeachingAnnotator.csproj
 </Project>
 EOF
 
-# 4. Overwrite MainWindow.xaml (Restored Default System Cursor & Kept the Footprint Dot)
+# 4. Overwrite MainWindow.xaml
 cat << 'EOF' > MainWindow.xaml
 <Window x:Class="TeachingAnnotator.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Apex Native Annotator - Zero Lag Edition" 
+        Title="Apex Native Annotator - Platinum Edition" 
         WindowState="Maximized" 
         Background="#0f1115" WindowStartupLocation="CenterScreen"
         KeyDown="Window_KeyDown">
@@ -48,7 +48,7 @@ cat << 'EOF' > MainWindow.xaml
         <Border x:Name="MainToolbar" Grid.Row="0" Background="#1a1c23" BorderBrush="#3a3f4b" BorderThickness="0,0,0,1" Padding="15,10" Panel.ZIndex="100">
             <WrapPanel Orientation="Horizontal">
                 <Button Content="📂 Open PDF" Click="OpenPdf_Click" Foreground="White" Background="#3a3f4b" Margin="0,0,10,0" Padding="12,6" FontWeight="Bold" BorderThickness="0"/>
-                <Button Content="💾 Export Annotated PDF" Click="ExportAnnotated_Click" Foreground="#00ffcc" Background="#3a3f4b" Margin="0,0,10,0" Padding="12,6" FontWeight="Bold" BorderThickness="0"/>
+                <Button Content="💾 Export Vector PDF" Click="ExportAnnotated_Click" Foreground="#00ffcc" Background="#3a3f4b" Margin="0,0,10,0" Padding="12,6" FontWeight="Bold" BorderThickness="0"/>
                 
                 <Rectangle Width="2" Fill="#3a3f4b" Margin="0,0,15,0"/>
                 
@@ -60,7 +60,7 @@ cat << 'EOF' > MainWindow.xaml
                 
                 <Rectangle Width="2" Fill="#3a3f4b" Margin="0,0,15,0"/>
                 
-                <TextBlock Text="Color:" Foreground="White" VerticalAlignment="Center" Margin="0,0,5,0" FontWeight="Bold"/>
+                <TextBlock Text="Color (1-8):" Foreground="White" VerticalAlignment="Center" Margin="0,0,5,0" FontWeight="Bold"/>
                 <ComboBox x:Name="ColorPicker" SelectionChanged="Color_Changed" Width="80" Margin="0,0,15,0" SelectedIndex="0">
                     <ComboBoxItem Content="Red"/>
                     <ComboBoxItem Content="Blue"/>
@@ -72,7 +72,7 @@ cat << 'EOF' > MainWindow.xaml
                     <ComboBoxItem Content="Magenta"/>
                 </ComboBox>
 
-                <TextBlock Text="Size:" Foreground="White" VerticalAlignment="Center" Margin="0,0,5,0" FontWeight="Bold"/>
+                <TextBlock Text="Size (< >):" Foreground="White" VerticalAlignment="Center" Margin="0,0,5,0" FontWeight="Bold"/>
                 <Slider x:Name="SizeSlider" Minimum="0.5" Maximum="50" Value="4" Width="80" VerticalAlignment="Center" Margin="0,0,5,0" ValueChanged="Size_Changed" IsMoveToPointEnabled="True"/>
                 
                 <TextBox x:Name="SizeInput" Text="{Binding Value, ElementName=SizeSlider, UpdateSourceTrigger=PropertyChanged, StringFormat=F1}" 
@@ -83,12 +83,25 @@ cat << 'EOF' > MainWindow.xaml
                 <Rectangle Width="2" Fill="#3a3f4b" Margin="0,0,15,0"/>
 
                 <Button Content="🗑️ Clear All" Click="ClearInk_Click" Foreground="#ff4757" Background="#3a3f4b" Margin="0,0,10,0" Padding="12,6" FontWeight="Bold" BorderThickness="0"/>
-                <TextBlock Text="[F] Fullscreen | [H] Hide Toolbar" Foreground="#00ffcc" VerticalAlignment="Center" Margin="10,0,0,0" FontWeight="Bold"/>
+                <TextBlock Text="[F] Full | [H] Hide | [Ctrl+Z] Undo" Foreground="#00ffcc" VerticalAlignment="Center" Margin="10,0,0,0" FontWeight="Bold"/>
             </WrapPanel>
         </Border>
 
         <ScrollViewer Grid.Row="1" x:Name="MainScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" PanningMode="Both" Background="#0f1115" PreviewMouseWheel="MainScroll_PreviewMouseWheel">
+            
             <Grid x:Name="Workspace" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="40">
+                <Grid.Background>
+                    <DrawingBrush TileMode="Tile" Viewport="0,0,40,40" ViewportUnits="Absolute">
+                        <DrawingBrush.Drawing>
+                            <GeometryDrawing Geometry="M0,0 L0,40 M0,0 L40,0">
+                                <GeometryDrawing.Pen>
+                                    <Pen Brush="#2A2E39" Thickness="1"/>
+                                </GeometryDrawing.Pen>
+                            </GeometryDrawing>
+                        </DrawingBrush.Drawing>
+                    </DrawingBrush>
+                </Grid.Background>
+
                 <Grid.LayoutTransform>
                     <ScaleTransform x:Name="ZoomTransform" ScaleX="1" ScaleY="1"/>
                 </Grid.LayoutTransform>
@@ -107,6 +120,7 @@ cat << 'EOF' > MainWindow.xaml
                 </ItemsControl>
 
                 <InkCanvas x:Name="MainInkCanvas" Background="Transparent" UseCustomCursor="True" Cursor="Arrow" HorizontalAlignment="Left" VerticalAlignment="Top" Focusable="True"
+                           PreviewMouseLeftButtonDown="MainInkCanvas_PreviewMouseLeftButtonDown"
                            MouseMove="MainInkCanvas_MouseMove" MouseLeave="MainInkCanvas_MouseLeave" MouseEnter="MainInkCanvas_MouseEnter"
                            StrokeCollected="MainInkCanvas_StrokeCollected">
                     <InkCanvas.Resources>
@@ -115,13 +129,11 @@ cat << 'EOF' > MainWindow.xaml
                 </InkCanvas>
                 
                 <Canvas x:Name="CursorCanvas" IsHitTestVisible="False" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Panel.ZIndex="999">
-                    
                     <Ellipse x:Name="CustomDotCursor" Visibility="Hidden" IsHitTestVisible="False">
                         <Ellipse.Effect>
                             <DropShadowEffect x:Name="CursorGlow" BlurRadius="4" ShadowDepth="1" Opacity="0.6" />
                         </Ellipse.Effect>
                     </Ellipse>
-                    
                 </Canvas>
             </Grid>
         </ScrollViewer>
@@ -129,7 +141,7 @@ cat << 'EOF' > MainWindow.xaml
 </Window>
 EOF
 
-# 5. Overwrite MainWindow.xaml.cs (Cleaned C# Logic to support default Arrow + Dot)
+# 5. Overwrite MainWindow.xaml.cs 
 cat << 'EOF' > MainWindow.xaml.cs
 using System;
 using System.Collections.Generic;
@@ -186,14 +198,22 @@ namespace TeachingAnnotator
         private DispatcherTimer _laserTimer;
         private DateTime _lastLaserActivityTime = DateTime.Now;
 
+        // Custom Undo/Redo Engine
+        private Stack<StrokeCollection> _undoStack = new Stack<StrokeCollection>();
+        private Stack<StrokeCollection> _redoStack = new Stack<StrokeCollection>();
+
         public MainWindow()
         {
             InitializeComponent();
             PdfItemsControl.ItemsSource = PdfPages;
             System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
 
-            // Force Default System Arrow natively
             MainInkCanvas.Cursor = Cursors.Arrow;
+
+            // Initialize Whiteboard Dimensions (4K Default Teaching Space)
+            Workspace.Width = 3840; Workspace.Height = 2160;
+            MainInkCanvas.Width = 3840; MainInkCanvas.Height = 2160;
+            CursorCanvas.Width = 3840; CursorCanvas.Height = 2160;
 
             _laserTimer = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(33) };
             _laserTimer.Tick += LaserTimer_Tick;
@@ -202,36 +222,76 @@ namespace TeachingAnnotator
             SyncToolToUI();
         }
 
+        // --- UNDO / REDO LOGIC ---
+        private void SaveUndoState()
+        {
+            if (_isUpdatingUI) return;
+            _undoStack.Push(MainInkCanvas.Strokes.Clone());
+            _redoStack.Clear();
+        }
+
+        private void PerformUndo()
+        {
+            if (_undoStack.Count > 0)
+            {
+                _isUpdatingUI = true;
+                _redoStack.Push(MainInkCanvas.Strokes.Clone());
+                MainInkCanvas.Strokes = _undoStack.Pop();
+                _laserStrokes.Clear(); // Clear orphans
+                _isUpdatingUI = false;
+            }
+        }
+
+        private void PerformRedo()
+        {
+            if (_redoStack.Count > 0)
+            {
+                _isUpdatingUI = true;
+                _undoStack.Push(MainInkCanvas.Strokes.Clone());
+                MainInkCanvas.Strokes = _redoStack.Pop();
+                _laserStrokes.Clear();
+                _isUpdatingUI = false;
+            }
+        }
+
+        // Snapshot stroke state RIGHT BEFORE the user touches the canvas to draw or erase
+        private void MainInkCanvas_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (MainInkCanvas.EditingMode != InkCanvasEditingMode.None && MainInkCanvas.EditingMode != InkCanvasEditingMode.Select)
+            {
+                SaveUndoState();
+            }
+        }
+
         private void MainScroll_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
         {
             e.Handled = true; 
-            
-            if (Keyboard.Modifiers == ModifierKeys.Control)
-            {
+            if (Keyboard.Modifiers == ModifierKeys.Control) {
                 if (e.Delta > 0) PerformZoomIn();
                 else PerformZoomOut();
-            }
-            else
-            {
+            } else {
                 double scrollFactor = 0.3; 
-                if (Keyboard.Modifiers == ModifierKeys.Shift)
-                {
-                    MainScroll.ScrollToHorizontalOffset(MainScroll.HorizontalOffset - (e.Delta * scrollFactor));
-                }
-                else
-                {
-                    MainScroll.ScrollToVerticalOffset(MainScroll.VerticalOffset - (e.Delta * scrollFactor));
-                }
+                if (Keyboard.Modifiers == ModifierKeys.Shift) MainScroll.ScrollToHorizontalOffset(MainScroll.HorizontalOffset - (e.Delta * scrollFactor));
+                else MainScroll.ScrollToVerticalOffset(MainScroll.VerticalOffset - (e.Delta * scrollFactor));
             }
         }
 
         private void Window_KeyDown(object sender, KeyEventArgs e)
         {
+            // Ctrl Shortcuts
+            if (Keyboard.Modifiers == ModifierKeys.Control)
+            {
+                if (e.Key == Key.Z) { PerformUndo(); return; }
+                if (e.Key == Key.Y) { PerformRedo(); return; }
+            }
+
+            // Custom Delete Hook
             if (e.Key == Key.Delete)
             {
                 var selectedStrokes = MainInkCanvas.GetSelectedStrokes();
                 if (selectedStrokes.Count > 0)
                 {
+                    SaveUndoState();
                     MainInkCanvas.Strokes.Remove(selectedStrokes);
                     return;
                 }
@@ -239,27 +299,29 @@ namespace TeachingAnnotator
 
             if (SizeInput.IsFocused) return;
 
+            // Numbers 1-8 for Colors
+            if (e.Key >= Key.D1 && e.Key <= Key.D8)
+            {
+                int index = e.Key - Key.D1;
+                if (index < ColorPicker.Items.Count) ColorPicker.SelectedIndex = index;
+            }
+            if (e.Key >= Key.NumPad1 && e.Key <= Key.NumPad8)
+            {
+                int index = e.Key - Key.NumPad1;
+                if (index < ColorPicker.Items.Count) ColorPicker.SelectedIndex = index;
+            }
+
+            // < and > for Pen Size
+            if (e.Key == Key.OemComma) SizeSlider.Value = Math.Max(SizeSlider.Minimum, SizeSlider.Value - 1.0);
+            if (e.Key == Key.OemPeriod) SizeSlider.Value = Math.Min(SizeSlider.Maximum, SizeSlider.Value + 1.0);
+
+            // Toggles
             if (e.Key == Key.F)
             {
-                if (this.WindowStyle == WindowStyle.None)
-                {
-                    this.WindowStyle = WindowStyle.SingleBorderWindow;
-                    this.WindowState = WindowState.Normal;
-                    this.Topmost = false;
-                }
-                else
-                {
-                    this.WindowStyle = WindowStyle.None;
-                    this.WindowState = WindowState.Maximized;
-                    this.Topmost = true; 
-                }
+                if (this.WindowStyle == WindowStyle.None) { this.WindowStyle = WindowStyle.SingleBorderWindow; this.WindowState = WindowState.Normal; this.Topmost = false; }
+                else { this.WindowStyle = WindowStyle.None; this.WindowState = WindowState.Maximized; this.Topmost = true; }
             }
-
-            if (e.Key == Key.H)
-            {
-                MainToolbar.Visibility = MainToolbar.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
-            }
-
+            if (e.Key == Key.H) MainToolbar.Visibility = MainToolbar.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
             if (e.Key == Key.P) PenBtn.IsChecked = true;
             else if (e.Key == Key.M) HighlightBtn.IsChecked = true; 
             else if (e.Key == Key.E) EraserBtn.IsChecked = true;
@@ -361,7 +423,8 @@ namespace TeachingAnnotator
             {
                 MainInkCanvas.EditingMode = InkCanvasEditingMode.Ink;
                 MainInkCanvas.Cursor = Cursors.Arrow;
-                MainInkCanvas.DefaultDrawingAttributes = new DrawingAttributes { Color = activeColor, Width = activeSize, Height = activeSize, FitToCurve = true, IgnorePressure = true };
+                // Make the laser highly vibrant internally so the ink glows
+                MainInkCanvas.DefaultDrawingAttributes = new DrawingAttributes { Color = Color.FromArgb(200, activeColor.R, activeColor.G, activeColor.B), Width = activeSize, Height = activeSize, FitToCurve = true, IgnorePressure = true };
             }
             else if (EraserBtn.IsChecked == true)
             {
@@ -421,26 +484,13 @@ namespace TeachingAnnotator
             if (SelectBtn.IsChecked == true) return;
             
             CustomDotCursor.Visibility = Visibility.Visible;
-            
             Point p = e.GetPosition(CursorCanvas);
-            
-            // Orbits the exact tip of the Windows system arrow pointer
             Canvas.SetLeft(CustomDotCursor, p.X - (CustomDotCursor.Width / 2));
             Canvas.SetTop(CustomDotCursor, p.Y - (CustomDotCursor.Height / 2));
         }
 
-        private void MainInkCanvas_MouseLeave(object sender, MouseEventArgs e) 
-        { 
-            CustomDotCursor.Visibility = Visibility.Hidden; 
-        }
-
-        private void MainInkCanvas_MouseEnter(object sender, MouseEventArgs e) 
-        { 
-            if (SelectBtn.IsChecked != true) 
-            {
-                CustomDotCursor.Visibility = Visibility.Visible; 
-            }
-        }
+        private void MainInkCanvas_MouseLeave(object sender, MouseEventArgs e) => CustomDotCursor.Visibility = Visibility.Hidden;
+        private void MainInkCanvas_MouseEnter(object sender, MouseEventArgs e) { if (SelectBtn.IsChecked != true) CustomDotCursor.Visibility = Visibility.Visible; }
 
         private void MainInkCanvas_StrokeCollected(object sender, InkCanvasStrokeCollectedEventArgs e)
         {
@@ -464,7 +514,10 @@ namespace TeachingAnnotator
 
                     if (ls.Life <= 0)
                     {
+                        // Remove gracefully without triggering the undo stack
+                        _isUpdatingUI = true;
                         MainInkCanvas.Strokes.Remove(ls.Stroke);
+                        _isUpdatingUI = false;
                         _laserStrokes.RemoveAt(i);
                     }
                     else
@@ -484,6 +537,8 @@ namespace TeachingAnnotator
                 _currentPdfPath = dlg.FileName;
                 PdfPages.Clear();
                 MainInkCanvas.Strokes.Clear();
+                _undoStack.Clear();
+                _redoStack.Clear();
 
                 try 
                 {
@@ -527,6 +582,9 @@ namespace TeachingAnnotator
                         }
                     }
 
+                    // Remove Whiteboard Background
+                    Workspace.Background = new SolidColorBrush(Colors.Transparent);
+                    
                     Workspace.Width = maxWidth; Workspace.Height = currentY;
                     MainInkCanvas.Width = maxWidth; MainInkCanvas.Height = currentY;
                     CursorCanvas.Width = maxWidth; CursorCanvas.Height = currentY;
@@ -538,8 +596,80 @@ namespace TeachingAnnotator
 
         private void ExportAnnotated_Click(object sender, RoutedEventArgs e)
         {
-            if (string.IsNullOrEmpty(_currentPdfPath)) { MessageBox.Show("Open a PDF first."); return; }
+            // STANDALONE WHITEBOARD EXPORT LOGIC
+            if (string.IsNullOrEmpty(_currentPdfPath)) 
+            { 
+                SaveFileDialog wbdlg = new SaveFileDialog { Filter = "PDF (*.pdf)|*.pdf", FileName = "Whiteboard_Export.pdf" };
+                if (wbdlg.ShowDialog() == true)
+                {
+                    try
+                    {
+                        PdfSharp.Pdf.PdfDocument wbDoc = new PdfSharp.Pdf.PdfDocument();
+                        PdfSharp.Pdf.PdfPage wbPage = wbDoc.AddPage();
+                        
+                        // Standard 1080p Landscape Output
+                        wbPage.Width = XUnit.FromPoint(1920);
+                        wbPage.Height = XUnit.FromPoint(1080);
+                        XGraphics gfx = XGraphics.FromPdfPage(wbPage);
 
+                        // Draw Dark Background
+                        gfx.DrawRectangle(new XSolidBrush(XColor.FromArgb(255, 15, 17, 21)), 0, 0, wbPage.Width.Point, wbPage.Height.Point);
+                        
+                        // Draw Minimal Grid
+                        XPen gridPen = new XPen(XColor.FromArgb(255, 42, 46, 57), 1);
+                        for (double x = 0; x < wbPage.Width.Point; x += 40) gfx.DrawLine(gridPen, x, 0, x, wbPage.Height.Point);
+                        for (double y = 0; y < wbPage.Height.Point; y += 40) gfx.DrawLine(gridPen, 0, y, wbPage.Width.Point, y);
+
+                        // Math scaling to fit strokes on 1080p page
+                        double scaleX = wbPage.Width.Point / Workspace.Width;
+                        double scaleY = wbPage.Height.Point / Workspace.Height;
+
+                        foreach (Stroke stroke in MainInkCanvas.Strokes)
+                        {
+                            if (_laserStrokes.Any(ls => ls.Stroke == stroke)) continue;
+
+                            XColor color = XColor.FromArgb(stroke.DrawingAttributes.Color.A, stroke.DrawingAttributes.Color.R, stroke.DrawingAttributes.Color.G, stroke.DrawingAttributes.Color.B);
+                            double baseThickness = stroke.DrawingAttributes.Width * scaleX;
+                            StylusPointCollection points = stroke.StylusPoints;
+
+                            if (points.Count > 1)
+                            {
+                                if (stroke.DrawingAttributes.IsHighlighter || stroke.DrawingAttributes.IgnorePressure)
+                                {
+                                    XGraphicsPath path = new XGraphicsPath();
+                                    XPoint[] xPoints = new XPoint[points.Count];
+                                    for (int j = 0; j < points.Count; j++) { xPoints[j] = new XPoint(points[j].X * scaleX, points[j].Y * scaleY); }
+                                    path.AddLines(xPoints);
+                                    
+                                    XLineCap cap = stroke.DrawingAttributes.IsHighlighter ? XLineCap.Square : XLineCap.Round;
+                                    XPen pathPen = new XPen(color, baseThickness) { LineCap = cap, LineJoin = XLineJoin.Round };
+                                    gfx.DrawPath(pathPen, path);
+                                }
+                                else
+                                {
+                                    for (int j = 0; j < points.Count - 1; j++)
+                                    {
+                                        var p1 = points[j]; var p2 = points[j + 1];
+                                        double x1 = p1.X * scaleX; double y1 = p1.Y * scaleY;
+                                        double x2 = p2.X * scaleX; double y2 = p2.Y * scaleY;
+                                        double pFactor = p1.PressureFactor * 2.0;
+                                        
+                                        XPen segmentPen = new XPen(color, baseThickness * pFactor) { LineCap = XLineCap.Round };
+                                        gfx.DrawLine(segmentPen, x1, y1, x2, y2);
+                                    }
+                                }
+                            }
+                        }
+
+                        wbDoc.Save(wbdlg.FileName);
+                        MessageBox.Show("Whiteboard Vector Exported Successfully!");
+                    }
+                    catch (Exception ex) { MessageBox.Show("Export failed: " + ex.Message); }
+                }
+                return; 
+            }
+
+            // PDF EXPORT LOGIC
             SaveFileDialog dlg = new SaveFileDialog { Filter = "PDF (*.pdf)|*.pdf", FileName = "Annotated_Document.pdf" };
             if (dlg.ShowDialog() == true)
             {
@@ -567,8 +697,8 @@ namespace TeachingAnnotator
                             {
                                 XColor color = XColor.FromArgb(stroke.DrawingAttributes.Color.A, stroke.DrawingAttributes.Color.R, stroke.DrawingAttributes.Color.G, stroke.DrawingAttributes.Color.B);
                                 double baseThickness = stroke.DrawingAttributes.Width * scaleX;
-
                                 StylusPointCollection points = stroke.StylusPoints;
+
                                 if (points.Count > 1)
                                 {
                                     if (stroke.DrawingAttributes.IsHighlighter || stroke.DrawingAttributes.IgnorePressure)
@@ -606,7 +736,11 @@ namespace TeachingAnnotator
             }
         }
 
-        private void ClearInk_Click(object sender, RoutedEventArgs e) => MainInkCanvas.Strokes.Clear();
+        private void ClearInk_Click(object sender, RoutedEventArgs e)
+        {
+            SaveUndoState();
+            MainInkCanvas.Strokes.Clear();
+        }
 
         private void PerformZoomIn() { _zoom += 0.25; ZoomTransform.ScaleX = _zoom; ZoomTransform.ScaleY = _zoom; }
         private void PerformZoomOut() { _zoom = Math.Max(0.25, _zoom - 0.25); ZoomTransform.ScaleX = _zoom; ZoomTransform.ScaleY = _zoom; }
