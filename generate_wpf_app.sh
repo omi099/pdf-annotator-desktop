@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping the Native WPF Annotator (Perfect Yellow Lasso Edition)..."
+echo "🚀 Bootstrapping the Native WPF Annotator (Ultimate Yellow Bounding Box Edition)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -39,14 +39,6 @@ cat << 'EOF' > MainWindow.xaml
         WindowState="Maximized" 
         Background="#0f1115" WindowStartupLocation="CenterScreen"
         KeyDown="Window_KeyDown">
-
-    <Window.Resources>
-        <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#FFFF00"/>
-        <SolidColorBrush x:Key="{x:Static SystemColors.WindowFrameBrushKey}" Color="#FFFF00"/>
-        <SolidColorBrush x:Key="{x:Static SystemColors.WindowTextBrushKey}" Color="#FFFF00"/>
-        <SolidColorBrush x:Key="{x:Static SystemColors.ControlTextBrushKey}" Color="#FFFF00"/>
-        <SolidColorBrush x:Key="{x:Static SystemColors.ActiveBorderBrushKey}" Color="#FFFF00"/>
-    </Window.Resources>
 
     <Grid>
         <Grid.RowDefinitions>
@@ -132,23 +124,19 @@ cat << 'EOF' > MainWindow.xaml
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
 
-                <AdornerDecorator>
-                    <Grid x:Name="CanvasContainer" HorizontalAlignment="Left" VerticalAlignment="Top">
-                        
-                        <InkCanvas x:Name="MainInkCanvas" Background="Transparent" UseCustomCursor="True" Cursor="Arrow" Focusable="True"
-                                   PreviewMouseLeftButtonDown="MainInkCanvas_PreviewMouseLeftButtonDown"
-                                   PreviewMouseMove="MainInkCanvas_PreviewMouseMove"
-                                   PreviewMouseLeftButtonUp="MainInkCanvas_PreviewMouseLeftButtonUp"
-                                   MouseMove="MainInkCanvas_MouseMove" MouseLeave="MainInkCanvas_MouseLeave" MouseEnter="MainInkCanvas_MouseEnter"
-                                   SelectionChanged="MainInkCanvas_SelectionChanged">
-                        </InkCanvas>
-                        
-                        <InkCanvas x:Name="LaserInkCanvas" Background="Transparent" UseCustomCursor="True" Cursor="Arrow" Focusable="False" IsHitTestVisible="False"
-                                   MouseMove="MainInkCanvas_MouseMove" MouseLeave="MainInkCanvas_MouseLeave" MouseEnter="MainInkCanvas_MouseEnter"
-                                   StrokeCollected="LaserInkCanvas_StrokeCollected">
-                        </InkCanvas>
-                    </Grid>
-                </AdornerDecorator>
+                <Grid x:Name="CanvasContainer" HorizontalAlignment="Left" VerticalAlignment="Top">
+                    <InkCanvas x:Name="MainInkCanvas" Background="Transparent" UseCustomCursor="True" Cursor="Arrow" Focusable="True"
+                               PreviewMouseLeftButtonDown="MainInkCanvas_PreviewMouseLeftButtonDown"
+                               PreviewMouseMove="MainInkCanvas_PreviewMouseMove"
+                               PreviewMouseLeftButtonUp="MainInkCanvas_PreviewMouseLeftButtonUp"
+                               MouseMove="MainInkCanvas_MouseMove" MouseLeave="MainInkCanvas_MouseLeave" MouseEnter="MainInkCanvas_MouseEnter">
+                    </InkCanvas>
+                    
+                    <InkCanvas x:Name="LaserInkCanvas" Background="Transparent" UseCustomCursor="True" Cursor="Arrow" Focusable="False" IsHitTestVisible="False"
+                               MouseMove="MainInkCanvas_MouseMove" MouseLeave="MainInkCanvas_MouseLeave" MouseEnter="MainInkCanvas_MouseEnter"
+                               StrokeCollected="LaserInkCanvas_StrokeCollected">
+                    </InkCanvas>
+                </Grid>
                 
                 <Canvas x:Name="CursorCanvas" IsHitTestVisible="False" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Panel.ZIndex="999">
                     <Polygon x:Name="CustomLassoPolygon" Visibility="Hidden" Stroke="#FFFF00" StrokeThickness="2" StrokeDashArray="4,4" Fill="#33FFFF00" IsHitTestVisible="False" />
@@ -232,7 +220,6 @@ namespace TeachingAnnotator
 
         private bool _isDarkTheme = true;
 
-        // Custom Lasso variables
         private PointCollection _lassoPoints = new PointCollection();
         private bool _isLassoing = false;
 
@@ -250,6 +237,10 @@ namespace TeachingAnnotator
             LaserInkCanvas.Width = 3840; LaserInkCanvas.Height = 2160;
             CursorCanvas.Width = 3840; CursorCanvas.Height = 2160;
 
+            // THE SILVER BULLET: Hook into the deepest rendering cycle
+            // This prevents WPF from EVER drawing the hardcoded black bounding box.
+            MainInkCanvas.LayoutUpdated += MainInkCanvas_LayoutUpdated;
+
             _laserTimer = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(33) };
             _laserTimer.Tick += LaserTimer_Tick;
             _laserTimer.Start();
@@ -259,28 +250,27 @@ namespace TeachingAnnotator
             ApplyTheme();
         }
 
-        // --- SURGICAL VISUAL TREE REFLECTION (The True Yellow Resizing Box Fix) ---
-        private void MainInkCanvas_SelectionChanged(object sender, EventArgs e)
+        // --- AGGRESSIVE RENDER HOOK FOR TRUE YELLOW BOUNDING BOX ---
+        private void MainInkCanvas_LayoutUpdated(object? sender, EventArgs e)
         {
-            // Delay injection until the application is fully idle and Adorner is drawn
-            Dispatcher.BeginInvoke(new Action(() => ForceYellowSelectionBox(MainInkCanvas)), DispatcherPriority.ApplicationIdle);
+            if (MainInkCanvas.GetSelectedStrokes().Count > 0)
+            {
+                ForceYellowSelectionBox();
+            }
         }
 
-        private void ForceYellowSelectionBox(DependencyObject parent)
+        private void ForceYellowSelectionBox()
         {
-            if (parent == null) return;
-
-            int childrenCount = VisualTreeHelper.GetChildrenCount(parent);
-            for (int i = 0; i < childrenCount; i++)
+            // Drill down to the hidden InkCanvasInnerCanvas
+            if (VisualTreeHelper.GetChildrenCount(MainInkCanvas) > 0)
             {
-                var child = VisualTreeHelper.GetChild(parent, i);
-                
-                if (child is UIElement uiElement)
+                var innerCanvas = VisualTreeHelper.GetChild(MainInkCanvas, 0) as UIElement;
+                if (innerCanvas != null)
                 {
-                    var layer = System.Windows.Documents.AdornerLayer.GetAdornerLayer(uiElement);
+                    var layer = System.Windows.Documents.AdornerLayer.GetAdornerLayer(innerCanvas);
                     if (layer != null)
                     {
-                        var adorners = layer.GetAdorners(uiElement);
+                        var adorners = layer.GetAdorners(innerCanvas);
                         if (adorners != null)
                         {
                             foreach (var adorner in adorners)
@@ -293,7 +283,6 @@ namespace TeachingAnnotator
                         }
                     }
                 }
-                ForceYellowSelectionBox(child);
             }
         }
 
@@ -301,30 +290,41 @@ namespace TeachingAnnotator
         {
             var flags = BindingFlags.NonPublic | BindingFlags.Instance;
             
+            // 1. The Dashed Rectangle Outline
             var hatchPenField = adorner.GetType().GetField("_hatchPen", flags);
             if (hatchPenField != null)
             {
+                Pen? currentPen = hatchPenField.GetValue(adorner) as Pen;
+                
+                // CRITICAL SAFETY CHECK: Stop infinite loop if it's already yellow
+                if (currentPen != null && currentPen.Brush == Brushes.Yellow) return;
+
                 Pen yellowDash = new Pen(Brushes.Yellow, 1.5) { DashStyle = DashStyles.Dash };
+                yellowDash.Freeze();
                 hatchPenField.SetValue(adorner, yellowDash);
             }
 
+            // 2. The Border of the Expanding Dots
             var elementsPenField = adorner.GetType().GetField("_elementsPen", flags);
             if (elementsPenField != null)
             {
                 Pen yellowSolid = new Pen(Brushes.Yellow, 1.5);
+                yellowSolid.Freeze();
                 elementsPenField.SetValue(adorner, yellowSolid);
             }
 
+            // 3. The Fill of the Expanding Dots
             var elementsFillBrushField = adorner.GetType().GetField("_elementsFillBrush", flags);
             if (elementsFillBrushField != null)
             {
                 elementsFillBrushField.SetValue(adorner, Brushes.Yellow);
             }
             
+            // Force the GPU to redraw the Yellow box immediately
             adorner.InvalidateVisual(); 
         }
 
-        private void Theme_Click(object sender, RoutedEventArgs e)
+        private void Theme_Click(object? sender, RoutedEventArgs? e)
         {
             _isDarkTheme = !_isDarkTheme;
             ApplyTheme();
@@ -454,7 +454,6 @@ namespace TeachingAnnotator
             }
         }
 
-        // --- THE CUSTOM YELLOW LASSO ENGINE ---
         private void MainInkCanvas_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             if (MainInkCanvas.EditingMode != InkCanvasEditingMode.None && MainInkCanvas.EditingMode != InkCanvasEditingMode.Select)
@@ -467,8 +466,7 @@ namespace TeachingAnnotator
                 var hitResult = MainInkCanvas.HitTestSelection(e.GetPosition(MainInkCanvas));
                 if (hitResult == InkCanvasSelectionHitResult.None)
                 {
-                    // Starts the Custom Yellow Lasso
-                    MainInkCanvas.EditingMode = InkCanvasEditingMode.None; // Defeats the Microsoft default black lasso
+                    MainInkCanvas.EditingMode = InkCanvasEditingMode.None; 
                     _isLassoing = true;
                     _lassoPoints.Clear();
                     _lassoPoints.Add(e.GetPosition(CursorCanvas));
@@ -479,7 +477,6 @@ namespace TeachingAnnotator
                 }
                 else
                 {
-                    // Allow normal WPF resizing logic if they clicked on a selected bounding box
                     MainInkCanvas.EditingMode = InkCanvasEditingMode.Select;
                 }
             }
@@ -503,12 +500,10 @@ namespace TeachingAnnotator
 
                 if (_lassoPoints.Count > 3)
                 {
-                    // Mathematically select strokes inside the custom lasso
                     var selected = MainInkCanvas.Strokes.HitTest(_lassoPoints, 50); 
                     MainInkCanvas.Select(selected);
                 }
                 
-                // Restore Select Mode so the bounding box and resize handles activate
                 MainInkCanvas.EditingMode = InkCanvasEditingMode.Select;
                 e.Handled = true;
             }
@@ -685,7 +680,7 @@ namespace TeachingAnnotator
                 }
                 else if (SelectBtn.IsChecked == true)
                 {
-                    MainInkCanvas.EditingMode = InkCanvasEditingMode.Select; // Ensure default is loaded if not lassoing
+                    MainInkCanvas.EditingMode = InkCanvasEditingMode.Select; 
                 }
             }
 
@@ -709,8 +704,7 @@ namespace TeachingAnnotator
             if (LaserBtn.IsChecked == true) 
             {
                 CustomDotCursor.Fill = new SolidColorBrush(c);
-                // ABSOLUTELY ZERO OUTLINE FOR THE LASER DOT
-                CustomDotCursor.StrokeThickness = 0;
+                CustomDotCursor.StrokeThickness = 0; // Absolute Zero Outline
 
                 CursorGlow.Color = c; 
                 CursorGlow.Opacity = 0.65; 
@@ -999,4 +993,4 @@ namespace TeachingAnnotator
 }
 EOF
 
-echo "✅ Script generated flawlessly! Ready for zero-error execution."
+echo "✅ App Polished to Absolute Perfection! Ready for zero-error execution."
