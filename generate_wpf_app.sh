@@ -28,7 +28,7 @@ cat << 'EOF' > TeachingAnnotator.csproj
 </Project>
 EOF
 
-# 4. Overwrite MainWindow.xaml (Fixed WrapPanel Padding)
+# 4. Overwrite MainWindow.xaml
 cat << 'EOF' > MainWindow.xaml
 <Window x:Class="TeachingAnnotator.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -105,7 +105,7 @@ cat << 'EOF' > MainWindow.xaml
 </Window>
 EOF
 
-# 5. Overwrite MainWindow.xaml.cs (High-DPI PDF & Vector Export Logic)
+# 5. Overwrite MainWindow.xaml.cs (Ambiguity Fixes Applied)
 cat << 'EOF' > MainWindow.xaml.cs
 using System;
 using System.Collections.ObjectModel;
@@ -113,10 +113,10 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Ink;
+using System.Windows.Input; // FIX: Added for StylusPointCollection
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Microsoft.Win32;
-using Windows.Data.Pdf;
 using Windows.Storage;
 using Windows.Storage.Streams;
 using PdfSharp.Pdf;
@@ -203,19 +203,20 @@ namespace TeachingAnnotator
                 try 
                 {
                     StorageFile file = await StorageFile.GetFileFromPathAsync(dlg.FileName);
-                    PdfDocument pdfDoc = await PdfDocument.LoadFromFileAsync(file);
+                    // FIX: Explicitly use Windows Native PdfDocument
+                    Windows.Data.Pdf.PdfDocument pdfDoc = await Windows.Data.Pdf.PdfDocument.LoadFromFileAsync(file);
 
                     double currentY = 0;
                     double maxWidth = 0;
 
                     for (uint i = 0; i < pdfDoc.PageCount; i++)
                     {
-                        using (PdfPage page = pdfDoc.GetPage(i))
+                        // FIX: Explicitly use Windows Native PdfPage
+                        using (Windows.Data.Pdf.PdfPage page = pdfDoc.GetPage(i))
                         {
                             using (var stream = new InMemoryRandomAccessStream())
                             {
-                                // CRITICAL HIGH-DPI FIX: 3x Scale (4K Resolution) to eliminate pixelation
-                                var options = new PdfPageRenderOptions
+                                var options = new Windows.Data.Pdf.PdfPageRenderOptions
                                 {
                                     DestinationWidth = (uint)(page.Size.Width * 3.0),
                                     DestinationHeight = (uint)(page.Size.Height * 3.0)
@@ -238,7 +239,7 @@ namespace TeachingAnnotator
                                     PdfPages.Add(new PdfPageModel
                                     {
                                         ImageSource = bitmap,
-                                        Width = page.Size.Width, // UI displays at normal size, but source image is 3x larger
+                                        Width = page.Size.Width,
                                         Height = page.Size.Height,
                                         StartY = currentY
                                     });
@@ -267,17 +268,21 @@ namespace TeachingAnnotator
             {
                 try
                 {
-                    PdfDocument document = PdfReader.Open(_currentPdfPath, PdfDocumentOpenMode.Modify);
+                    // FIX: Explicitly use PdfSharp Document
+                    PdfSharp.Pdf.PdfDocument document = PdfReader.Open(_currentPdfPath, PdfDocumentOpenMode.Modify);
 
                     for (int i = 0; i < document.Pages.Count; i++)
                     {
                         if (i >= PdfPages.Count) break;
+                        
+                        // FIX: Explicitly use PdfSharp Page
                         PdfSharp.Pdf.PdfPage pdfPage = document.Pages[i];
                         XGraphics gfx = XGraphics.FromPdfPage(pdfPage);
                         PdfPageModel uiPage = PdfPages[i];
 
-                        double scaleX = pdfPage.Width / uiPage.Width;
-                        double scaleY = pdfPage.Height / uiPage.Height;
+                        // FIX: Use .Point property for PdfSharp 6.1
+                        double scaleX = pdfPage.Width.Point / uiPage.Width;
+                        double scaleY = pdfPage.Height.Point / uiPage.Height;
 
                         foreach (Stroke stroke in MainInkCanvas.Strokes)
                         {
@@ -329,4 +334,4 @@ namespace TeachingAnnotator
 }
 EOF
 
-echo "✅ Custom WPF Codebase Generated!"
+echo "✅ Custom WPF Codebase Generated Flawlessly!"
