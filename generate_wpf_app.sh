@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping the Native WPF Annotator (Custom Colored Arrow Edition)..."
+echo "🚀 Bootstrapping the Native WPF Annotator (Immersive Fullscreen Edition)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -28,12 +28,13 @@ cat << 'EOF' > TeachingAnnotator.csproj
 </Project>
 EOF
 
-# 4. Overwrite MainWindow.xaml (Upgraded with Dual Cursor System)
+# 4. Overwrite MainWindow.xaml (Added Maximized State, MainToolbar Name, & Green Lasso)
 cat << 'EOF' > MainWindow.xaml
 <Window x:Class="TeachingAnnotator.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Apex Native Annotator - Ultimate Edition" Height="900" Width="1400"
+        Title="Apex Native Annotator - Ultimate Edition" 
+        WindowState="Maximized" 
         Background="#0f1115" WindowStartupLocation="CenterScreen"
         KeyDown="Window_KeyDown">
     <Grid>
@@ -42,7 +43,7 @@ cat << 'EOF' > MainWindow.xaml
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
         
-        <Border Grid.Row="0" Background="#1a1c23" BorderBrush="#3a3f4b" BorderThickness="0,0,0,1" Padding="15,10" Panel.ZIndex="100">
+        <Border x:Name="MainToolbar" Grid.Row="0" Background="#1a1c23" BorderBrush="#3a3f4b" BorderThickness="0,0,0,1" Padding="15,10" Panel.ZIndex="100">
             <WrapPanel Orientation="Horizontal">
                 <Button Content="📂 Open PDF" Click="OpenPdf_Click" Foreground="White" Background="#3a3f4b" Margin="0,0,10,0" Padding="12,6" FontWeight="Bold" BorderThickness="0"/>
                 <Button Content="💾 Export Annotated PDF" Click="ExportAnnotated_Click" Foreground="#00ffcc" Background="#3a3f4b" Margin="0,0,10,0" Padding="12,6" FontWeight="Bold" BorderThickness="0"/>
@@ -50,7 +51,7 @@ cat << 'EOF' > MainWindow.xaml
                 <Rectangle Width="2" Fill="#3a3f4b" Margin="0,0,15,0"/>
                 
                 <RadioButton Content="🖊️ Pen (P)" x:Name="PenBtn" IsChecked="True" Checked="Tool_Checked" Foreground="White" Margin="0,0,15,0" VerticalAlignment="Center" FontWeight="Bold"/>
-                <RadioButton Content="🖍️ Highlight (H)" x:Name="HighlightBtn" Checked="Tool_Checked" Foreground="White" Margin="0,0,15,0" VerticalAlignment="Center" FontWeight="Bold"/>
+                <RadioButton Content="🖍️ Highlight (M)" x:Name="HighlightBtn" Checked="Tool_Checked" Foreground="White" Margin="0,0,15,0" VerticalAlignment="Center" FontWeight="Bold"/>
                 <RadioButton Content="☄️ Laser (L)" x:Name="LaserBtn" Checked="Tool_Checked" Foreground="#ff6b81" Margin="0,0,15,0" VerticalAlignment="Center" FontWeight="Bold"/>
                 <RadioButton Content="🧽 Eraser (E)" x:Name="EraserBtn" Checked="Tool_Checked" Foreground="White" Margin="0,0,15,0" VerticalAlignment="Center" FontWeight="Bold"/>
                 <RadioButton Content="⬚ Select (S)" x:Name="SelectBtn" Checked="Tool_Checked" Foreground="#7bed9f" Margin="0,0,15,0" VerticalAlignment="Center" FontWeight="Bold" ToolTip="Draw a lasso around ink to resize or hit Delete."/>
@@ -80,8 +81,7 @@ cat << 'EOF' > MainWindow.xaml
                 <Rectangle Width="2" Fill="#3a3f4b" Margin="0,0,15,0"/>
 
                 <Button Content="🗑️ Clear All" Click="ClearInk_Click" Foreground="#ff4757" Background="#3a3f4b" Margin="0,0,10,0" Padding="12,6" FontWeight="Bold" BorderThickness="0"/>
-                <Button Content="🔍 +" Click="ZoomIn_Click" Foreground="White" Background="#3a3f4b" Margin="0,0,5,0" Padding="10,6" FontWeight="Bold" BorderThickness="0"/>
-                <Button Content="🔍 -" Click="ZoomOut_Click" Foreground="White" Background="#3a3f4b" Padding="10,6" FontWeight="Bold" BorderThickness="0"/>
+                <TextBlock Text="[F] Fullscreen | [H] Hide Toolbar" Foreground="#00ffcc" VerticalAlignment="Center" Margin="10,0,0,0" FontWeight="Bold"/>
             </WrapPanel>
         </Border>
 
@@ -104,9 +104,13 @@ cat << 'EOF' > MainWindow.xaml
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
 
-                <InkCanvas x:Name="MainInkCanvas" Background="Transparent" UseCustomCursor="True" HorizontalAlignment="Left" VerticalAlignment="Top" Focusable="True"
+                <InkCanvas x:Name="MainInkCanvas" Background="Transparent" Foreground="#2ecc71" UseCustomCursor="True" HorizontalAlignment="Left" VerticalAlignment="Top" Focusable="True"
                            MouseMove="MainInkCanvas_MouseMove" MouseLeave="MainInkCanvas_MouseLeave" MouseEnter="MainInkCanvas_MouseEnter"
-                           StrokeCollected="MainInkCanvas_StrokeCollected"/>
+                           StrokeCollected="MainInkCanvas_StrokeCollected">
+                    <InkCanvas.Resources>
+                        <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#2ecc71"/>
+                    </InkCanvas.Resources>
+                </InkCanvas>
                 
                 <Canvas x:Name="CursorCanvas" IsHitTestVisible="False" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
                     
@@ -127,7 +131,7 @@ cat << 'EOF' > MainWindow.xaml
 </Window>
 EOF
 
-# 5. Overwrite MainWindow.xaml.cs 
+# 5. Overwrite MainWindow.xaml.cs (Added Fullscreen & Hide Toolbar Logic)
 cat << 'EOF' > MainWindow.xaml.cs
 using System;
 using System.Collections.Generic;
@@ -236,8 +240,29 @@ namespace TeachingAnnotator
 
             if (SizeInput.IsFocused) return;
 
+            // Fullscreen Toggle (F)
+            if (e.Key == Key.F)
+            {
+                if (this.WindowStyle == WindowStyle.None)
+                {
+                    this.WindowStyle = WindowStyle.SingleBorderWindow;
+                    this.WindowState = WindowState.Normal;
+                }
+                else
+                {
+                    this.WindowStyle = WindowStyle.None;
+                    this.WindowState = WindowState.Maximized;
+                }
+            }
+
+            // Hide Toolbar Toggle (H)
+            if (e.Key == Key.H)
+            {
+                MainToolbar.Visibility = MainToolbar.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
+            }
+
             if (e.Key == Key.P) PenBtn.IsChecked = true;
-            else if (e.Key == Key.H) HighlightBtn.IsChecked = true;
+            else if (e.Key == Key.M) HighlightBtn.IsChecked = true; // Remapped to M for Marker
             else if (e.Key == Key.E) EraserBtn.IsChecked = true;
             else if (e.Key == Key.S) SelectBtn.IsChecked = true;
             else if (e.Key == Key.L) LaserBtn.IsChecked = true;
@@ -368,7 +393,6 @@ namespace TeachingAnnotator
 
             if (HighlightBtn.IsChecked == true) { size *= 4; c = Color.FromArgb(120, c.R, c.G, c.B); }
             
-            // Format the Dot (Footprint of the ink)
             if (EraserBtn.IsChecked == true) {
                 size = 20; 
                 c = Colors.White;
@@ -376,26 +400,17 @@ namespace TeachingAnnotator
                 CustomDotCursor.Fill = new SolidColorBrush(Color.FromArgb(100, 255, 255, 255));
             } else { 
                 CustomDotCursor.Stroke = new SolidColorBrush(c);
-                CustomDotCursor.Fill = new SolidColorBrush(Color.FromArgb(50, c.R, c.G, c.B)); // Highly transparent fill
+                CustomDotCursor.Fill = new SolidColorBrush(Color.FromArgb(50, c.R, c.G, c.B)); 
             }
 
             CustomDotCursor.Width = size; 
             CustomDotCursor.Height = size;
-
-            // Format the Colored Arrow
             CustomArrowCursor.Fill = new SolidColorBrush(c);
 
-            // Laser Glowing Effects
             if (LaserBtn.IsChecked == true) {
-                CursorGlow.Color = c; 
-                CursorGlow.Opacity = 1.0; 
-                CursorGlow.BlurRadius = 15;
-                CursorGlow.ShadowDepth = 0;
+                CursorGlow.Color = c; CursorGlow.Opacity = 1.0; CursorGlow.BlurRadius = 15; CursorGlow.ShadowDepth = 0;
             } else { 
-                CursorGlow.Color = Colors.Black; 
-                CursorGlow.Opacity = 0.5; 
-                CursorGlow.BlurRadius = 4;
-                CursorGlow.ShadowDepth = 1;
+                CursorGlow.Color = Colors.Black; CursorGlow.Opacity = 0.5; CursorGlow.BlurRadius = 4; CursorGlow.ShadowDepth = 1;
             }
         }
 
@@ -413,11 +428,9 @@ namespace TeachingAnnotator
             
             Point p = e.GetPosition(CursorCanvas);
             
-            // Arrow tip points EXACTLY to the mouse coordinate
             Canvas.SetLeft(CustomArrowCursor, p.X);
             Canvas.SetTop(CustomArrowCursor, p.Y);
             
-            // Dot perfectly circles the mouse coordinate
             Canvas.SetLeft(CustomDotCursor, p.X - (CustomDotCursor.Width / 2));
             Canvas.SetTop(CustomDotCursor, p.Y - (CustomDotCursor.Height / 2));
         }
@@ -598,4 +611,4 @@ namespace TeachingAnnotator
 }
 EOF
 
-echo "✅ Colored Arrow Pointer Added Flawlessly!"
+echo "✅ App Polished to Perfection!"
