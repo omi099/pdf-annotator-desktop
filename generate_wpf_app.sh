@@ -30,7 +30,7 @@ cat << 'EOF' > TeachingAnnotator.csproj
 </Project>
 EOF
 
-# 4. Overwrite MainWindow.xaml
+# 4. Overwrite MainWindow.xaml (FIXED: Properly encoded XML characters for the UI label)
 cat << 'EOF' > MainWindow.xaml
 <Window x:Class="TeachingAnnotator.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -72,7 +72,7 @@ cat << 'EOF' > MainWindow.xaml
                     <ComboBoxItem Content="Magenta"/>
                 </ComboBox>
 
-                <TextBlock Text="Size (< >):" Foreground="White" VerticalAlignment="Center" Margin="0,0,5,0" FontWeight="Bold"/>
+                <TextBlock Text="Size (&lt; &gt;):" Foreground="White" VerticalAlignment="Center" Margin="0,0,5,0" FontWeight="Bold"/>
                 <Slider x:Name="SizeSlider" Minimum="0.5" Maximum="50" Value="4" Width="80" VerticalAlignment="Center" Margin="0,0,5,0" ValueChanged="Size_Changed" IsMoveToPointEnabled="True"/>
                 
                 <TextBox x:Name="SizeInput" Text="{Binding Value, ElementName=SizeSlider, UpdateSourceTrigger=PropertyChanged, StringFormat=F1}" 
@@ -751,4 +751,4 @@ namespace TeachingAnnotator
 }
 EOF
 
-echo "✅ App Polished to Perfection!"
+echo "✅ App Polished to Absolute Perfection!"
