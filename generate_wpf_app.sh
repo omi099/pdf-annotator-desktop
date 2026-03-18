@@ -1,18 +1,18 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping the Ultimate Custom WPF Annotator..."
+echo "🚀 Bootstrapping the Ultimate GoodNotes-Level Annotator..."
 
-# 1. Clean environment and let .NET create the project folder properly
+# 1. Clean environment
 rm -rf TeachingAnnotator
 dotnet new wpf -n TeachingAnnotator -f net8.0 --force
 cd TeachingAnnotator
 
-# 2. Install Native PDF Writer Libraries for Vector Export
+# 2. Install Native PDF Writer Libraries
 dotnet add package PdfSharp --version 6.1.1
 dotnet add package System.Text.Encoding.CodePages --version 8.0.0
 
-# 3. Overwrite .csproj to target Windows 10 APIs for High-Res PDF Rendering
+# 3. Overwrite .csproj
 cat << 'EOF' > TeachingAnnotator.csproj
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
@@ -33,27 +33,29 @@ cat << 'EOF' > MainWindow.xaml
 <Window x:Class="TeachingAnnotator.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Apex Native Annotator - Ultimate Custom Edition" Height="900" Width="1400"
-        Background="#0f1115" WindowStartupLocation="CenterScreen">
+        Title="Apex Native Annotator - Ultimate Edition" Height="900" Width="1400"
+        Background="#0f1115" WindowStartupLocation="CenterScreen"
+        KeyDown="Window_KeyDown">
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
         
-        <Border Grid.Row="0" Background="#1a1c23" BorderBrush="#3a3f4b" BorderThickness="0,0,0,1" Padding="15,10">
+        <Border Grid.Row="0" Background="#1a1c23" BorderBrush="#3a3f4b" BorderThickness="0,0,0,1" Padding="15,10" Panel.ZIndex="100">
             <WrapPanel Orientation="Horizontal">
                 <Button Content="📂 Open PDF" Click="OpenPdf_Click" Foreground="White" Background="#3a3f4b" Margin="0,0,10,0" Padding="12,6" FontWeight="Bold" BorderThickness="0"/>
                 <Button Content="💾 Export Annotated PDF" Click="ExportAnnotated_Click" Foreground="#00ffcc" Background="#3a3f4b" Margin="0,0,10,0" Padding="12,6" FontWeight="Bold" BorderThickness="0"/>
-                <Button Content="💾 Save Original PDF" Click="ExportOriginal_Click" Foreground="White" Background="#3a3f4b" Margin="0,0,20,0" Padding="12,6" FontWeight="Bold" BorderThickness="0"/>
                 
-                <Rectangle Width="2" Fill="#3a3f4b" Margin="0,0,20,0"/>
+                <Rectangle Width="2" Fill="#3a3f4b" Margin="0,0,15,0"/>
                 
-                <RadioButton Content="🖊️ Pen" x:Name="PenBtn" IsChecked="True" Checked="Tool_Checked" Foreground="White" Margin="0,0,15,0" VerticalAlignment="Center" FontWeight="Bold"/>
-                <RadioButton Content="🖍️ Highlight" x:Name="HighlightBtn" Checked="Tool_Checked" Foreground="White" Margin="0,0,15,0" VerticalAlignment="Center" FontWeight="Bold"/>
-                <RadioButton Content="🧽 Eraser" x:Name="EraserBtn" Checked="Tool_Checked" Foreground="White" Margin="0,0,20,0" VerticalAlignment="Center" FontWeight="Bold"/>
+                <RadioButton Content="🖊️ Pen (P)" x:Name="PenBtn" IsChecked="True" Checked="Tool_Checked" Foreground="White" Margin="0,0,15,0" VerticalAlignment="Center" FontWeight="Bold"/>
+                <RadioButton Content="🖍️ Highlight (H)" x:Name="HighlightBtn" Checked="Tool_Checked" Foreground="White" Margin="0,0,15,0" VerticalAlignment="Center" FontWeight="Bold"/>
+                <RadioButton Content="☄️ Laser (L)" x:Name="LaserBtn" Checked="Tool_Checked" Foreground="#ff6b81" Margin="0,0,15,0" VerticalAlignment="Center" FontWeight="Bold"/>
+                <RadioButton Content="🧽 Eraser (E)" x:Name="EraserBtn" Checked="Tool_Checked" Foreground="White" Margin="0,0,15,0" VerticalAlignment="Center" FontWeight="Bold"/>
+                <RadioButton Content="⬚ Select (S)" x:Name="SelectBtn" Checked="Tool_Checked" Foreground="#7bed9f" Margin="0,0,15,0" VerticalAlignment="Center" FontWeight="Bold" ToolTip="Draw a lasso around ink to resize or hit Delete."/>
                 
-                <Rectangle Width="2" Fill="#3a3f4b" Margin="0,0,20,0"/>
+                <Rectangle Width="2" Fill="#3a3f4b" Margin="0,0,15,0"/>
                 
                 <TextBlock Text="Color:" Foreground="White" VerticalAlignment="Center" Margin="0,0,5,0" FontWeight="Bold"/>
                 <ComboBox x:Name="ColorPicker" SelectionChanged="Color_Changed" Width="80" Margin="0,0,15,0" SelectedIndex="0">
@@ -63,23 +65,27 @@ cat << 'EOF' > MainWindow.xaml
                     <ComboBoxItem Content="Black"/>
                     <ComboBoxItem Content="White"/>
                     <ComboBoxItem Content="Yellow"/>
+                    <ComboBoxItem Content="Cyan"/>
+                    <ComboBoxItem Content="Magenta"/>
                 </ComboBox>
 
                 <TextBlock Text="Size:" Foreground="White" VerticalAlignment="Center" Margin="0,0,5,0" FontWeight="Bold"/>
-                <Slider x:Name="SizeSlider" Minimum="1" Maximum="50" Value="4" Width="100" VerticalAlignment="Center" Margin="0,0,10,0" ValueChanged="Size_Changed"/>
-                <TextBlock Text="{Binding Value, ElementName=SizeSlider, StringFormat={}{0:0}}" Foreground="#00ffcc" VerticalAlignment="Center" Margin="0,0,15,0" Width="20" FontWeight="Bold"/>
+                <Slider x:Name="SizeSlider" Minimum="0.5" Maximum="50" Value="4" Width="80" VerticalAlignment="Center" Margin="0,0,5,0" ValueChanged="Size_Changed" IsMoveToPointEnabled="True"/>
+                
+                <TextBox x:Name="SizeInput" Text="{Binding Value, ElementName=SizeSlider, UpdateSourceTrigger=PropertyChanged, StringFormat=F1}" 
+                         Width="35" TextAlignment="Center" VerticalAlignment="Center" Margin="0,0,15,0" FontWeight="Bold" Background="#3a3f4b" Foreground="#00ffcc" BorderThickness="0"/>
 
-                <CheckBox x:Name="PressureToggle" Content="Pressure Effect" IsChecked="True" Foreground="White" VerticalAlignment="Center" Margin="0,0,20,0" Checked="Pressure_Changed" Unchecked="Pressure_Changed" FontWeight="Bold"/>
+                <CheckBox x:Name="PressureToggle" Content="Pressure" IsChecked="True" Foreground="White" VerticalAlignment="Center" Margin="0,0,15,0" Checked="Pressure_Changed" Unchecked="Pressure_Changed" FontWeight="Bold"/>
 
-                <Rectangle Width="2" Fill="#3a3f4b" Margin="0,0,20,0"/>
+                <Rectangle Width="2" Fill="#3a3f4b" Margin="0,0,15,0"/>
 
-                <Button Content="🗑️ Clear Ink" Click="ClearInk_Click" Foreground="#ff4757" Background="#3a3f4b" Margin="0,0,10,0" Padding="12,6" FontWeight="Bold" BorderThickness="0"/>
+                <Button Content="🗑️ Clear All" Click="ClearInk_Click" Foreground="#ff4757" Background="#3a3f4b" Margin="0,0,10,0" Padding="12,6" FontWeight="Bold" BorderThickness="0"/>
                 <Button Content="🔍 +" Click="ZoomIn_Click" Foreground="White" Background="#3a3f4b" Margin="0,0,5,0" Padding="10,6" FontWeight="Bold" BorderThickness="0"/>
                 <Button Content="🔍 -" Click="ZoomOut_Click" Foreground="White" Background="#3a3f4b" Padding="10,6" FontWeight="Bold" BorderThickness="0"/>
             </WrapPanel>
         </Border>
 
-        <ScrollViewer Grid.Row="1" x:Name="MainScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" PanningMode="Both">
+        <ScrollViewer Grid.Row="1" x:Name="MainScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" PanningMode="Both" Background="#0f1115">
             <Grid x:Name="Workspace" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="40">
                 <Grid.LayoutTransform>
                     <ScaleTransform x:Name="ZoomTransform" ScaleX="1" ScaleY="1"/>
@@ -98,25 +104,39 @@ cat << 'EOF' > MainWindow.xaml
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
 
-                <InkCanvas x:Name="MainInkCanvas" Background="Transparent" UseCustomCursor="False" HorizontalAlignment="Left" VerticalAlignment="Top"/>
+                <InkCanvas x:Name="MainInkCanvas" Background="Transparent" UseCustomCursor="True" HorizontalAlignment="Left" VerticalAlignment="Top"
+                           MouseMove="MainInkCanvas_MouseMove" MouseLeave="MainInkCanvas_MouseLeave" MouseEnter="MainInkCanvas_MouseEnter"
+                           StrokeCollected="MainInkCanvas_StrokeCollected"/>
+                
+                <Canvas x:Name="CursorCanvas" IsHitTestVisible="False" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+                    <Ellipse x:Name="CustomDotCursor" Visibility="Hidden" IsHitTestVisible="False">
+                        <Ellipse.Effect>
+                            <DropShadowEffect x:Name="CursorGlow" BlurRadius="10" ShadowDepth="0" Opacity="0.8" />
+                        </Ellipse.Effect>
+                    </Ellipse>
+                </Canvas>
             </Grid>
         </ScrollViewer>
     </Grid>
 </Window>
 EOF
 
-# 5. Overwrite MainWindow.xaml.cs (Ambiguity Fixes Applied)
+# 5. Overwrite MainWindow.xaml.cs (Advanced Physics & Logic)
 cat << 'EOF' > MainWindow.xaml.cs
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Ink;
-using System.Windows.Input; // FIX: Added for StylusPointCollection
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using Microsoft.Win32;
+using Windows.Data.Pdf;
 using Windows.Storage;
 using Windows.Storage.Streams;
 using PdfSharp.Pdf;
@@ -133,64 +153,268 @@ namespace TeachingAnnotator
         public double StartY { get; set; }
     }
 
+    public class LaserStrokeData
+    {
+        public Stroke Stroke { get; set; }
+        public int Life { get; set; } = 255;
+        public LaserStrokeData(Stroke s) { Stroke = s; }
+    }
+
     public partial class MainWindow : Window
     {
         public ObservableCollection<PdfPageModel> PdfPages { get; set; } = new ObservableCollection<PdfPageModel>();
         private double _zoom = 1.0;
         private string? _currentPdfPath = null;
+        private bool _isUpdatingUI = false;
+
+        // Independent Tool Memory
+        private double _penSize = 4.0;
+        private Color _penColor = Colors.Red;
+        
+        private double _highlightSize = 24.0;
+        private Color _highlightColor = Colors.Yellow;
+        
+        private double _laserSize = 6.0;
+        private Color _laserColor = Colors.Red;
+
+        // Laser Pointer Physics
+        private List<LaserStrokeData> _laserStrokes = new List<LaserStrokeData>();
+        private DispatcherTimer _laserTimer;
 
         public MainWindow()
         {
             InitializeComponent();
             PdfItemsControl.ItemsSource = PdfPages;
             System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
-            UpdatePenAttributes();
+
+            // Hide normal Windows Cursor inside canvas
+            MainInkCanvas.Cursor = Cursors.None;
+
+            // Initialize Laser Fading Engine (Runs at 30 FPS)
+            _laserTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(33) };
+            _laserTimer.Tick += LaserTimer_Tick;
+            _laserTimer.Start();
+
+            SyncToolToUI();
         }
 
-        private void UpdatePenAttributes()
+        // --- KEYBOARD SHORTCUTS ---
+        private void Window_KeyDown(object sender, KeyEventArgs e)
         {
-            if (MainInkCanvas == null || ColorPicker == null || SizeSlider == null || PressureToggle == null) return;
+            // Ignore shortcuts if the user is typing in the Size text box
+            if (SizeInput.IsFocused) return;
 
-            Color selectedColor = Colors.Red;
-            if (ColorPicker.Text == "Blue") selectedColor = Colors.Blue;
-            else if (ColorPicker.Text == "Green") selectedColor = Colors.Green;
-            else if (ColorPicker.Text == "Black") selectedColor = Colors.Black;
-            else if (ColorPicker.Text == "White") selectedColor = Colors.White;
-            else if (ColorPicker.Text == "Yellow") selectedColor = Colors.Yellow;
+            if (e.Key == Key.P) PenBtn.IsChecked = true;
+            else if (e.Key == Key.H) HighlightBtn.IsChecked = true;
+            else if (e.Key == Key.E) EraserBtn.IsChecked = true;
+            else if (e.Key == Key.S) SelectBtn.IsChecked = true;
+            else if (e.Key == Key.L) LaserBtn.IsChecked = true;
+        }
 
-            double size = SizeSlider.Value;
+        // --- INDEPENDENT TOOL LOGIC ---
+        private void Tool_Checked(object sender, RoutedEventArgs e)
+        {
+            if (_isUpdatingUI || MainInkCanvas == null) return;
+            SyncToolToUI();
+        }
+
+        private void SyncToolToUI()
+        {
+            _isUpdatingUI = true;
+            if (PenBtn.IsChecked == true) {
+                SizeSlider.Value = _penSize;
+                SetComboColor(_penColor);
+            } else if (HighlightBtn.IsChecked == true) {
+                SizeSlider.Value = _highlightSize;
+                SetComboColor(_highlightColor);
+            } else if (LaserBtn.IsChecked == true) {
+                SizeSlider.Value = _laserSize;
+                SetComboColor(_laserColor);
+            }
+            _isUpdatingUI = false;
+            ApplyPenAttributes();
+        }
+
+        private void SetComboColor(Color c)
+        {
+            string search = "Red";
+            if (c == Colors.Blue) search = "Blue";
+            else if (c == Colors.Green) search = "Green";
+            else if (c == Colors.Black) search = "Black";
+            else if (c == Colors.White) search = "White";
+            else if (c == Colors.Yellow) search = "Yellow";
+            else if (c == Colors.Cyan) search = "Cyan";
+            else if (c == Colors.Magenta) search = "Magenta";
+
+            foreach (ComboBoxItem item in ColorPicker.Items) {
+                if (item.Content.ToString() == search) {
+                    ColorPicker.SelectedItem = item;
+                    break;
+                }
+            }
+        }
+
+        private Color GetComboColor()
+        {
+            var item = ColorPicker.SelectedItem as ComboBoxItem;
+            string c = item?.Content.ToString() ?? "Red";
+            switch (c) {
+                case "Blue": return Colors.Blue;
+                case "Green": return Colors.Green;
+                case "Black": return Colors.Black;
+                case "White": return Colors.White;
+                case "Yellow": return Colors.Yellow;
+                case "Cyan": return Colors.Cyan;
+                case "Magenta": return Colors.Magenta;
+                default: return Colors.Red;
+            }
+        }
+
+        private void Color_Changed(object sender, SelectionChangedEventArgs e)
+        {
+            if (_isUpdatingUI) return;
+            Color c = GetComboColor();
+            if (PenBtn.IsChecked == true) _penColor = c;
+            else if (HighlightBtn.IsChecked == true) _highlightColor = c;
+            else if (LaserBtn.IsChecked == true) _laserColor = c;
+            ApplyPenAttributes();
+        }
+
+        private void Size_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isUpdatingUI) return;
+            double s = SizeSlider.Value;
+            if (PenBtn.IsChecked == true) _penSize = s;
+            else if (HighlightBtn.IsChecked == true) _highlightSize = s;
+            else if (LaserBtn.IsChecked == true) _laserSize = s;
+            ApplyPenAttributes();
+        }
+
+        private void Pressure_Changed(object sender, RoutedEventArgs e) => ApplyPenAttributes();
+
+        private void ApplyPenAttributes()
+        {
+            if (MainInkCanvas == null) return;
+
             bool ignorePressure = PressureToggle.IsChecked == false;
+            Color activeColor = GetComboColor();
+            double activeSize = SizeSlider.Value;
 
             if (PenBtn.IsChecked == true)
             {
                 MainInkCanvas.EditingMode = InkCanvasEditingMode.Ink;
-                MainInkCanvas.DefaultDrawingAttributes = new DrawingAttributes
-                {
-                    Color = selectedColor, Width = size, Height = size,
-                    FitToCurve = true, IgnorePressure = ignorePressure, IsHighlighter = false
-                };
+                MainInkCanvas.Cursor = Cursors.None;
+                MainInkCanvas.DefaultDrawingAttributes = new DrawingAttributes { Color = activeColor, Width = activeSize, Height = activeSize, FitToCurve = true, IgnorePressure = ignorePressure };
             }
             else if (HighlightBtn.IsChecked == true)
             {
                 MainInkCanvas.EditingMode = InkCanvasEditingMode.Ink;
-                MainInkCanvas.DefaultDrawingAttributes = new DrawingAttributes
-                {
-                    Color = Color.FromArgb(120, selectedColor.R, selectedColor.G, selectedColor.B),
-                    Width = size * 4, Height = size * 4,
-                    StylusTip = StylusTip.Rectangle, IsHighlighter = true, IgnorePressure = true
-                };
+                MainInkCanvas.Cursor = Cursors.None;
+                MainInkCanvas.DefaultDrawingAttributes = new DrawingAttributes { Color = Color.FromArgb(120, activeColor.R, activeColor.G, activeColor.B), Width = activeSize * 4, Height = activeSize * 4, StylusTip = StylusTip.Rectangle, IsHighlighter = true, IgnorePressure = true };
+            }
+            else if (LaserBtn.IsChecked == true)
+            {
+                MainInkCanvas.EditingMode = InkCanvasEditingMode.Ink;
+                MainInkCanvas.Cursor = Cursors.None;
+                MainInkCanvas.DefaultDrawingAttributes = new DrawingAttributes { Color = activeColor, Width = activeSize, Height = activeSize, FitToCurve = true, IgnorePressure = true };
             }
             else if (EraserBtn.IsChecked == true)
             {
                 MainInkCanvas.EditingMode = InkCanvasEditingMode.EraseByStroke;
+                MainInkCanvas.Cursor = Cursors.None;
+            }
+            else if (SelectBtn.IsChecked == true)
+            {
+                // Native Freeform Selection (Lasso). Dragging creates a box. Hitting Delete deletes selected strokes.
+                MainInkCanvas.EditingMode = InkCanvasEditingMode.Select;
+                MainInkCanvas.Cursor = Cursors.Cross;
+            }
+
+            UpdateCustomCursorAppearance();
+        }
+
+        // --- CUSTOM DYNAMIC CURSOR ---
+        private void UpdateCustomCursorAppearance()
+        {
+            if (CustomDotCursor == null) return;
+
+            if (SelectBtn.IsChecked == true) {
+                CustomDotCursor.Visibility = Visibility.Hidden;
+                return;
+            }
+
+            double size = SizeSlider.Value;
+            Color c = GetComboColor();
+
+            if (HighlightBtn.IsChecked == true) {
+                size *= 4;
+                c = Color.FromArgb(120, c.R, c.G, c.B);
+            }
+            
+            if (EraserBtn.IsChecked == true) {
+                size = 20; // Default eraser visual size
+                c = Colors.White;
+                CustomDotCursor.Stroke = new SolidColorBrush(Colors.Black);
+                CustomDotCursor.StrokeThickness = 1;
+            } else {
+                CustomDotCursor.StrokeThickness = 0;
+            }
+
+            CustomDotCursor.Width = size;
+            CustomDotCursor.Height = size;
+            CustomDotCursor.Fill = new SolidColorBrush(c);
+            
+            if (LaserBtn.IsChecked == true) {
+                CursorGlow.Color = c;
+                CursorGlow.Opacity = 1.0;
+                CursorGlow.BlurRadius = size * 2;
+            } else {
+                CursorGlow.Opacity = 0.0;
             }
         }
 
-        private void Tool_Checked(object sender, RoutedEventArgs e) => UpdatePenAttributes();
-        private void Color_Changed(object sender, SelectionChangedEventArgs e) => UpdatePenAttributes();
-        private void Size_Changed(object sender, RoutedPropertyChangedEventArgs<double> e) => UpdatePenAttributes();
-        private void Pressure_Changed(object sender, RoutedEventArgs e) => UpdatePenAttributes();
+        private void MainInkCanvas_MouseMove(object sender, MouseEventArgs e)
+        {
+            if (SelectBtn.IsChecked == true) return;
+            CustomDotCursor.Visibility = Visibility.Visible;
+            Point p = e.GetPosition(CursorCanvas);
+            Canvas.SetLeft(CustomDotCursor, p.X - (CustomDotCursor.Width / 2));
+            Canvas.SetTop(CustomDotCursor, p.Y - (CustomDotCursor.Height / 2));
+        }
 
+        private void MainInkCanvas_MouseLeave(object sender, MouseEventArgs e) => CustomDotCursor.Visibility = Visibility.Hidden;
+        private void MainInkCanvas_MouseEnter(object sender, MouseEventArgs e) { if (SelectBtn.IsChecked != true) CustomDotCursor.Visibility = Visibility.Visible; }
+
+        // --- LASER POINTER PHYSICS ---
+        private void MainInkCanvas_StrokeCollected(object sender, InkCanvasStrokeCollectedEventArgs e)
+        {
+            if (LaserBtn.IsChecked == true)
+            {
+                _laserStrokes.Add(new LaserStrokeData(e.Stroke));
+            }
+        }
+
+        private void LaserTimer_Tick(object sender, EventArgs e)
+        {
+            for (int i = _laserStrokes.Count - 1; i >= 0; i--)
+            {
+                var ls = _laserStrokes[i];
+                ls.Life -= 8; // Fade speed
+
+                if (ls.Life <= 0)
+                {
+                    MainInkCanvas.Strokes.Remove(ls.Stroke);
+                    _laserStrokes.RemoveAt(i);
+                }
+                else
+                {
+                    var c = ls.Stroke.DrawingAttributes.Color;
+                    ls.Stroke.DrawingAttributes.Color = Color.FromArgb((byte)ls.Life, c.R, c.G, c.B);
+                }
+            }
+        }
+
+        // --- NATIVE PDF RENDERING ---
         private async void OpenPdf_Click(object sender, RoutedEventArgs e)
         {
             OpenFileDialog dlg = new OpenFileDialog { Filter = "PDF Files (*.pdf)|*.pdf" };
@@ -203,7 +427,6 @@ namespace TeachingAnnotator
                 try 
                 {
                     StorageFile file = await StorageFile.GetFileFromPathAsync(dlg.FileName);
-                    // FIX: Explicitly use Windows Native PdfDocument
                     Windows.Data.Pdf.PdfDocument pdfDoc = await Windows.Data.Pdf.PdfDocument.LoadFromFileAsync(file);
 
                     double currentY = 0;
@@ -211,7 +434,6 @@ namespace TeachingAnnotator
 
                     for (uint i = 0; i < pdfDoc.PageCount; i++)
                     {
-                        // FIX: Explicitly use Windows Native PdfPage
                         using (Windows.Data.Pdf.PdfPage page = pdfDoc.GetPage(i))
                         {
                             using (var stream = new InMemoryRandomAccessStream())
@@ -236,14 +458,7 @@ namespace TeachingAnnotator
                                     bitmap.StreamSource = ms;
                                     bitmap.EndInit();
 
-                                    PdfPages.Add(new PdfPageModel
-                                    {
-                                        ImageSource = bitmap,
-                                        Width = page.Size.Width,
-                                        Height = page.Size.Height,
-                                        StartY = currentY
-                                    });
-
+                                    PdfPages.Add(new PdfPageModel { ImageSource = bitmap, Width = page.Size.Width, Height = page.Size.Height, StartY = currentY });
                                     currentY += page.Size.Height + 25; 
                                     maxWidth = Math.Max(maxWidth, page.Size.Width);
                                 }
@@ -253,12 +468,14 @@ namespace TeachingAnnotator
 
                     Workspace.Width = maxWidth; Workspace.Height = currentY;
                     MainInkCanvas.Width = maxWidth; MainInkCanvas.Height = currentY;
+                    CursorCanvas.Width = maxWidth; CursorCanvas.Height = currentY;
                     MainScroll.ScrollToTop();
                 } 
                 catch (Exception ex) { MessageBox.Show("Failed to load PDF: " + ex.Message); }
             }
         }
 
+        // --- VECTOR EXPORT ---
         private void ExportAnnotated_Click(object sender, RoutedEventArgs e)
         {
             if (string.IsNullOrEmpty(_currentPdfPath)) { MessageBox.Show("Open a PDF first."); return; }
@@ -268,24 +485,24 @@ namespace TeachingAnnotator
             {
                 try
                 {
-                    // FIX: Explicitly use PdfSharp Document
                     PdfSharp.Pdf.PdfDocument document = PdfReader.Open(_currentPdfPath, PdfDocumentOpenMode.Modify);
 
                     for (int i = 0; i < document.Pages.Count; i++)
                     {
                         if (i >= PdfPages.Count) break;
                         
-                        // FIX: Explicitly use PdfSharp Page
                         PdfSharp.Pdf.PdfPage pdfPage = document.Pages[i];
                         XGraphics gfx = XGraphics.FromPdfPage(pdfPage);
                         PdfPageModel uiPage = PdfPages[i];
 
-                        // FIX: Use .Point property for PdfSharp 6.1
                         double scaleX = pdfPage.Width.Point / uiPage.Width;
                         double scaleY = pdfPage.Height.Point / uiPage.Height;
 
                         foreach (Stroke stroke in MainInkCanvas.Strokes)
                         {
+                            // Do not export temporary laser strokes
+                            if (_laserStrokes.Any(ls => ls.Stroke == stroke)) continue;
+
                             Rect bounds = stroke.GetBounds();
                             if (bounds.Bottom >= uiPage.StartY && bounds.Top <= (uiPage.StartY + uiPage.Height))
                             {
@@ -310,20 +527,9 @@ namespace TeachingAnnotator
                         }
                     }
                     document.Save(dlg.FileName);
-                    MessageBox.Show("Vector PDF Exported!");
+                    MessageBox.Show("Vector PDF Exported Successfully!");
                 }
                 catch (Exception ex) { MessageBox.Show("Export failed: " + ex.Message); }
-            }
-        }
-
-        private void ExportOriginal_Click(object sender, RoutedEventArgs e)
-        {
-            if (string.IsNullOrEmpty(_currentPdfPath)) return;
-            SaveFileDialog dlg = new SaveFileDialog { Filter = "PDF (*.pdf)|*.pdf", FileName = "Original_Document.pdf" };
-            if (dlg.ShowDialog() == true)
-            {
-                File.Copy(_currentPdfPath, dlg.FileName, true);
-                MessageBox.Show("Original saved.");
             }
         }
 
@@ -334,4 +540,4 @@ namespace TeachingAnnotator
 }
 EOF
 
-echo "✅ Custom WPF Codebase Generated Flawlessly!"
+echo "✅ Ultimate GoodNotes Architecture Generated Flawlessly!"
