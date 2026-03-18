@@ -24,17 +24,19 @@ jobs:
           chmod +x generate_wpf_app.sh
           ./generate_wpf_app.sh
 
-      - name: Compile Native Application Folder
+      - name: Compile Application to Hardcoded Folder
         working-directory: ./TeachingAnnotator
+        # The '-o ./Final_Build' is the ultimate fix. It forces output to a known, stable directory.
         run: >
           dotnet publish 
           -c Release 
           -r win-x64 
-          --self-contained true
+          --self-contained true 
+          -o ./Final_Build
 
       - name: Upload Application Folder
         uses: actions/upload-artifact@v4
         with:
-          name: Apex-Teaching-Annotator
-          # CRITICAL FIX: The path now matches the net8.0-windows target framework
-          path: TeachingAnnotator/bin/Release/net8.0-windows/win-x64/publish/
+          name: Apex-Teaching-Annotator-Ultimate
+          # Grabbing the exact hardcoded folder we just created
+          path: TeachingAnnotator/Final_Build/
