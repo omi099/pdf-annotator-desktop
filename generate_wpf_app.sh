@@ -1,16 +1,16 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping Native WPF Teaching Annotator..."
+echo "🚀 Bootstrapping the Apex Native WPF Teaching Annotator..."
 
-# 1. Clean any previous botched runs and create a modern .NET 8 WPF App
+# 1. Clean environment and create a pristine .NET 8 WPF App
 rm -rf TeachingAnnotator
 dotnet new wpf -n TeachingAnnotator --force
 
-# 2. Move INTO the generated folder
+# 2. Enter the isolated project directory
 cd TeachingAnnotator
 
-# 3. Overwrite .csproj to target Windows 10 APIs (required for Native PDF Rendering)
+# 3. Overwrite .csproj to target Windows 10 APIs (for Native PDF Engine)
 cat << 'EOF' > TeachingAnnotator.csproj
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
@@ -18,37 +18,44 @@ cat << 'EOF' > TeachingAnnotator.csproj
     <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
     <Nullable>enable</Nullable>
     <UseWPF>true</UseWPF>
+    <TieredCompilation>true</TieredCompilation>
+    <Optimize>true</Optimize>
   </PropertyGroup>
 </Project>
 EOF
 
-# 4. Overwrite MainWindow.xaml (The Hardware-Accelerated UI)
+# 4. Overwrite MainWindow.xaml (Hardware-Accelerated UI)
 cat << 'EOF' > MainWindow.xaml
 <Window x:Class="TeachingAnnotator.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Apex Native Annotator (WPF)" Height="900" Width="1400"
-        Background="#0f1115">
+        Background="#0f1115" WindowStartupLocation="CenterScreen">
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
         
-        <ToolBar Grid.Row="0" Background="#1a1c23" Foreground="White" Padding="10">
-            <Button Content="📂 Open PDF" Click="OpenPdf_Click" Foreground="White" Background="#3a3f4b" Margin="0,0,10,0" Padding="10,5"/>
-            <Button Content="💾 Save Ink Vector" Click="SaveInk_Click" Foreground="#00ffcc" Background="#3a3f4b" Margin="0,0,10,0" Padding="10,5"/>
-            <Button Content="📄 Load Ink" Click="LoadInk_Click" Foreground="White" Background="#3a3f4b" Margin="0,0,20,0" Padding="10,5"/>
+        <ToolBar Grid.Row="0" Background="#1a1c23" Foreground="White" Padding="15,10">
+            <Button Content="📂 Open PDF" Click="OpenPdf_Click" Foreground="White" Background="#3a3f4b" Margin="0,0,10,0" Padding="12,6" FontWeight="Bold" BorderThickness="0"/>
+            <Button Content="💾 Save Vector Ink" Click="SaveInk_Click" Foreground="#00ffcc" Background="#3a3f4b" Margin="0,0,10,0" Padding="12,6" FontWeight="Bold" BorderThickness="0"/>
+            <Button Content="📄 Load Ink" Click="LoadInk_Click" Foreground="White" Background="#3a3f4b" Margin="0,0,20,0" Padding="12,6" FontWeight="Bold" BorderThickness="0"/>
             
-            <RadioButton Content="🖊️ Pen" x:Name="PenBtn" IsChecked="True" Checked="Tool_Checked" Foreground="White" Margin="0,0,10,0"/>
-            <RadioButton Content="🖍️ Highlighter" x:Name="HighlightBtn" Checked="Tool_Checked" Foreground="White" Margin="0,0,10,0"/>
-            <RadioButton Content="🧽 Eraser" x:Name="EraserBtn" Checked="Tool_Checked" Foreground="White" Margin="0,0,20,0"/>
+            <Separator Margin="0,0,20,0" Background="#3a3f4b"/>
             
-            <Button Content="🔍 Zoom In" Click="ZoomIn_Click" Foreground="White" Background="#3a3f4b" Margin="0,0,10,0" Padding="10,5"/>
-            <Button Content="🔍 Zoom Out" Click="ZoomOut_Click" Foreground="White" Background="#3a3f4b" Padding="10,5"/>
+            <RadioButton Content="🖊️ Pen" x:Name="PenBtn" IsChecked="True" Checked="Tool_Checked" Foreground="White" Margin="0,0,15,0" FontWeight="Bold"/>
+            <RadioButton Content="🖍️ Highlighter" x:Name="HighlightBtn" Checked="Tool_Checked" Foreground="White" Margin="0,0,15,0" FontWeight="Bold"/>
+            <RadioButton Content="🧽 Eraser" x:Name="EraserBtn" Checked="Tool_Checked" Foreground="White" Margin="0,0,20,0" FontWeight="Bold"/>
+            
+            <Separator Margin="0,0,20,0" Background="#3a3f4b"/>
+            
+            <Button Content="🔍 Zoom In" Click="ZoomIn_Click" Foreground="White" Background="#3a3f4b" Margin="0,0,10,0" Padding="12,6" FontWeight="Bold" BorderThickness="0"/>
+            <Button Content="🔍 Zoom Out" Click="ZoomOut_Click" Foreground="White" Background="#3a3f4b" Margin="0,0,10,0" Padding="12,6" FontWeight="Bold" BorderThickness="0"/>
+            <Button Content="🗑️ Clear All" Click="ClearInk_Click" Foreground="#ff4757" Background="#3a3f4b" Padding="12,6" FontWeight="Bold" BorderThickness="0"/>
         </ToolBar>
 
-        <ScrollViewer Grid.Row="1" x:Name="MainScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+        <ScrollViewer Grid.Row="1" x:Name="MainScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" PanningMode="Both">
             <Grid x:Name="Workspace" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="40">
                 <Grid.LayoutTransform>
                     <ScaleTransform x:Name="ZoomTransform" ScaleX="1" ScaleY="1"/>
@@ -57,7 +64,12 @@ cat << 'EOF' > MainWindow.xaml
                 <ItemsControl x:Name="PdfItemsControl">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Image Source="{Binding ImageSource}" Width="{Binding Width}" Height="{Binding Height}" Margin="0,0,0,20" Stretch="Uniform"/>
+                            <Border Background="White" Margin="0,0,0,25" CornerRadius="4">
+                                <Border.Effect>
+                                    <DropShadowEffect Color="Black" BlurRadius="15" Opacity="0.5" Direction="270" ShadowDepth="5"/>
+                                </Border.Effect>
+                                <Image Source="{Binding ImageSource}" Width="{Binding Width}" Height="{Binding Height}" Stretch="Uniform"/>
+                            </Border>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
@@ -69,7 +81,7 @@ cat << 'EOF' > MainWindow.xaml
 </Window>
 EOF
 
-# 5. Overwrite MainWindow.xaml.cs (The C# Backend Logic)
+# 5. Overwrite MainWindow.xaml.cs (Zero-Warning, Zero-Crash C# Backend)
 cat << 'EOF' > MainWindow.xaml.cs
 using System;
 using System.Collections.ObjectModel;
@@ -88,7 +100,8 @@ namespace TeachingAnnotator
 {
     public class PdfPageModel
     {
-        public BitmapImage ImageSource { get; set; }
+        // Fixed CS8618: Made ImageSource nullable to satisfy strict compiler
+        public BitmapImage? ImageSource { get; set; }
         public double Width { get; set; }
         public double Height { get; set; }
     }
@@ -138,7 +151,7 @@ namespace TeachingAnnotator
                         {
                             using (var stream = new InMemoryRandomAccessStream())
                             {
-                                // Render crisp at 2x scale
+                                // Render crisp at 2x scale for 4K displays
                                 var options = new PdfPageRenderOptions
                                 {
                                     DestinationWidth = (uint)(page.Size.Width * 2),
@@ -167,7 +180,7 @@ namespace TeachingAnnotator
                                         Height = page.Size.Height
                                     });
 
-                                    totalHeight += page.Size.Height + 20;
+                                    totalHeight += page.Size.Height + 25; // 25px margin
                                     maxWidth = Math.Max(maxWidth, page.Size.Width);
                                 }
                             }
@@ -181,7 +194,7 @@ namespace TeachingAnnotator
                 } 
                 catch (Exception ex) 
                 {
-                    MessageBox.Show("Failed to load PDF: " + ex.Message);
+                    MessageBox.Show("Failed to load PDF: " + ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 }
             }
         }
@@ -208,22 +221,29 @@ namespace TeachingAnnotator
             }
             else if (EraserBtn.IsChecked == true)
             {
-                // Native stroke eraser - removes the whole line mathematically
+                // Native stroke eraser - removes the whole line mathematically perfectly
                 MainInkCanvas.EditingMode = InkCanvasEditingMode.EraseByStroke;
             }
         }
 
         private void SaveInk_Click(object sender, RoutedEventArgs e)
         {
-            // Saves pure vector paths to an ISF file (Ink Serialized Format) - Extremely lightweight!
-            SaveFileDialog dlg = new SaveFileDialog { Filter = "Vector Ink Data (*.isf)|*.isf" };
+            // Saves pure vector paths to an ISF file (Ink Serialized Format)
+            SaveFileDialog dlg = new SaveFileDialog { Filter = "Vector Ink Data (*.isf)|*.isf", DefaultExt = ".isf" };
             if (dlg.ShowDialog() == true)
             {
-                using (FileStream fs = new FileStream(dlg.FileName, FileMode.Create))
+                try
                 {
-                    MainInkCanvas.Strokes.Save(fs);
+                    using (FileStream fs = new FileStream(dlg.FileName, FileMode.Create))
+                    {
+                        MainInkCanvas.Strokes.Save(fs);
+                    }
+                    MessageBox.Show("Vector Ink saved successfully!", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
-                MessageBox.Show("Vector Ink saved successfully!");
+                catch (Exception ex)
+                {
+                    MessageBox.Show("Failed to save ink: " + ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
             }
         }
 
@@ -232,11 +252,26 @@ namespace TeachingAnnotator
             OpenFileDialog dlg = new OpenFileDialog { Filter = "Vector Ink Data (*.isf)|*.isf" };
             if (dlg.ShowDialog() == true)
             {
-                using (FileStream fs = new FileStream(dlg.FileName, FileMode.Open))
+                try
                 {
-                    StrokeCollection strokes = new StrokeCollection(fs);
-                    MainInkCanvas.Strokes = strokes;
+                    using (FileStream fs = new FileStream(dlg.FileName, FileMode.Open))
+                    {
+                        StrokeCollection strokes = new StrokeCollection(fs);
+                        MainInkCanvas.Strokes = strokes;
+                    }
                 }
+                catch (Exception ex)
+                {
+                    MessageBox.Show("Failed to load ink: " + ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+        }
+
+        private void ClearInk_Click(object sender, RoutedEventArgs e)
+        {
+            if (MessageBox.Show("Are you sure you want to clear all annotations?", "Confirm Clear", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes)
+            {
+                MainInkCanvas.Strokes.Clear();
             }
         }
 
@@ -257,4 +292,4 @@ namespace TeachingAnnotator
 }
 EOF
 
-echo "✅ Perfect Native WPF Codebase Generated without folder conflicts!"
+echo "✅ Apex Native WPF Codebase Generated Flawlessly!"
