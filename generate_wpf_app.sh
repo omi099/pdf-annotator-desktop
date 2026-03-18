@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping the Ultimate Native WPF Annotator (Gold Master Edition)..."
+echo "🚀 Bootstrapping the Native WPF Annotator (Custom Colored Arrow Edition)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -28,7 +28,7 @@ cat << 'EOF' > TeachingAnnotator.csproj
 </Project>
 EOF
 
-# 4. Overwrite MainWindow.xaml
+# 4. Overwrite MainWindow.xaml (Upgraded with Dual Cursor System)
 cat << 'EOF' > MainWindow.xaml
 <Window x:Class="TeachingAnnotator.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -109,11 +109,17 @@ cat << 'EOF' > MainWindow.xaml
                            StrokeCollected="MainInkCanvas_StrokeCollected"/>
                 
                 <Canvas x:Name="CursorCanvas" IsHitTestVisible="False" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
-                    <Ellipse x:Name="CustomDotCursor" Visibility="Hidden" IsHitTestVisible="False">
-                        <Ellipse.Effect>
-                            <DropShadowEffect x:Name="CursorGlow" BlurRadius="10" ShadowDepth="0" Opacity="0.8" />
-                        </Ellipse.Effect>
-                    </Ellipse>
+                    
+                    <Ellipse x:Name="CustomDotCursor" Visibility="Hidden" IsHitTestVisible="False"/>
+                    
+                    <Path x:Name="CustomArrowCursor" Visibility="Hidden" IsHitTestVisible="False" 
+                          Data="M0,0 L0,16 L4,12 L7,17 L9,16 L6,11 L12,11 Z" 
+                          Stroke="White" StrokeThickness="1.5">
+                        <Path.Effect>
+                            <DropShadowEffect x:Name="CursorGlow" BlurRadius="4" ShadowDepth="1" Opacity="0.6" />
+                        </Path.Effect>
+                    </Path>
+                    
                 </Canvas>
             </Grid>
         </ScrollViewer>
@@ -121,7 +127,7 @@ cat << 'EOF' > MainWindow.xaml
 </Window>
 EOF
 
-# 5. Overwrite MainWindow.xaml.cs (Advanced Scroll, Laser Physics, & Bulletproof Selection)
+# 5. Overwrite MainWindow.xaml.cs 
 cat << 'EOF' > MainWindow.xaml.cs
 using System;
 using System.Collections.Generic;
@@ -216,10 +222,8 @@ namespace TeachingAnnotator
             }
         }
 
-        // --- GLOBAL KEYBOARD HOOKS (Bulletproof Delete & Shortcuts) ---
         private void Window_KeyDown(object sender, KeyEventArgs e)
         {
-            // If the user has lasso-selected strokes and presses Delete, destroy them.
             if (e.Key == Key.Delete)
             {
                 var selectedStrokes = MainInkCanvas.GetSelectedStrokes();
@@ -230,7 +234,6 @@ namespace TeachingAnnotator
                 }
             }
 
-            // Do not trigger shortcuts if typing a decimal size
             if (SizeInput.IsFocused) return;
 
             if (e.Key == Key.P) PenBtn.IsChecked = true;
@@ -352,9 +355,10 @@ namespace TeachingAnnotator
 
         private void UpdateCustomCursorAppearance()
         {
-            if (CustomDotCursor == null) return;
+            if (CustomArrowCursor == null || CustomDotCursor == null) return;
 
             if (SelectBtn.IsChecked == true) {
+                CustomArrowCursor.Visibility = Visibility.Hidden;
                 CustomDotCursor.Visibility = Visibility.Hidden;
                 return;
             }
@@ -364,18 +368,35 @@ namespace TeachingAnnotator
 
             if (HighlightBtn.IsChecked == true) { size *= 4; c = Color.FromArgb(120, c.R, c.G, c.B); }
             
+            // Format the Dot (Footprint of the ink)
             if (EraserBtn.IsChecked == true) {
-                size = 20; c = Colors.White;
+                size = 20; 
+                c = Colors.White;
                 CustomDotCursor.Stroke = new SolidColorBrush(Colors.Black);
-                CustomDotCursor.StrokeThickness = 1;
-            } else { CustomDotCursor.StrokeThickness = 0; }
+                CustomDotCursor.Fill = new SolidColorBrush(Color.FromArgb(100, 255, 255, 255));
+            } else { 
+                CustomDotCursor.Stroke = new SolidColorBrush(c);
+                CustomDotCursor.Fill = new SolidColorBrush(Color.FromArgb(50, c.R, c.G, c.B)); // Highly transparent fill
+            }
 
-            CustomDotCursor.Width = size; CustomDotCursor.Height = size;
-            CustomDotCursor.Fill = new SolidColorBrush(c);
-            
+            CustomDotCursor.Width = size; 
+            CustomDotCursor.Height = size;
+
+            // Format the Colored Arrow
+            CustomArrowCursor.Fill = new SolidColorBrush(c);
+
+            // Laser Glowing Effects
             if (LaserBtn.IsChecked == true) {
-                CursorGlow.Color = c; CursorGlow.Opacity = 1.0; CursorGlow.BlurRadius = size * 2;
-            } else { CursorGlow.Opacity = 0.0; }
+                CursorGlow.Color = c; 
+                CursorGlow.Opacity = 1.0; 
+                CursorGlow.BlurRadius = 15;
+                CursorGlow.ShadowDepth = 0;
+            } else { 
+                CursorGlow.Color = Colors.Black; 
+                CursorGlow.Opacity = 0.5; 
+                CursorGlow.BlurRadius = 4;
+                CursorGlow.ShadowDepth = 1;
+            }
         }
 
         private void MainInkCanvas_MouseMove(object sender, MouseEventArgs e)
@@ -386,14 +407,35 @@ namespace TeachingAnnotator
             }
 
             if (SelectBtn.IsChecked == true) return;
+            
+            CustomArrowCursor.Visibility = Visibility.Visible;
             CustomDotCursor.Visibility = Visibility.Visible;
+            
             Point p = e.GetPosition(CursorCanvas);
+            
+            // Arrow tip points EXACTLY to the mouse coordinate
+            Canvas.SetLeft(CustomArrowCursor, p.X);
+            Canvas.SetTop(CustomArrowCursor, p.Y);
+            
+            // Dot perfectly circles the mouse coordinate
             Canvas.SetLeft(CustomDotCursor, p.X - (CustomDotCursor.Width / 2));
             Canvas.SetTop(CustomDotCursor, p.Y - (CustomDotCursor.Height / 2));
         }
 
-        private void MainInkCanvas_MouseLeave(object sender, MouseEventArgs e) => CustomDotCursor.Visibility = Visibility.Hidden;
-        private void MainInkCanvas_MouseEnter(object sender, MouseEventArgs e) { if (SelectBtn.IsChecked != true) CustomDotCursor.Visibility = Visibility.Visible; }
+        private void MainInkCanvas_MouseLeave(object sender, MouseEventArgs e) 
+        { 
+            CustomArrowCursor.Visibility = Visibility.Hidden;
+            CustomDotCursor.Visibility = Visibility.Hidden; 
+        }
+
+        private void MainInkCanvas_MouseEnter(object sender, MouseEventArgs e) 
+        { 
+            if (SelectBtn.IsChecked != true) 
+            {
+                CustomArrowCursor.Visibility = Visibility.Visible;
+                CustomDotCursor.Visibility = Visibility.Visible; 
+            }
+        }
 
         private void MainInkCanvas_StrokeCollected(object sender, InkCanvasStrokeCollectedEventArgs e)
         {
@@ -556,4 +598,4 @@ namespace TeachingAnnotator
 }
 EOF
 
-echo "✅ Ultimate GoodNotes Architecture Generated Flawlessly!"
+echo "✅ Colored Arrow Pointer Added Flawlessly!"
