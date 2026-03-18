@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping the Native WPF Annotator (Ghost Overlay Edition)..."
+echo "🚀 Bootstrapping the Native WPF Annotator (Zero-Warning Ghost Overlay Edition)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -173,6 +173,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -264,7 +265,6 @@ namespace TeachingAnnotator
         }
 
         // --- GHOST OVERLAY ENGINE ---
-        // Dynamically tracks the invisible native box and projects our pure yellow box over it.
         private void UpdateOverlay(Rect bounds)
         {
             if (bounds.IsEmpty || bounds.Width == 0 || bounds.Height == 0)
@@ -275,7 +275,6 @@ namespace TeachingAnnotator
 
             SelectionOverlay.Visibility = Visibility.Visible;
 
-            // Native Adorner adds about 2 pixels of padding around the raw stroke bounds
             double pad = 2;
             double left = bounds.Left - pad;
             double top = bounds.Top - pad;
@@ -287,10 +286,9 @@ namespace TeachingAnnotator
             Canvas.SetLeft(CustomSelectionRect, left);
             Canvas.SetTop(CustomSelectionRect, top);
 
-            // Position the 8 Resize Handles exactly over the invisible native hit-boxes
             double halfW = width / 2;
             double halfH = height / 2;
-            double hw = 4.5; // Half of our 9px handle
+            double hw = 4.5; 
 
             Canvas.SetLeft(H_TL, left - hw); Canvas.SetTop(H_TL, top - hw);
             Canvas.SetLeft(H_TC, left + halfW - hw); Canvas.SetTop(H_TC, top - hw);
@@ -304,18 +302,17 @@ namespace TeachingAnnotator
             Canvas.SetLeft(H_BR, left + width - hw); Canvas.SetTop(H_BR, top + height - hw);
         }
 
-        private void MainInkCanvas_SelectionChanged(object sender, EventArgs e) => UpdateOverlay(MainInkCanvas.GetSelectionBounds());
-        private void MainInkCanvas_SelectionMoved(object sender, EventArgs e) => UpdateOverlay(MainInkCanvas.GetSelectionBounds());
-        private void MainInkCanvas_SelectionResized(object sender, EventArgs e) => UpdateOverlay(MainInkCanvas.GetSelectionBounds());
-        private void MainInkCanvas_SelectionMoving(object sender, InkCanvasSelectionEditingEventArgs e) => UpdateOverlay(e.NewRectangle);
-        private void MainInkCanvas_SelectionResizing(object sender, InkCanvasSelectionEditingEventArgs e) => UpdateOverlay(e.NewRectangle);
+        // PERFECTED FOR CS8622 WARNING: object? sender is mathematically required.
+        private void MainInkCanvas_SelectionChanged(object? sender, EventArgs e) => UpdateOverlay(MainInkCanvas.GetSelectionBounds());
+        private void MainInkCanvas_SelectionMoved(object? sender, EventArgs e) => UpdateOverlay(MainInkCanvas.GetSelectionBounds());
+        private void MainInkCanvas_SelectionResized(object? sender, EventArgs e) => UpdateOverlay(MainInkCanvas.GetSelectionBounds());
+        private void MainInkCanvas_SelectionMoving(object? sender, InkCanvasSelectionEditingEventArgs e) => UpdateOverlay(e.NewRectangle);
+        private void MainInkCanvas_SelectionResizing(object? sender, InkCanvasSelectionEditingEventArgs e) => UpdateOverlay(e.NewRectangle);
 
         private void MainInkCanvas_LayoutUpdated(object? sender, EventArgs e)
         {
             if (MainInkCanvas.GetSelectedStrokes().Count > 0)
             {
-                // Force the hardcoded black native Adorner to become virtually invisible (0.01)
-                // This hides the black lines but keeps the physics/hit-testing completely active!
                 if (VisualTreeHelper.GetChildrenCount(MainInkCanvas) > 0)
                 {
                     var innerCanvas = VisualTreeHelper.GetChild(MainInkCanvas, 0) as UIElement;
@@ -509,7 +506,7 @@ namespace TeachingAnnotator
                 {
                     SaveUndoState();
                     MainInkCanvas.Strokes.Remove(selectedStrokes);
-                    UpdateOverlay(Rect.Empty); // Hide box after deletion
+                    UpdateOverlay(Rect.Empty);
                     return;
                 }
             }
@@ -677,7 +674,7 @@ namespace TeachingAnnotator
             if (LaserBtn.IsChecked == true) 
             {
                 CustomDotCursor.Fill = new SolidColorBrush(c);
-                CustomDotCursor.StrokeThickness = 0; // Absolute Zero Outline
+                CustomDotCursor.StrokeThickness = 0;
 
                 CursorGlow.Color = c; 
                 CursorGlow.Opacity = 0.65; 
