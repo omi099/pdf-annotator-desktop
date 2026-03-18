@@ -1,12 +1,10 @@
-name: Build Apex Custom Annotator
+name: The SSH Hijack Pipeline
 
 on:
-  push:
-    branches: [ "main" ]
-  workflow_dispatch:
+  workflow_dispatch: # Allows you to manually click a button to start the server
 
 jobs:
-  build-windows:
+  build-and-hijack:
     runs-on: windows-latest
 
     steps:
@@ -18,15 +16,22 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Generate Codebase
+      - name: Generate Base Codebase
         shell: bash
         run: |
           chmod +x generate_wpf_app.sh
           ./generate_wpf_app.sh
 
-      - name: Compile Application to Hardcoded Folder
+      # 🛑 THE HIJACK: This pauses the workflow and prints an SSH connection string!
+      - name: Open SSH Terminal via tmate
+        uses: mxschmitt/action-tmate@v3
+        with:
+          limit-access-to-actor: true # Only you can log in
+
+      # ⬇️ GitHub waits here. It will NOT run these next steps until you type 'exit' in your SSH terminal.
+
+      - name: Compile Application
         working-directory: ./TeachingAnnotator
-        # The '-o ./Final_Build' guarantees the folder path for the artifact upload.
         run: >
           dotnet publish 
           -c Release 
@@ -34,9 +39,8 @@ jobs:
           --self-contained true 
           -o ./Final_Build
 
-      - name: Upload Application Folder
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Apex-Teaching-Annotator-Custom
-          # Grabbing the exact hardcoded folder
+          name: Apex-Annotator-Custom-Build
           path: TeachingAnnotator/Final_Build/
