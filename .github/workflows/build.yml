@@ -1,4 +1,4 @@
-name: Build Apex Annotator (WebView2)
+name: Build Apex Custom Annotator
 
 on:
   push:
@@ -26,7 +26,7 @@ jobs:
 
       - name: Compile Application to Hardcoded Folder
         working-directory: ./TeachingAnnotator
-        # The '-o ./Final_Build' is the ultimate fix. It forces output to a known, stable directory.
+        # The '-o ./Final_Build' guarantees the folder path for the artifact upload.
         run: >
           dotnet publish 
           -c Release 
@@ -37,6 +37,6 @@ jobs:
       - name: Upload Application Folder
         uses: actions/upload-artifact@v4
         with:
-          name: Apex-Teaching-Annotator-Ultimate
-          # Grabbing the exact hardcoded folder we just created
+          name: Apex-Teaching-Annotator-Custom
+          # Grabbing the exact hardcoded folder
           path: TeachingAnnotator/Final_Build/
