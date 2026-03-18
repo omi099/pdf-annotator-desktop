@@ -3,12 +3,14 @@ set -e
 
 echo "🚀 Bootstrapping Native WPF Teaching Annotator..."
 
-# 1. Create a modern .NET 8 WPF App
-mkdir -p TeachingAnnotator
-cd TeachingAnnotator
+# 1. Clean any previous botched runs and create a modern .NET 8 WPF App
+rm -rf TeachingAnnotator
 dotnet new wpf -n TeachingAnnotator --force
 
-# 2. Overwrite .csproj to target Windows 10 APIs (required for Native PDF Rendering)
+# 2. Move INTO the generated folder
+cd TeachingAnnotator
+
+# 3. Overwrite .csproj to target Windows 10 APIs (required for Native PDF Rendering)
 cat << 'EOF' > TeachingAnnotator.csproj
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
@@ -20,7 +22,7 @@ cat << 'EOF' > TeachingAnnotator.csproj
 </Project>
 EOF
 
-# 3. Overwrite MainWindow.xaml (The Hardware-Accelerated UI)
+# 4. Overwrite MainWindow.xaml (The Hardware-Accelerated UI)
 cat << 'EOF' > MainWindow.xaml
 <Window x:Class="TeachingAnnotator.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -67,7 +69,7 @@ cat << 'EOF' > MainWindow.xaml
 </Window>
 EOF
 
-# 4. Overwrite MainWindow.xaml.cs (The C# Backend Logic)
+# 5. Overwrite MainWindow.xaml.cs (The C# Backend Logic)
 cat << 'EOF' > MainWindow.xaml.cs
 using System;
 using System.Collections.ObjectModel;
@@ -121,50 +123,66 @@ namespace TeachingAnnotator
                 PdfPages.Clear();
                 MainInkCanvas.Strokes.Clear();
 
-                // Load PDF via Native Windows 10/11 Engine
-                StorageFile file = await StorageFile.GetFileFromPathAsync(dlg.FileName);
-                PdfDocument pdfDoc = await PdfDocument.LoadFromFileAsync(file);
-
-                double totalHeight = 0;
-                double maxWidth = 0;
-
-                for (uint i = 0; i < pdfDoc.PageCount; i++)
+                try 
                 {
-                    using (PdfPage page = pdfDoc.GetPage(i))
+                    // Load PDF via Native Windows 10/11 Engine
+                    StorageFile file = await StorageFile.GetFileFromPathAsync(dlg.FileName);
+                    PdfDocument pdfDoc = await PdfDocument.LoadFromFileAsync(file);
+
+                    double totalHeight = 0;
+                    double maxWidth = 0;
+
+                    for (uint i = 0; i < pdfDoc.PageCount; i++)
                     {
-                        using (var stream = new InMemoryRandomAccessStream())
+                        using (PdfPage page = pdfDoc.GetPage(i))
                         {
-                            // Render crisp at 2x scale
-                            var options = new PdfPageRenderOptions
+                            using (var stream = new InMemoryRandomAccessStream())
                             {
-                                DestinationWidth = (uint)(page.Size.Width * 2),
-                                DestinationHeight = (uint)(page.Size.Height * 2)
-                            };
-                            await page.RenderToStreamAsync(stream, options);
+                                // Render crisp at 2x scale
+                                var options = new PdfPageRenderOptions
+                                {
+                                    DestinationWidth = (uint)(page.Size.Width * 2),
+                                    DestinationHeight = (uint)(page.Size.Height * 2)
+                                };
+                                await page.RenderToStreamAsync(stream, options);
 
-                            var bitmap = new BitmapImage();
-                            bitmap.BeginInit();
-                            bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                            bitmap.StreamSource = stream.AsStream();
-                            bitmap.EndInit();
+                                // 100% crash-proof stream conversion for .NET 8
+                                var reader = new DataReader(stream.GetInputStreamAt(0));
+                                await reader.LoadAsync((uint)stream.Size);
+                                byte[] buffer = new byte[stream.Size];
+                                reader.ReadBytes(buffer);
 
-                            PdfPages.Add(new PdfPageModel
-                            {
-                                ImageSource = bitmap,
-                                Width = page.Size.Width,
-                                Height = page.Size.Height
-                            });
+                                using (var ms = new MemoryStream(buffer))
+                                {
+                                    var bitmap = new BitmapImage();
+                                    bitmap.BeginInit();
+                                    bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                                    bitmap.StreamSource = ms;
+                                    bitmap.EndInit();
 
-                            totalHeight += page.Size.Height + 20;
-                            maxWidth = Math.Max(maxWidth, page.Size.Width);
+                                    PdfPages.Add(new PdfPageModel
+                                    {
+                                        ImageSource = bitmap,
+                                        Width = page.Size.Width,
+                                        Height = page.Size.Height
+                                    });
+
+                                    totalHeight += page.Size.Height + 20;
+                                    maxWidth = Math.Max(maxWidth, page.Size.Width);
+                                }
+                            }
                         }
                     }
-                }
 
-                Workspace.Width = maxWidth;
-                Workspace.Height = totalHeight;
-                MainInkCanvas.Width = maxWidth;
-                MainInkCanvas.Height = totalHeight;
+                    Workspace.Width = maxWidth;
+                    Workspace.Height = totalHeight;
+                    MainInkCanvas.Width = maxWidth;
+                    MainInkCanvas.Height = totalHeight;
+                } 
+                catch (Exception ex) 
+                {
+                    MessageBox.Show("Failed to load PDF: " + ex.Message);
+                }
             }
         }
 
@@ -239,4 +257,4 @@ namespace TeachingAnnotator
 }
 EOF
 
-echo "✅ Perfect Native WPF Codebase Generated!"
+echo "✅ Perfect Native WPF Codebase Generated without folder conflicts!"
