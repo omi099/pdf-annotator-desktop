@@ -1,112 +1,86 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping Native WinUI 3 Teaching Annotator..."
+echo "🚀 Bootstrapping Native WPF Teaching Annotator..."
 
-# 1. Install Community WinUI CLI Templates (Bypasses Microsoft's VS-only restriction)
-dotnet new install VijayAnand.WinUITemplates
-
-# 2. Explicitly create the project directory and move into it
+# 1. Create a modern .NET 8 WPF App
 mkdir -p TeachingAnnotator
 cd TeachingAnnotator
+dotnet new wpf -n TeachingAnnotator --force
 
-# 3. Create the WinUI 3 Project inside the current folder
-dotnet new winui -n TeachingAnnotator -f net8.0 --force
-
-# 4. Overwrite the .csproj for Unpackaged, Self-Contained .EXE generation
+# 2. Overwrite .csproj to target Windows 10 APIs (required for Native PDF Rendering)
 cat << 'EOF' > TeachingAnnotator.csproj
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
-    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
-    <RootNamespace>TeachingAnnotator</RootNamespace>
-    <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Platforms>x86;x64;ARM64</Platforms>
-    <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
-    <UseWinUI>true</UseWinUI>
-    <EnableMsixTooling>true</EnableMsixTooling>
-    
-    <WindowsPackageType>None</WindowsPackageType>
-    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <Nullable>enable</Nullable>
+    <UseWPF>true</UseWPF>
   </PropertyGroup>
-  <ItemGroup>
-    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.5.240311000" />
-    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.22621.3233" />
-    <Manifest Include="$(ApplicationManifest)" />
-  </ItemGroup>
 </Project>
 EOF
 
-# 5. Overwrite MainWindow.xaml (Native Hardware-Accelerated UI)
+# 3. Overwrite MainWindow.xaml (The Hardware-Accelerated UI)
 cat << 'EOF' > MainWindow.xaml
-<Window
-    x:Class="TeachingAnnotator.MainWindow"
-    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    Title="Apex Native Annotator">
-
-    <Grid Background="#0f1115">
+<Window x:Class="TeachingAnnotator.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Apex Native Annotator (WPF)" Height="900" Width="1400"
+        Background="#0f1115">
+    <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
+        
+        <ToolBar Grid.Row="0" Background="#1a1c23" Foreground="White" Padding="10">
+            <Button Content="📂 Open PDF" Click="OpenPdf_Click" Foreground="White" Background="#3a3f4b" Margin="0,0,10,0" Padding="10,5"/>
+            <Button Content="💾 Save Ink Vector" Click="SaveInk_Click" Foreground="#00ffcc" Background="#3a3f4b" Margin="0,0,10,0" Padding="10,5"/>
+            <Button Content="📄 Load Ink" Click="LoadInk_Click" Foreground="White" Background="#3a3f4b" Margin="0,0,20,0" Padding="10,5"/>
+            
+            <RadioButton Content="🖊️ Pen" x:Name="PenBtn" IsChecked="True" Checked="Tool_Checked" Foreground="White" Margin="0,0,10,0"/>
+            <RadioButton Content="🖍️ Highlighter" x:Name="HighlightBtn" Checked="Tool_Checked" Foreground="White" Margin="0,0,10,0"/>
+            <RadioButton Content="🧽 Eraser" x:Name="EraserBtn" Checked="Tool_Checked" Foreground="White" Margin="0,0,20,0"/>
+            
+            <Button Content="🔍 Zoom In" Click="ZoomIn_Click" Foreground="White" Background="#3a3f4b" Margin="0,0,10,0" Padding="10,5"/>
+            <Button Content="🔍 Zoom Out" Click="ZoomOut_Click" Foreground="White" Background="#3a3f4b" Padding="10,5"/>
+        </ToolBar>
 
-        <CommandBar Grid.Row="0" Background="#1a1c23" DefaultLabelPosition="Right">
-            <AppBarButton Icon="OpenFile" Label="Open PDF" Click="OpenPdf_Click" Foreground="White"/>
-            <AppBarButton Icon="Save" Label="Save Vector Ink" Click="SaveInk_Click" Foreground="#00ffcc"/>
-            <AppBarButton Icon="Document" Label="Load Ink" Click="LoadInk_Click" Foreground="White"/>
-            
-            <AppBarSeparator/>
-            
-            <AppBarToggleButton Icon="Edit" Label="Pen" x:Name="PenButton" Click="Tool_Click" IsChecked="True" Foreground="White"/>
-            <AppBarToggleButton Icon="Highlight" Label="Highlighter" x:Name="HighlightButton" Click="Tool_Click" Foreground="White"/>
-            <AppBarToggleButton Icon="Clear" Label="Eraser" x:Name="EraserButton" Click="Tool_Click" Foreground="White"/>
-            
-            <AppBarSeparator/>
-            
-            <AppBarButton Icon="ZoomIn" Label="Zoom In" Click="ZoomIn_Click" Foreground="White"/>
-            <AppBarButton Icon="ZoomOut" Label="Zoom Out" Click="ZoomOut_Click" Foreground="White"/>
-        </CommandBar>
-
-        <ScrollViewer Grid.Row="1" x:Name="MainScrollViewer" 
-                      ZoomMode="Enabled" MinZoomFactor="0.5" MaxZoomFactor="5.0" 
-                      HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
-                      Background="#0f1115">
-            
-            <Grid x:Name="WorkspaceGrid" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="40">
+        <ScrollViewer Grid.Row="1" x:Name="MainScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+            <Grid x:Name="Workspace" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="40">
+                <Grid.LayoutTransform>
+                    <ScaleTransform x:Name="ZoomTransform" ScaleX="1" ScaleY="1"/>
+                </Grid.LayoutTransform>
                 
-                <ItemsControl x:Name="PdfPagesControl">
+                <ItemsControl x:Name="PdfItemsControl">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Grid Margin="0,0,0,20" Background="White" CornerRadius="4">
-                                <Image Source="{Binding ImageSource}" Width="{Binding Width}" Height="{Binding Height}" Stretch="Uniform"/>
-                            </Grid>
+                            <Image Source="{Binding ImageSource}" Width="{Binding Width}" Height="{Binding Height}" Margin="0,0,0,20" Stretch="Uniform"/>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
 
-                <InkCanvas x:Name="MainInkCanvas" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
-                
+                <InkCanvas x:Name="MainInkCanvas" Background="Transparent" UseCustomCursor="False"/>
             </Grid>
         </ScrollViewer>
     </Grid>
 </Window>
 EOF
 
-# 6. Overwrite MainWindow.xaml.cs (C# Kernel-Level Logic)
+# 4. Overwrite MainWindow.xaml.cs (The C# Backend Logic)
 cat << 'EOF' > MainWindow.xaml.cs
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media.Imaging;
 using System;
 using System.Collections.ObjectModel;
-using Windows.Storage;
-using Windows.Storage.Pickers;
+using System.IO;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Ink;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using Microsoft.Win32;
 using Windows.Data.Pdf;
+using Windows.Storage;
 using Windows.Storage.Streams;
-using Microsoft.UI.Input.Inking;
-using Windows.UI.Core;
 
 namespace TeachingAnnotator
 {
@@ -117,45 +91,40 @@ namespace TeachingAnnotator
         public double Height { get; set; }
     }
 
-    public sealed partial class MainWindow : Window
+    public partial class MainWindow : Window
     {
-        private ObservableCollection<PdfPageModel> PdfPages { get; set; } = new ObservableCollection<PdfPageModel>();
+        public ObservableCollection<PdfPageModel> PdfPages { get; set; } = new ObservableCollection<PdfPageModel>();
+        private double _zoom = 1.0;
 
         public MainWindow()
         {
-            this.InitializeComponent();
-            PdfPagesControl.ItemsSource = PdfPages;
-
-            // Direct Kernel Ink Handling - Flawless Palm Rejection & Erasers
-            MainInkCanvas.InkPresenter.InputDeviceTypes = 
-                CoreInputDeviceTypes.Mouse | 
-                CoreInputDeviceTypes.Pen | 
-                CoreInputDeviceTypes.Touch;
-
-            InkDrawingAttributes drawingAttributes = new InkDrawingAttributes();
-            drawingAttributes.Color = Windows.UI.Color.FromArgb(255, 255, 71, 87);
-            drawingAttributes.Size = new Windows.Foundation.Size(4, 4);
-            drawingAttributes.FitToCurve = true;
-            MainInkCanvas.InkPresenter.UpdateDefaultDrawingAttributes(drawingAttributes);
+            InitializeComponent();
+            PdfItemsControl.ItemsSource = PdfPages;
+            
+            // Configure Native Pen Settings
+            var drawingAttributes = new DrawingAttributes
+            {
+                Color = Colors.Red,
+                Width = 4,
+                Height = 4,
+                FitToCurve = true,
+                IgnorePressure = false // Hardware pressure enabled natively!
+            };
+            MainInkCanvas.DefaultDrawingAttributes = drawingAttributes;
         }
 
         private async void OpenPdf_Click(object sender, RoutedEventArgs e)
         {
-            var picker = new FileOpenPicker();
-            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
-            WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
-            picker.ViewMode = PickerViewMode.Thumbnail;
-            picker.FileTypeFilter.Add(".pdf");
-
-            StorageFile file = await picker.PickSingleFileAsync();
-            if (file == null) return;
-
-            PdfPages.Clear();
-            MainInkCanvas.InkPresenter.StrokeContainer.Clear();
-
-            try
+            OpenFileDialog dlg = new OpenFileDialog { Filter = "PDF Files (*.pdf)|*.pdf" };
+            if (dlg.ShowDialog() == true)
             {
+                PdfPages.Clear();
+                MainInkCanvas.Strokes.Clear();
+
+                // Load PDF via Native Windows 10/11 Engine
+                StorageFile file = await StorageFile.GetFileFromPathAsync(dlg.FileName);
                 PdfDocument pdfDoc = await PdfDocument.LoadFromFileAsync(file);
+
                 double totalHeight = 0;
                 double maxWidth = 0;
 
@@ -163,107 +132,111 @@ namespace TeachingAnnotator
                 {
                     using (PdfPage page = pdfDoc.GetPage(i))
                     {
-                        InMemoryRandomAccessStream stream = new InMemoryRandomAccessStream();
-                        PdfPageRenderOptions options = new PdfPageRenderOptions();
-                        options.DestinationWidth = (uint)(page.Size.Width * 2);
-                        options.DestinationHeight = (uint)(page.Size.Height * 2);
-                        
-                        await page.RenderToStreamAsync(stream, options);
-
-                        BitmapImage bitmap = new BitmapImage();
-                        await bitmap.SetSourceAsync(stream);
-
-                        PdfPages.Add(new PdfPageModel
+                        using (var stream = new InMemoryRandomAccessStream())
                         {
-                            ImageSource = bitmap,
-                            Width = page.Size.Width,
-                            Height = page.Size.Height
-                        });
+                            // Render crisp at 2x scale
+                            var options = new PdfPageRenderOptions
+                            {
+                                DestinationWidth = (uint)(page.Size.Width * 2),
+                                DestinationHeight = (uint)(page.Size.Height * 2)
+                            };
+                            await page.RenderToStreamAsync(stream, options);
 
-                        totalHeight += page.Size.Height + 20;
-                        maxWidth = Math.Max(maxWidth, page.Size.Width);
+                            var bitmap = new BitmapImage();
+                            bitmap.BeginInit();
+                            bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                            bitmap.StreamSource = stream.AsStream();
+                            bitmap.EndInit();
+
+                            PdfPages.Add(new PdfPageModel
+                            {
+                                ImageSource = bitmap,
+                                Width = page.Size.Width,
+                                Height = page.Size.Height
+                            });
+
+                            totalHeight += page.Size.Height + 20;
+                            maxWidth = Math.Max(maxWidth, page.Size.Width);
+                        }
                     }
                 }
 
-                WorkspaceGrid.Width = maxWidth;
-                WorkspaceGrid.Height = totalHeight;
+                Workspace.Width = maxWidth;
+                Workspace.Height = totalHeight;
                 MainInkCanvas.Width = maxWidth;
                 MainInkCanvas.Height = totalHeight;
-                MainScrollViewer.ChangeView(null, null, 1.0f);
-            }
-            catch { }
-        }
-
-        private void Tool_Click(object sender, RoutedEventArgs e)
-        {
-            PenButton.IsChecked = false; HighlightButton.IsChecked = false; EraserButton.IsChecked = false;
-            var button = sender as AppBarToggleButton;
-            button.IsChecked = true;
-
-            if (button == PenButton)
-            {
-                MainInkCanvas.InkPresenter.InputProcessingConfiguration.Mode = InkInputProcessingMode.Inking;
-                var attr = MainInkCanvas.InkPresenter.CopyDefaultDrawingAttributes();
-                attr.Color = Windows.UI.Color.FromArgb(255, 255, 71, 87);
-                attr.Size = new Windows.Foundation.Size(4, 4);
-                attr.PenTip = PenTipShape.Circle;
-                MainInkCanvas.InkPresenter.UpdateDefaultDrawingAttributes(attr);
-            }
-            else if (button == HighlightButton)
-            {
-                MainInkCanvas.InkPresenter.InputProcessingConfiguration.Mode = InkInputProcessingMode.Inking;
-                var attr = MainInkCanvas.InkPresenter.CopyDefaultDrawingAttributes();
-                attr.Color = Windows.UI.Color.FromArgb(100, 253, 255, 182);
-                attr.Size = new Windows.Foundation.Size(24, 24);
-                attr.PenTip = PenTipShape.Rectangle;
-                MainInkCanvas.InkPresenter.UpdateDefaultDrawingAttributes(attr);
-            }
-            else if (button == EraserButton)
-            {
-                MainInkCanvas.InkPresenter.InputProcessingConfiguration.Mode = InkInputProcessingMode.Erasing;
             }
         }
 
-        private async void SaveInk_Click(object sender, RoutedEventArgs e)
+        private void Tool_Checked(object sender, RoutedEventArgs e)
         {
-            var picker = new FileSavePicker();
-            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
-            WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
-            picker.SuggestedStartLocation = PickerLocationId.DocumentsLibrary;
-            picker.FileTypeChoices.Add("Vector Ink Format", new[] { ".ink" });
-            picker.SuggestedFileName = "Annotations";
+            if (MainInkCanvas == null) return;
 
-            StorageFile file = await picker.PickSaveFileAsync();
-            if (file != null)
+            if (PenBtn.IsChecked == true)
             {
-                using (IRandomAccessStream stream = await file.OpenAsync(FileAccessMode.ReadWrite))
+                MainInkCanvas.EditingMode = InkCanvasEditingMode.Ink;
+                MainInkCanvas.DefaultDrawingAttributes.IsHighlighter = false;
+                MainInkCanvas.DefaultDrawingAttributes.Color = Colors.Red;
+                MainInkCanvas.DefaultDrawingAttributes.Width = 4;
+                MainInkCanvas.DefaultDrawingAttributes.Height = 4;
+            }
+            else if (HighlightBtn.IsChecked == true)
+            {
+                MainInkCanvas.EditingMode = InkCanvasEditingMode.Ink;
+                MainInkCanvas.DefaultDrawingAttributes.IsHighlighter = true;
+                MainInkCanvas.DefaultDrawingAttributes.Color = Colors.Yellow;
+                MainInkCanvas.DefaultDrawingAttributes.Width = 24;
+                MainInkCanvas.DefaultDrawingAttributes.Height = 24;
+            }
+            else if (EraserBtn.IsChecked == true)
+            {
+                // Native stroke eraser - removes the whole line mathematically
+                MainInkCanvas.EditingMode = InkCanvasEditingMode.EraseByStroke;
+            }
+        }
+
+        private void SaveInk_Click(object sender, RoutedEventArgs e)
+        {
+            // Saves pure vector paths to an ISF file (Ink Serialized Format) - Extremely lightweight!
+            SaveFileDialog dlg = new SaveFileDialog { Filter = "Vector Ink Data (*.isf)|*.isf" };
+            if (dlg.ShowDialog() == true)
+            {
+                using (FileStream fs = new FileStream(dlg.FileName, FileMode.Create))
                 {
-                    await MainInkCanvas.InkPresenter.StrokeContainer.SaveAsync(stream);
+                    MainInkCanvas.Strokes.Save(fs);
+                }
+                MessageBox.Show("Vector Ink saved successfully!");
+            }
+        }
+
+        private void LoadInk_Click(object sender, RoutedEventArgs e)
+        {
+            OpenFileDialog dlg = new OpenFileDialog { Filter = "Vector Ink Data (*.isf)|*.isf" };
+            if (dlg.ShowDialog() == true)
+            {
+                using (FileStream fs = new FileStream(dlg.FileName, FileMode.Open))
+                {
+                    StrokeCollection strokes = new StrokeCollection(fs);
+                    MainInkCanvas.Strokes = strokes;
                 }
             }
         }
 
-        private async void LoadInk_Click(object sender, RoutedEventArgs e)
+        private void ZoomIn_Click(object sender, RoutedEventArgs e)
         {
-            var picker = new FileOpenPicker();
-            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
-            WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
-            picker.FileTypeFilter.Add(".ink");
-
-            StorageFile file = await picker.PickSingleFileAsync();
-            if (file != null)
-            {
-                using (IRandomAccessStream stream = await file.OpenAsync(FileAccessMode.Read))
-                {
-                    await MainInkCanvas.InkPresenter.StrokeContainer.LoadAsync(stream);
-                }
-            }
+            _zoom += 0.25;
+            ZoomTransform.ScaleX = _zoom;
+            ZoomTransform.ScaleY = _zoom;
         }
 
-        private void ZoomIn_Click(object sender, RoutedEventArgs e) { MainScrollViewer.ChangeView(null, null, MainScrollViewer.ZoomFactor + 0.25f); }
-        private void ZoomOut_Click(object sender, RoutedEventArgs e) { MainScrollViewer.ChangeView(null, null, Math.Max(0.5f, MainScrollViewer.ZoomFactor - 0.25f)); }
+        private void ZoomOut_Click(object sender, RoutedEventArgs e)
+        {
+            _zoom = Math.Max(0.25, _zoom - 0.25);
+            ZoomTransform.ScaleX = _zoom;
+            ZoomTransform.ScaleY = _zoom;
+        }
     }
 }
 EOF
 
-echo "✅ Native WinUI 3 Codebase Successfully Generated!"
+echo "✅ Perfect Native WPF Codebase Generated!"
