@@ -3,16 +3,19 @@ set -e
 
 echo "🚀 Bootstrapping the Ultimate Chromium-Backed Annotator..."
 
-# 1. Clean environment and create a pristine .NET 8 WPF App
+# 1. Clean environment to ensure a fresh build
 rm -rf TeachingAnnotator
-mkdir -p TeachingAnnotator
-cd TeachingAnnotator
-dotnet new wpf -n TeachingAnnotator --force
 
-# 2. Install the Microsoft WebView2 Engine (The magic ingredient for perfect PDFs)
+# 2. Let .NET create the project AND the folder automatically
+dotnet new wpf -n TeachingAnnotator -f net8.0 --force
+
+# 3. Move into the newly created folder
+cd TeachingAnnotator
+
+# 4. Install the Microsoft WebView2 Engine (The magic ingredient for perfect PDFs)
 dotnet add package Microsoft.Web.WebView2 --version 1.0.2420.47
 
-# 3. Overwrite .csproj
+# 5. Overwrite .csproj
 cat << 'EOF' > TeachingAnnotator.csproj
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
@@ -27,7 +30,7 @@ cat << 'EOF' > TeachingAnnotator.csproj
 </Project>
 EOF
 
-# 4. Overwrite MainWindow.xaml
+# 6. Overwrite MainWindow.xaml
 cat << 'EOF' > MainWindow.xaml
 <Window x:Class="TeachingAnnotator.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -51,7 +54,7 @@ cat << 'EOF' > MainWindow.xaml
 </Window>
 EOF
 
-# 5. Overwrite MainWindow.xaml.cs 
+# 7. Overwrite MainWindow.xaml.cs 
 cat << 'EOF' > MainWindow.xaml.cs
 using System;
 using System.IO;
