@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping the Native WPF Annotator (Zero-Error Tailwind Edition)..."
+echo "🚀 Bootstrapping the Native WPF Annotator (Pure Native Lasso & High Contrast Edition)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -30,14 +30,14 @@ cat << 'EOF' > TeachingAnnotator.csproj
 </Project>
 EOF
 
-# 4. Overwrite MainWindow.xaml (FIXED: Restored missing x:Name tags for C# binding)
+# 4. Overwrite MainWindow.xaml
 cat << 'EOF' > MainWindow.xaml
 <Window x:Class="TeachingAnnotator.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Anydraw - Professional Whiteboard" 
         WindowState="Maximized" 
-        Background="#0F172A" WindowStartupLocation="CenterScreen"
+        Background="#000000" WindowStartupLocation="CenterScreen"
         KeyDown="Window_KeyDown" FontFamily="Segoe UI, Helvetica, Arial, sans-serif">
 
     <Window.Resources>
@@ -45,9 +45,6 @@ cat << 'EOF' > MainWindow.xaml
         <SolidColorBrush x:Key="{x:Static SystemColors.WindowFrameBrushKey}" Color="#FFFF00"/>
         <SolidColorBrush x:Key="{x:Static SystemColors.ActiveBorderBrushKey}" Color="#FFFF00"/>
 
-        <SolidColorBrush x:Key="Slate900" Color="#0F172A"/>
-        <SolidColorBrush x:Key="Slate800" Color="#1E293B"/>
-        <SolidColorBrush x:Key="Slate700" Color="#334155"/>
         <SolidColorBrush x:Key="Slate300" Color="#CBD5E1"/>
         <SolidColorBrush x:Key="Slate50" Color="#F8FAFC"/>
         <SolidColorBrush x:Key="Sky400" Color="#38BDF8"/>
@@ -66,7 +63,7 @@ cat << 'EOF' > MainWindow.xaml
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="{StaticResource Slate700}"/>
+                                <Setter TargetName="border" Property="Background" Value="#334155"/>
                                 <Setter Property="Foreground" Value="{StaticResource Slate50}"/>
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
@@ -93,7 +90,7 @@ cat << 'EOF' > MainWindow.xaml
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="{StaticResource Slate700}"/>
+                                <Setter TargetName="border" Property="Background" Value="#334155"/>
                                 <Setter Property="Foreground" Value="{StaticResource Slate50}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
@@ -109,10 +106,16 @@ cat << 'EOF' > MainWindow.xaml
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
         
-        <Border x:Name="MainToolbar" Grid.Row="0" Background="{StaticResource Slate800}" BorderBrush="{StaticResource Slate700}" BorderThickness="0,0,0,1" Padding="20,12" Panel.ZIndex="100">
+        <Border x:Name="MainToolbar" Grid.Row="0" Background="#000000" BorderBrush="#334155" BorderThickness="0,0,0,1" Padding="20,12" Panel.ZIndex="100">
             <Border.Effect>
                 <DropShadowEffect Color="Black" BlurRadius="10" Opacity="0.3" ShadowDepth="2" Direction="270"/>
             </Border.Effect>
+            
+            <Border.Resources>
+                <SolidColorBrush x:Key="{x:Static SystemColors.WindowTextBrushKey}" Color="Black"/>
+                <SolidColorBrush x:Key="{x:Static SystemColors.ControlTextBrushKey}" Color="Black"/>
+                <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#0078D7"/>
+            </Border.Resources>
             
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -125,7 +128,7 @@ cat << 'EOF' > MainWindow.xaml
                     <Path Data="M12 2 L2 22 L6 22 L12 10 L18 22 L22 22 Z M7 16 L17 16 L17 18 L7 18 Z" Fill="{StaticResource Sky400}" Height="24" Stretch="Uniform" Margin="0,0,8,0"/>
                     <TextBlock Text="Anydraw" FontSize="20" FontWeight="Bold" Foreground="{StaticResource Slate50}" VerticalAlignment="Center" Margin="0,0,24,0"/>
                     
-                    <Rectangle Width="1" Fill="{StaticResource Slate700}" Margin="0,4,12,4"/>
+                    <Rectangle Width="1" Fill="#334155" Margin="0,4,12,4"/>
 
                     <Button Style="{StaticResource TailwindButton}" Click="OpenPdf_Click" ToolTip="Open PDF">
                         <StackPanel Orientation="Horizontal">
@@ -158,7 +161,7 @@ cat << 'EOF' > MainWindow.xaml
                         <Path Data="M3,3 L9,3 L9,5 L5,5 L5,9 L3,9 L3,3 Z M15,3 L21,3 L21,9 L19,9 L19,5 L15,5 L15,3 Z M3,15 L5,15 L5,19 L9,19 L9,21 L3,21 L3,15 Z M15,21 L19,21 L19,17 L21,17 L21,21 L15,21 Z" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" Height="20" Stretch="Uniform"/>
                     </RadioButton>
 
-                    <Rectangle Width="1" Fill="{StaticResource Slate700}" Margin="12,4"/>
+                    <Rectangle Width="1" Fill="#334155" Margin="12,4"/>
 
                     <ComboBox x:Name="ColorPicker" SelectionChanged="Color_Changed" Width="80" Margin="0,0,10,0" SelectedIndex="0" VerticalAlignment="Center">
                         <ComboBoxItem Content="Red"/><ComboBoxItem Content="Blue"/><ComboBoxItem Content="Green"/>
@@ -183,7 +186,7 @@ cat << 'EOF' > MainWindow.xaml
                         <Path Data="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" Fill="{StaticResource Rose500}" Height="16" Stretch="Uniform"/>
                     </Button>
 
-                    <Rectangle Width="1" Fill="{StaticResource Slate700}" Margin="0,4,12,4"/>
+                    <Rectangle Width="1" Fill="#334155" Margin="0,4,12,4"/>
                     
                     <Button Style="{StaticResource TailwindButton}" Click="Theme_Click" ToolTip="Toggle Dark/Light Mode">
                         <Path Data="M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 0 1-4.4 2.26 5.403 5.403 0 0 1-3.14-9.8c-.44-.06-.9-.1-1.36-.1z" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Height="16" Stretch="Uniform"/>
@@ -218,10 +221,7 @@ cat << 'EOF' > MainWindow.xaml
                     <Grid x:Name="CanvasContainer" HorizontalAlignment="Left" VerticalAlignment="Top">
                         <InkCanvas x:Name="MainInkCanvas" Background="Transparent" UseCustomCursor="True" Cursor="Arrow" Focusable="True"
                                    PreviewMouseLeftButtonDown="MainInkCanvas_PreviewMouseLeftButtonDown"
-                                   PreviewMouseMove="MainInkCanvas_PreviewMouseMove"
-                                   PreviewMouseLeftButtonUp="MainInkCanvas_PreviewMouseLeftButtonUp"
-                                   MouseMove="MainInkCanvas_MouseMove" MouseLeave="MainInkCanvas_MouseLeave" MouseEnter="MainInkCanvas_MouseEnter"
-                                   SelectionChanged="MainInkCanvas_SelectionChanged">
+                                   MouseMove="MainInkCanvas_MouseMove" MouseLeave="MainInkCanvas_MouseLeave" MouseEnter="MainInkCanvas_MouseEnter">
                         </InkCanvas>
                         
                         <InkCanvas x:Name="LaserInkCanvas" Background="Transparent" UseCustomCursor="True" Cursor="Arrow" Focusable="False" IsHitTestVisible="False"
@@ -232,18 +232,17 @@ cat << 'EOF' > MainWindow.xaml
                 </AdornerDecorator>
                 
                 <Canvas x:Name="CursorCanvas" IsHitTestVisible="False" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Panel.ZIndex="999">
-                    <Polygon x:Name="CustomLassoPolygon" Visibility="Hidden" Stroke="#FFFF00" StrokeThickness="2" StrokeDashArray="4,4" Fill="#33FFFF00" IsHitTestVisible="False" />
                     
                     <Canvas x:Name="SelectionOverlay" IsHitTestVisible="False" Visibility="Hidden">
                         <Rectangle x:Name="CustomSelectionRect" Stroke="#FFFF00" StrokeThickness="1.5" StrokeDashArray="4 4" Fill="Transparent" />
-                        <Rectangle x:Name="H_TL" Width="9" Height="9" Stroke="#FFFF00" StrokeThickness="1.5" Fill="#1E293B" />
-                        <Rectangle x:Name="H_TC" Width="9" Height="9" Stroke="#FFFF00" StrokeThickness="1.5" Fill="#1E293B" />
-                        <Rectangle x:Name="H_TR" Width="9" Height="9" Stroke="#FFFF00" StrokeThickness="1.5" Fill="#1E293B" />
-                        <Rectangle x:Name="H_ML" Width="9" Height="9" Stroke="#FFFF00" StrokeThickness="1.5" Fill="#1E293B" />
-                        <Rectangle x:Name="H_MR" Width="9" Height="9" Stroke="#FFFF00" StrokeThickness="1.5" Fill="#1E293B" />
-                        <Rectangle x:Name="H_BL" Width="9" Height="9" Stroke="#FFFF00" StrokeThickness="1.5" Fill="#1E293B" />
-                        <Rectangle x:Name="H_BC" Width="9" Height="9" Stroke="#FFFF00" StrokeThickness="1.5" Fill="#1E293B" />
-                        <Rectangle x:Name="H_BR" Width="9" Height="9" Stroke="#FFFF00" StrokeThickness="1.5" Fill="#1E293B" />
+                        <Rectangle x:Name="H_TL" Width="9" Height="9" Stroke="#FFFF00" StrokeThickness="1.5" Fill="#282828" />
+                        <Rectangle x:Name="H_TC" Width="9" Height="9" Stroke="#FFFF00" StrokeThickness="1.5" Fill="#282828" />
+                        <Rectangle x:Name="H_TR" Width="9" Height="9" Stroke="#FFFF00" StrokeThickness="1.5" Fill="#282828" />
+                        <Rectangle x:Name="H_ML" Width="9" Height="9" Stroke="#FFFF00" StrokeThickness="1.5" Fill="#282828" />
+                        <Rectangle x:Name="H_MR" Width="9" Height="9" Stroke="#FFFF00" StrokeThickness="1.5" Fill="#282828" />
+                        <Rectangle x:Name="H_BL" Width="9" Height="9" Stroke="#FFFF00" StrokeThickness="1.5" Fill="#282828" />
+                        <Rectangle x:Name="H_BC" Width="9" Height="9" Stroke="#FFFF00" StrokeThickness="1.5" Fill="#282828" />
+                        <Rectangle x:Name="H_BR" Width="9" Height="9" Stroke="#FFFF00" StrokeThickness="1.5" Fill="#282828" />
                     </Canvas>
 
                     <Ellipse x:Name="CustomDotCursor" Visibility="Hidden" IsHitTestVisible="False">
@@ -258,7 +257,7 @@ cat << 'EOF' > MainWindow.xaml
 </Window>
 EOF
 
-# 5. Overwrite MainWindow.xaml.cs
+# 5. Overwrite MainWindow.xaml.cs (PERFECTED PHYSICS ENGINE)
 cat << 'EOF' > MainWindow.xaml.cs
 using System;
 using System.Collections.Generic;
@@ -324,9 +323,6 @@ namespace TeachingAnnotator
         private Dictionary<int, StrokeCollection> _whiteboardPages = new Dictionary<int, StrokeCollection>();
 
         private bool _isDarkTheme = true;
-
-        private PointCollection _lassoPoints = new PointCollection();
-        private bool _isLassoing = false;
 
         public MainWindow()
         {
@@ -441,27 +437,42 @@ namespace TeachingAnnotator
         {
             if (_isDarkTheme)
             {
-                MainScroll.Background = new SolidColorBrush(Color.FromRgb(15, 17, 42)); // slate-900
-                if (string.IsNullOrEmpty(_currentPdfPath)) Workspace.Background = CreateGridBrush(Color.FromRgb(30, 41, 59)); // slate-800
-                H_TL.Fill = new SolidColorBrush(Color.FromRgb(30, 41, 59)); H_TC.Fill = H_TL.Fill; H_TR.Fill = H_TL.Fill; H_ML.Fill = H_TL.Fill; H_MR.Fill = H_TL.Fill; H_BL.Fill = H_TL.Fill; H_BC.Fill = H_TL.Fill; H_BR.Fill = H_TL.Fill;
+                // Pure Black Outer
+                MainToolbar.Background = new SolidColorBrush(Colors.Black);
+                MainScroll.Background = new SolidColorBrush(Colors.Black); 
+                
+                // Pure #282828 Inner Canvas
+                if (string.IsNullOrEmpty(_currentPdfPath)) Workspace.Background = CreateGridBrush(Color.FromRgb(0x28, 0x28, 0x28), Color.FromRgb(0x38, 0x38, 0x38)); 
+                
+                H_TL.Fill = new SolidColorBrush(Color.FromRgb(0x28, 0x28, 0x28)); H_TC.Fill = H_TL.Fill; H_TR.Fill = H_TL.Fill; H_ML.Fill = H_TL.Fill; H_MR.Fill = H_TL.Fill; H_BL.Fill = H_TL.Fill; H_BC.Fill = H_TL.Fill; H_BR.Fill = H_TL.Fill;
             }
             else
             {
-                MainScroll.Background = new SolidColorBrush(Color.FromRgb(248, 250, 252)); // slate-50
-                if (string.IsNullOrEmpty(_currentPdfPath)) Workspace.Background = CreateGridBrush(Color.FromRgb(203, 213, 225)); // slate-300
+                // Light Outer
+                MainToolbar.Background = new SolidColorBrush(Color.FromRgb(0xF3, 0xF4, 0xF6));
+                MainScroll.Background = new SolidColorBrush(Color.FromRgb(0xF3, 0xF4, 0xF6)); 
+                
+                // Pure White Inner Canvas
+                if (string.IsNullOrEmpty(_currentPdfPath)) Workspace.Background = CreateGridBrush(Colors.White, Color.FromRgb(0xE5, 0xE7, 0xEB)); 
+                
                 H_TL.Fill = new SolidColorBrush(Colors.White); H_TC.Fill = H_TL.Fill; H_TR.Fill = H_TL.Fill; H_ML.Fill = H_TL.Fill; H_MR.Fill = H_TL.Fill; H_BL.Fill = H_TL.Fill; H_BC.Fill = H_TL.Fill; H_BR.Fill = H_TL.Fill;
             }
         }
 
-        private DrawingBrush CreateGridBrush(Color lineColor)
+        private DrawingBrush CreateGridBrush(Color bgColor, Color lineColor)
         {
             DrawingBrush brush = new DrawingBrush { TileMode = TileMode.Tile, Viewport = new Rect(0, 0, 40, 40), ViewportUnits = BrushMappingMode.Absolute };
-            GeometryDrawing drawing = new GeometryDrawing { Pen = new Pen(new SolidColorBrush(lineColor), 1) };
+            GeometryDrawing bgDrawing = new GeometryDrawing { Brush = new SolidColorBrush(bgColor), Geometry = new RectangleGeometry(new Rect(0, 0, 40, 40)) };
+            GeometryDrawing lineDrawing = new GeometryDrawing { Pen = new Pen(new SolidColorBrush(lineColor), 1) };
             GeometryGroup group = new GeometryGroup();
             group.Children.Add(new LineGeometry(new Point(0, 0), new Point(0, 40)));
             group.Children.Add(new LineGeometry(new Point(0, 0), new Point(40, 0)));
-            drawing.Geometry = group;
-            brush.Drawing = drawing;
+            lineDrawing.Geometry = group;
+            
+            DrawingGroup mainGroup = new DrawingGroup();
+            mainGroup.Children.Add(bgDrawing);
+            mainGroup.Children.Add(lineDrawing);
+            brush.Drawing = mainGroup;
             return brush;
         }
 
@@ -564,58 +575,12 @@ namespace TeachingAnnotator
             }
         }
 
+        // Native Undo hook - custom polygon intercept removed!
         private void MainInkCanvas_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             if (MainInkCanvas.EditingMode != InkCanvasEditingMode.None && MainInkCanvas.EditingMode != InkCanvasEditingMode.Select)
             {
                 SaveUndoState();
-            }
-
-            if (SelectBtn.IsChecked == true)
-            {
-                var hitResult = MainInkCanvas.HitTestSelection(e.GetPosition(MainInkCanvas));
-                if (hitResult == InkCanvasSelectionHitResult.None)
-                {
-                    MainInkCanvas.EditingMode = InkCanvasEditingMode.None; 
-                    _isLassoing = true;
-                    _lassoPoints.Clear();
-                    _lassoPoints.Add(e.GetPosition(CursorCanvas));
-                    CustomLassoPolygon.Points = _lassoPoints;
-                    CustomLassoPolygon.Visibility = Visibility.Visible;
-                    MainInkCanvas.CaptureMouse();
-                    e.Handled = true;
-                }
-                else
-                {
-                    MainInkCanvas.EditingMode = InkCanvasEditingMode.Select;
-                }
-            }
-        }
-
-        private void MainInkCanvas_PreviewMouseMove(object sender, MouseEventArgs e)
-        {
-            if (_isLassoing && e.LeftButton == MouseButtonState.Pressed)
-            {
-                _lassoPoints.Add(e.GetPosition(CursorCanvas));
-            }
-        }
-
-        private void MainInkCanvas_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
-        {
-            if (_isLassoing)
-            {
-                _isLassoing = false;
-                MainInkCanvas.ReleaseMouseCapture();
-                CustomLassoPolygon.Visibility = Visibility.Hidden;
-
-                if (_lassoPoints.Count > 3)
-                {
-                    var selected = MainInkCanvas.Strokes.HitTest(_lassoPoints, 50); 
-                    MainInkCanvas.Select(selected);
-                }
-                
-                MainInkCanvas.EditingMode = InkCanvasEditingMode.Select;
-                e.Handled = true;
             }
         }
 
@@ -961,8 +926,8 @@ namespace TeachingAnnotator
                         SaveCurrentPage();
                         PdfSharp.Pdf.PdfDocument wbDoc = new PdfSharp.Pdf.PdfDocument();
                         
-                        XColor bgColor = _isDarkTheme ? XColor.FromArgb(255, 15, 23, 42) : XColor.FromArgb(255, 248, 250, 252);
-                        XColor gridColor = _isDarkTheme ? XColor.FromArgb(255, 30, 41, 59) : XColor.FromArgb(255, 203, 213, 225);
+                        XColor bgColor = _isDarkTheme ? XColor.FromArgb(255, 40, 40, 40) : XColor.FromArgb(255, 255, 255, 255);
+                        XColor gridColor = _isDarkTheme ? XColor.FromArgb(255, 56, 56, 56) : XColor.FromArgb(255, 229, 231, 235);
 
                         for (int i = 1; i <= _totalPages; i++)
                         {
