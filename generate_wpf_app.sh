@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping the Native WPF Annotator (Neon Laser Edition)..."
+echo "🚀 Bootstrapping the Native WPF Annotator (Ultimate Laser Physics Edition)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -30,7 +30,7 @@ cat << 'EOF' > TeachingAnnotator.csproj
 </Project>
 EOF
 
-# 4. Overwrite MainWindow.xaml
+# 4. Overwrite MainWindow.xaml (FIXED: Added LaserEffectBorder to fix overlapping shadow blowout)
 cat << 'EOF' > MainWindow.xaml
 <Window x:Class="TeachingAnnotator.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -39,6 +39,15 @@ cat << 'EOF' > MainWindow.xaml
         WindowState="Maximized" 
         Background="#0f1115" WindowStartupLocation="CenterScreen"
         KeyDown="Window_KeyDown">
+        
+    <Window.Resources>
+        <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#FFFF00"/>
+        <SolidColorBrush x:Key="{x:Static SystemColors.ControlTextBrushKey}" Color="#FFFF00"/>
+        <SolidColorBrush x:Key="{x:Static SystemColors.WindowTextBrushKey}" Color="#FFFF00"/>
+        <SolidColorBrush x:Key="{x:Static SystemColors.ActiveBorderBrushKey}" Color="#FFFF00"/>
+        <SolidColorBrush x:Key="{x:Static SystemColors.WindowFrameBrushKey}" Color="#FFFF00"/>
+    </Window.Resources>
+
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -120,21 +129,15 @@ cat << 'EOF' > MainWindow.xaml
                     
                     <InkCanvas x:Name="MainInkCanvas" Background="Transparent" UseCustomCursor="True" Cursor="Arrow" Focusable="True"
                                PreviewMouseLeftButtonDown="MainInkCanvas_PreviewMouseLeftButtonDown"
-                               MouseMove="MainInkCanvas_MouseMove" MouseLeave="MainInkCanvas_MouseLeave" MouseEnter="MainInkCanvas_MouseEnter"
-                               StrokeCollected="MainInkCanvas_StrokeCollected">
-                        <InkCanvas.Resources>
-                            <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#FFFF00"/>
-                            <SolidColorBrush x:Key="{x:Static SystemColors.ControlTextBrushKey}" Color="#FFFF00"/>
-                            <SolidColorBrush x:Key="{x:Static SystemColors.WindowTextBrushKey}" Color="#FFFF00"/>
-                            <SolidColorBrush x:Key="{x:Static SystemColors.ActiveBorderBrushKey}" Color="#FFFF00"/>
-                            <SolidColorBrush x:Key="{x:Static SystemColors.WindowFrameBrushKey}" Color="#FFFF00"/>
-                        </InkCanvas.Resources>
+                               MouseMove="MainInkCanvas_MouseMove" MouseLeave="MainInkCanvas_MouseLeave" MouseEnter="MainInkCanvas_MouseEnter">
                     </InkCanvas>
                     
-                    <InkCanvas x:Name="LaserInkCanvas" Background="Transparent" UseCustomCursor="True" Cursor="Arrow" Focusable="False" IsHitTestVisible="False"
-                               MouseMove="MainInkCanvas_MouseMove" MouseLeave="MainInkCanvas_MouseLeave" MouseEnter="MainInkCanvas_MouseEnter"
-                               StrokeCollected="LaserInkCanvas_StrokeCollected">
-                    </InkCanvas>
+                    <Border x:Name="LaserEffectBorder" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" IsHitTestVisible="False">
+                        <InkCanvas x:Name="LaserInkCanvas" Background="Transparent" UseCustomCursor="True" Cursor="Arrow" Focusable="False" IsHitTestVisible="False"
+                                   MouseMove="MainInkCanvas_MouseMove" MouseLeave="MainInkCanvas_MouseLeave" MouseEnter="MainInkCanvas_MouseEnter"
+                                   StrokeCollected="LaserInkCanvas_StrokeCollected">
+                        </InkCanvas>
+                    </Border>
                     
                 </Grid>
                 
@@ -151,7 +154,7 @@ cat << 'EOF' > MainWindow.xaml
 </Window>
 EOF
 
-# 5. Overwrite MainWindow.xaml.cs 
+# 5. Overwrite MainWindow.xaml.cs (FIXED: Flattened DropShadow logic and Solid State Vaporization)
 cat << 'EOF' > MainWindow.xaml.cs
 using System;
 using System.Collections.Generic;
@@ -183,13 +186,6 @@ namespace TeachingAnnotator
         public double StartY { get; set; }
     }
 
-    public class LaserStrokeData
-    {
-        public Stroke Stroke { get; set; }
-        public int Life { get; set; } = 255;
-        public LaserStrokeData(Stroke s) { Stroke = s; }
-    }
-
     public partial class MainWindow : Window
     {
         public ObservableCollection<PdfPageModel> PdfPages { get; set; } = new ObservableCollection<PdfPageModel>();
@@ -204,7 +200,6 @@ namespace TeachingAnnotator
         private double _laserSize = 6.0;
         private Color _laserColor = Colors.Red;
 
-        private List<LaserStrokeData> _laserStrokes = new List<LaserStrokeData>();
         private DispatcherTimer _laserTimer;
         private DateTime _lastLaserActivityTime = DateTime.Now;
 
@@ -286,7 +281,6 @@ namespace TeachingAnnotator
             _undoStack.Clear();
             _redoStack.Clear();
             LaserInkCanvas.Strokes.Clear();
-            _laserStrokes.Clear();
         }
 
         private void UpdatePageUI()
@@ -524,11 +518,11 @@ namespace TeachingAnnotator
                 LaserInkCanvas.IsHitTestVisible = true;
                 
                 LaserInkCanvas.EditingMode = InkCanvasEditingMode.Ink;
-                // Laser line is the actual chosen color
-                LaserInkCanvas.DefaultDrawingAttributes = new DrawingAttributes { Color = activeColor, Width = activeSize, Height = activeSize, FitToCurve = true, IgnorePressure = true };
+                // Solid state white core
+                LaserInkCanvas.DefaultDrawingAttributes = new DrawingAttributes { Color = Colors.White, Width = activeSize, Height = activeSize, FitToCurve = true, IgnorePressure = true };
                 
-                // Hardware DropShadow matches the color to create a massive Neon Glow
-                LaserInkCanvas.Effect = new System.Windows.Media.Effects.DropShadowEffect { Color = activeColor, BlurRadius = 25, ShadowDepth = 0, Opacity = 1.0 };
+                // Flattens the entire layer and drops one perfect shadow behind it (no overlap blowouts!)
+                LaserEffectBorder.Effect = new System.Windows.Media.Effects.DropShadowEffect { Color = activeColor, BlurRadius = 15, ShadowDepth = 0, Opacity = 0.9 };
             }
             else
             {
@@ -574,13 +568,13 @@ namespace TeachingAnnotator
             
             if (LaserBtn.IsChecked == true) 
             {
-                CustomDotCursor.StrokeThickness = 1.5;
-                CustomDotCursor.Stroke = new SolidColorBrush(Colors.White); // Bright white ring
-                CustomDotCursor.Fill = new SolidColorBrush(c); // Core is the selected color
+                CustomDotCursor.StrokeThickness = 2;
+                CustomDotCursor.Stroke = new SolidColorBrush(c);
+                CustomDotCursor.Fill = new SolidColorBrush(Colors.White); 
 
                 CursorGlow.Color = c; 
-                CursorGlow.Opacity = 1.0; 
-                CursorGlow.BlurRadius = 25; // Massive glow matching the neon ink
+                CursorGlow.Opacity = 0.9; 
+                CursorGlow.BlurRadius = 15; 
                 CursorGlow.ShadowDepth = 0;
             } 
             else if (EraserBtn.IsChecked == true) 
@@ -623,38 +617,21 @@ namespace TeachingAnnotator
         private void MainInkCanvas_MouseLeave(object sender, MouseEventArgs e) => CustomDotCursor.Visibility = Visibility.Hidden;
         private void MainInkCanvas_MouseEnter(object sender, MouseEventArgs e) { if (SelectBtn.IsChecked != true) CustomDotCursor.Visibility = Visibility.Visible; }
 
-        private void MainInkCanvas_StrokeCollected(object sender, InkCanvasStrokeCollectedEventArgs e) { }
-
         private void LaserInkCanvas_StrokeCollected(object sender, InkCanvasStrokeCollectedEventArgs e)
         {
-            _laserStrokes.Add(new LaserStrokeData(e.Stroke));
             _lastLaserActivityTime = DateTime.Now; 
         }
 
+        // PERFECT LASER VAPORIZE LOGIC: Solid state until 1.2 seconds of inactivity, then instant clear.
         private void LaserTimer_Tick(object? sender, EventArgs e)
         {
-            if (_laserStrokes.Count == 0) return;
+            if (LaserInkCanvas.Strokes.Count == 0) return;
 
-            if ((DateTime.Now - _lastLaserActivityTime).TotalSeconds > 1.5)
+            if ((DateTime.Now - _lastLaserActivityTime).TotalSeconds > 1.2)
             {
-                for (int i = _laserStrokes.Count - 1; i >= 0; i--)
-                {
-                    var ls = _laserStrokes[i];
-                    ls.Life -= 15; 
-
-                    if (ls.Life <= 0)
-                    {
-                        _isUpdatingUI = true;
-                        LaserInkCanvas.Strokes.Remove(ls.Stroke);
-                        _isUpdatingUI = false;
-                        _laserStrokes.RemoveAt(i);
-                    }
-                    else
-                    {
-                        var c = ls.Stroke.DrawingAttributes.Color;
-                        ls.Stroke.DrawingAttributes.Color = Color.FromArgb((byte)ls.Life, c.R, c.G, c.B);
-                    }
-                }
+                _isUpdatingUI = true;
+                LaserInkCanvas.Strokes.Clear(); 
+                _isUpdatingUI = false;
             }
         }
 
@@ -881,4 +858,4 @@ namespace TeachingAnnotator
 }
 EOF
 
-echo "✅ Laser Physics Polished to Neon Perfection!"
+echo "✅ App Polished to Absolute Perfection!"
