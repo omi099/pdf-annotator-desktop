@@ -1,10 +1,12 @@
-name: The SSH Hijack Pipeline
+name: Build Apex Annotator (Lightning Cache Edition)
 
 on:
-  workflow_dispatch: # Allows you to manually click a button to start the server
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
 
 jobs:
-  build-and-hijack:
+  build-windows:
     runs-on: windows-latest
 
     steps:
@@ -16,21 +18,23 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Generate Base Codebase
+      # 🔥 THE ACCELERATOR: Aggressively caches all NuGet packages 
+      # so GitHub doesn't download the internet every time you push.
+      - name: Cache NuGet Packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('generate_wpf_app.sh') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Generate Codebase
         shell: bash
         run: |
           chmod +x generate_wpf_app.sh
           ./generate_wpf_app.sh
 
-      # 🛑 THE HIJACK: This pauses the workflow and prints an SSH connection string!
-      - name: Open SSH Terminal via tmate
-        uses: mxschmitt/action-tmate@v3
-        with:
-          limit-access-to-actor: true # Only you can log in
-
-      # ⬇️ GitHub waits here. It will NOT run these next steps until you type 'exit' in your SSH terminal.
-
-      - name: Compile Application
+      - name: Compile Application (Release)
         working-directory: ./TeachingAnnotator
         run: >
           dotnet publish 
@@ -42,5 +46,5 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Apex-Annotator-Custom-Build
+          name: Apex-Teaching-Annotator-Platinum
           path: TeachingAnnotator/Final_Build/
