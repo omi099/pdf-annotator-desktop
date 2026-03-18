@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping the Native WPF Annotator (Pure Native Lasso & High Contrast Edition)..."
+echo "🚀 Bootstrapping the Native WPF Annotator (Ultimate Laser Physics Edition)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -41,10 +41,6 @@ cat << 'EOF' > MainWindow.xaml
         KeyDown="Window_KeyDown" FontFamily="Segoe UI, Helvetica, Arial, sans-serif">
 
     <Window.Resources>
-        <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#FFFF00"/>
-        <SolidColorBrush x:Key="{x:Static SystemColors.WindowFrameBrushKey}" Color="#FFFF00"/>
-        <SolidColorBrush x:Key="{x:Static SystemColors.ActiveBorderBrushKey}" Color="#FFFF00"/>
-
         <SolidColorBrush x:Key="Slate300" Color="#CBD5E1"/>
         <SolidColorBrush x:Key="Slate50" Color="#F8FAFC"/>
         <SolidColorBrush x:Key="Sky400" Color="#38BDF8"/>
@@ -257,7 +253,7 @@ cat << 'EOF' > MainWindow.xaml
 </Window>
 EOF
 
-# 5. Overwrite MainWindow.xaml.cs (PERFECTED PHYSICS ENGINE)
+# 5. Overwrite MainWindow.xaml.cs
 cat << 'EOF' > MainWindow.xaml.cs
 using System;
 using System.Collections.Generic;
@@ -294,6 +290,7 @@ namespace TeachingAnnotator
     {
         public Stroke Stroke { get; set; }
         public int Life { get; set; } = 255;
+        public DateTime CreatedAt { get; set; } = DateTime.Now;
         public LaserStrokeData(Stroke s) { Stroke = s; }
     }
 
@@ -575,7 +572,6 @@ namespace TeachingAnnotator
             }
         }
 
-        // Native Undo hook - custom polygon intercept removed!
         private void MainInkCanvas_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             if (MainInkCanvas.EditingMode != InkCanvasEditingMode.None && MainInkCanvas.EditingMode != InkCanvasEditingMode.Select)
@@ -780,7 +776,7 @@ namespace TeachingAnnotator
             if (LaserBtn.IsChecked == true) 
             {
                 CustomDotCursor.Fill = new SolidColorBrush(c);
-                CustomDotCursor.StrokeThickness = 0;
+                CustomDotCursor.StrokeThickness = 0; // ZERO OUTLINE FOR LASER DOT
 
                 CursorGlow.Color = c; 
                 CursorGlow.Opacity = 0.65; 
@@ -833,16 +829,43 @@ namespace TeachingAnnotator
             _lastLaserActivityTime = DateTime.Now; 
         }
 
+        // --- HYPER ACCURATE TAIL-SHRINKING LASER DISSOLVE ---
         private void LaserTimer_Tick(object? sender, EventArgs e)
         {
             if (_laserStrokes.Count == 0) return;
 
-            if ((DateTime.Now - _lastLaserActivityTime).TotalSeconds > 3.5)
+            for (int i = _laserStrokes.Count - 1; i >= 0; i--)
             {
-                _isUpdatingUI = true;
-                LaserInkCanvas.Strokes.Clear();
-                _laserStrokes.Clear();
-                _isUpdatingUI = false;
+                var ls = _laserStrokes[i];
+                
+                if ((DateTime.Now - ls.CreatedAt).TotalSeconds > 0.8)
+                {
+                    ls.Life -= 12; // Smooth fade
+
+                    // Physics: Eat the tail of the stroke so it shrinks out of existence
+                    try 
+                    {
+                        if (ls.Stroke.StylusPoints.Count > 5)
+                        {
+                            ls.Stroke.StylusPoints.RemoveAt(0);
+                            ls.Stroke.StylusPoints.RemoveAt(0);
+                            ls.Stroke.StylusPoints.RemoveAt(0);
+                        }
+                    } catch { }
+
+                    if (ls.Life <= 0 || ls.Stroke.StylusPoints.Count <= 2)
+                    {
+                        _isUpdatingUI = true;
+                        LaserInkCanvas.Strokes.Remove(ls.Stroke);
+                        _laserStrokes.RemoveAt(i);
+                        _isUpdatingUI = false;
+                    }
+                    else
+                    {
+                        var c = ls.Stroke.DrawingAttributes.Color;
+                        ls.Stroke.DrawingAttributes.Color = Color.FromArgb((byte)Math.Max(0, ls.Life), c.R, c.G, c.B);
+                    }
+                }
             }
         }
 
