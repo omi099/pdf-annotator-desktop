@@ -28,7 +28,7 @@ cat << 'EOF' > TeachingAnnotator.csproj
 </Project>
 EOF
 
-# 4. Overwrite MainWindow.xaml
+# 4. Overwrite MainWindow.xaml (Added PreviewMouseWheel for Scroll Physics)
 cat << 'EOF' > MainWindow.xaml
 <Window x:Class="TeachingAnnotator.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -85,7 +85,7 @@ cat << 'EOF' > MainWindow.xaml
             </WrapPanel>
         </Border>
 
-        <ScrollViewer Grid.Row="1" x:Name="MainScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" PanningMode="Both" Background="#0f1115">
+        <ScrollViewer Grid.Row="1" x:Name="MainScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" PanningMode="Both" Background="#0f1115" PreviewMouseWheel="MainScroll_PreviewMouseWheel">
             <Grid x:Name="Workspace" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="40">
                 <Grid.LayoutTransform>
                     <ScaleTransform x:Name="ZoomTransform" ScaleX="1" ScaleY="1"/>
@@ -121,7 +121,7 @@ cat << 'EOF' > MainWindow.xaml
 </Window>
 EOF
 
-# 5. Overwrite MainWindow.xaml.cs (Advanced Physics & Logic)
+# 5. Overwrite MainWindow.xaml.cs (Advanced Scroll & Laser Physics)
 cat << 'EOF' > MainWindow.xaml.cs
 using System;
 using System.Collections.Generic;
@@ -167,19 +167,16 @@ namespace TeachingAnnotator
         private string? _currentPdfPath = null;
         private bool _isUpdatingUI = false;
 
-        // Independent Tool Memory
         private double _penSize = 4.0;
         private Color _penColor = Colors.Red;
-        
         private double _highlightSize = 24.0;
         private Color _highlightColor = Colors.Yellow;
-        
         private double _laserSize = 6.0;
         private Color _laserColor = Colors.Red;
 
-        // Laser Pointer Physics
         private List<LaserStrokeData> _laserStrokes = new List<LaserStrokeData>();
         private DispatcherTimer _laserTimer;
+        private DateTime _lastLaserActivityTime = DateTime.Now;
 
         public MainWindow()
         {
@@ -187,10 +184,8 @@ namespace TeachingAnnotator
             PdfItemsControl.ItemsSource = PdfPages;
             System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
 
-            // Hide normal Windows Cursor inside canvas
             MainInkCanvas.Cursor = Cursors.None;
 
-            // Initialize Laser Fading Engine (Runs at 30 FPS)
             _laserTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(33) };
             _laserTimer.Tick += LaserTimer_Tick;
             _laserTimer.Start();
@@ -198,10 +193,34 @@ namespace TeachingAnnotator
             SyncToolToUI();
         }
 
-        // --- KEYBOARD SHORTCUTS ---
+        // --- CUSTOM SCROLL PHYSICS ---
+        private void MainScroll_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+        {
+            e.Handled = true; // Block default aggressive scrolling
+            
+            if (Keyboard.Modifiers == ModifierKeys.Control)
+            {
+                // Smooth CTRL+Scroll Zooming
+                if (e.Delta > 0) ZoomIn_Click(null, null);
+                else ZoomOut_Click(null, null);
+            }
+            else
+            {
+                // Smooth dampening factor (0.3 = 30% of normal scroll speed)
+                double scrollFactor = 0.3; 
+                if (Keyboard.Modifiers == ModifierKeys.Shift)
+                {
+                    MainScroll.ScrollToHorizontalOffset(MainScroll.HorizontalOffset - (e.Delta * scrollFactor));
+                }
+                else
+                {
+                    MainScroll.ScrollToVerticalOffset(MainScroll.VerticalOffset - (e.Delta * scrollFactor));
+                }
+            }
+        }
+
         private void Window_KeyDown(object sender, KeyEventArgs e)
         {
-            // Ignore shortcuts if the user is typing in the Size text box
             if (SizeInput.IsFocused) return;
 
             if (e.Key == Key.P) PenBtn.IsChecked = true;
@@ -211,7 +230,6 @@ namespace TeachingAnnotator
             else if (e.Key == Key.L) LaserBtn.IsChecked = true;
         }
 
-        // --- INDEPENDENT TOOL LOGIC ---
         private void Tool_Checked(object sender, RoutedEventArgs e)
         {
             if (_isUpdatingUI || MainInkCanvas == null) return;
@@ -221,16 +239,9 @@ namespace TeachingAnnotator
         private void SyncToolToUI()
         {
             _isUpdatingUI = true;
-            if (PenBtn.IsChecked == true) {
-                SizeSlider.Value = _penSize;
-                SetComboColor(_penColor);
-            } else if (HighlightBtn.IsChecked == true) {
-                SizeSlider.Value = _highlightSize;
-                SetComboColor(_highlightColor);
-            } else if (LaserBtn.IsChecked == true) {
-                SizeSlider.Value = _laserSize;
-                SetComboColor(_laserColor);
-            }
+            if (PenBtn.IsChecked == true) { SizeSlider.Value = _penSize; SetComboColor(_penColor); } 
+            else if (HighlightBtn.IsChecked == true) { SizeSlider.Value = _highlightSize; SetComboColor(_highlightColor); } 
+            else if (LaserBtn.IsChecked == true) { SizeSlider.Value = _laserSize; SetComboColor(_laserColor); }
             _isUpdatingUI = false;
             ApplyPenAttributes();
         }
@@ -247,10 +258,7 @@ namespace TeachingAnnotator
             else if (c == Colors.Magenta) search = "Magenta";
 
             foreach (ComboBoxItem item in ColorPicker.Items) {
-                if (item.Content.ToString() == search) {
-                    ColorPicker.SelectedItem = item;
-                    break;
-                }
+                if (item.Content.ToString() == search) { ColorPicker.SelectedItem = item; break; }
             }
         }
 
@@ -325,7 +333,6 @@ namespace TeachingAnnotator
             }
             else if (SelectBtn.IsChecked == true)
             {
-                // Native Freeform Selection (Lasso). Dragging creates a box. Hitting Delete deletes selected strokes.
                 MainInkCanvas.EditingMode = InkCanvasEditingMode.Select;
                 MainInkCanvas.Cursor = Cursors.Cross;
             }
@@ -333,7 +340,6 @@ namespace TeachingAnnotator
             UpdateCustomCursorAppearance();
         }
 
-        // --- CUSTOM DYNAMIC CURSOR ---
         private void UpdateCustomCursorAppearance()
         {
             if (CustomDotCursor == null) return;
@@ -346,35 +352,30 @@ namespace TeachingAnnotator
             double size = SizeSlider.Value;
             Color c = GetComboColor();
 
-            if (HighlightBtn.IsChecked == true) {
-                size *= 4;
-                c = Color.FromArgb(120, c.R, c.G, c.B);
-            }
+            if (HighlightBtn.IsChecked == true) { size *= 4; c = Color.FromArgb(120, c.R, c.G, c.B); }
             
             if (EraserBtn.IsChecked == true) {
-                size = 20; // Default eraser visual size
-                c = Colors.White;
+                size = 20; c = Colors.White;
                 CustomDotCursor.Stroke = new SolidColorBrush(Colors.Black);
                 CustomDotCursor.StrokeThickness = 1;
-            } else {
-                CustomDotCursor.StrokeThickness = 0;
-            }
+            } else { CustomDotCursor.StrokeThickness = 0; }
 
-            CustomDotCursor.Width = size;
-            CustomDotCursor.Height = size;
+            CustomDotCursor.Width = size; CustomDotCursor.Height = size;
             CustomDotCursor.Fill = new SolidColorBrush(c);
             
             if (LaserBtn.IsChecked == true) {
-                CursorGlow.Color = c;
-                CursorGlow.Opacity = 1.0;
-                CursorGlow.BlurRadius = size * 2;
-            } else {
-                CursorGlow.Opacity = 0.0;
-            }
+                CursorGlow.Color = c; CursorGlow.Opacity = 1.0; CursorGlow.BlurRadius = size * 2;
+            } else { CursorGlow.Opacity = 0.0; }
         }
 
         private void MainInkCanvas_MouseMove(object sender, MouseEventArgs e)
         {
+            // Reset Laser fade timer if drawing
+            if (LaserBtn.IsChecked == true && e.LeftButton == MouseButtonState.Pressed)
+            {
+                _lastLaserActivityTime = DateTime.Now;
+            }
+
             if (SelectBtn.IsChecked == true) return;
             CustomDotCursor.Visibility = Visibility.Visible;
             Point p = e.GetPosition(CursorCanvas);
@@ -385,36 +386,42 @@ namespace TeachingAnnotator
         private void MainInkCanvas_MouseLeave(object sender, MouseEventArgs e) => CustomDotCursor.Visibility = Visibility.Hidden;
         private void MainInkCanvas_MouseEnter(object sender, MouseEventArgs e) { if (SelectBtn.IsChecked != true) CustomDotCursor.Visibility = Visibility.Visible; }
 
-        // --- LASER POINTER PHYSICS ---
+        // --- 1.5s DELAY LASER PHYSICS ---
         private void MainInkCanvas_StrokeCollected(object sender, InkCanvasStrokeCollectedEventArgs e)
         {
             if (LaserBtn.IsChecked == true)
             {
                 _laserStrokes.Add(new LaserStrokeData(e.Stroke));
+                _lastLaserActivityTime = DateTime.Now; // Reset the 1.5s timer
             }
         }
 
         private void LaserTimer_Tick(object sender, EventArgs e)
         {
-            for (int i = _laserStrokes.Count - 1; i >= 0; i--)
-            {
-                var ls = _laserStrokes[i];
-                ls.Life -= 8; // Fade speed
+            if (_laserStrokes.Count == 0) return;
 
-                if (ls.Life <= 0)
+            // Wait 1.5 seconds after pen stops moving before fading
+            if ((DateTime.Now - _lastLaserActivityTime).TotalSeconds > 1.5)
+            {
+                for (int i = _laserStrokes.Count - 1; i >= 0; i--)
                 {
-                    MainInkCanvas.Strokes.Remove(ls.Stroke);
-                    _laserStrokes.RemoveAt(i);
-                }
-                else
-                {
-                    var c = ls.Stroke.DrawingAttributes.Color;
-                    ls.Stroke.DrawingAttributes.Color = Color.FromArgb((byte)ls.Life, c.R, c.G, c.B);
+                    var ls = _laserStrokes[i];
+                    ls.Life -= 15; // Fast fade once the timer hits
+
+                    if (ls.Life <= 0)
+                    {
+                        MainInkCanvas.Strokes.Remove(ls.Stroke);
+                        _laserStrokes.RemoveAt(i);
+                    }
+                    else
+                    {
+                        var c = ls.Stroke.DrawingAttributes.Color;
+                        ls.Stroke.DrawingAttributes.Color = Color.FromArgb((byte)ls.Life, c.R, c.G, c.B);
+                    }
                 }
             }
         }
 
-        // --- NATIVE PDF RENDERING ---
         private async void OpenPdf_Click(object sender, RoutedEventArgs e)
         {
             OpenFileDialog dlg = new OpenFileDialog { Filter = "PDF Files (*.pdf)|*.pdf" };
@@ -475,7 +482,6 @@ namespace TeachingAnnotator
             }
         }
 
-        // --- VECTOR EXPORT ---
         private void ExportAnnotated_Click(object sender, RoutedEventArgs e)
         {
             if (string.IsNullOrEmpty(_currentPdfPath)) { MessageBox.Show("Open a PDF first."); return; }
@@ -500,7 +506,6 @@ namespace TeachingAnnotator
 
                         foreach (Stroke stroke in MainInkCanvas.Strokes)
                         {
-                            // Do not export temporary laser strokes
                             if (_laserStrokes.Any(ls => ls.Stroke == stroke)) continue;
 
                             Rect bounds = stroke.GetBounds();
