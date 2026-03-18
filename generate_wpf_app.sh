@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping the Native WPF Annotator (True Yellow Adorner Edition)..."
+echo "🚀 Bootstrapping the Native WPF Annotator (Perfect Yellow Lasso Edition)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -40,6 +40,14 @@ cat << 'EOF' > MainWindow.xaml
         Background="#0f1115" WindowStartupLocation="CenterScreen"
         KeyDown="Window_KeyDown">
 
+    <Window.Resources>
+        <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#FFFF00"/>
+        <SolidColorBrush x:Key="{x:Static SystemColors.WindowFrameBrushKey}" Color="#FFFF00"/>
+        <SolidColorBrush x:Key="{x:Static SystemColors.WindowTextBrushKey}" Color="#FFFF00"/>
+        <SolidColorBrush x:Key="{x:Static SystemColors.ControlTextBrushKey}" Color="#FFFF00"/>
+        <SolidColorBrush x:Key="{x:Static SystemColors.ActiveBorderBrushKey}" Color="#FFFF00"/>
+    </Window.Resources>
+
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -47,6 +55,12 @@ cat << 'EOF' > MainWindow.xaml
         </Grid.RowDefinitions>
         
         <Border x:Name="MainToolbar" Grid.Row="0" Background="#1a1c23" BorderBrush="#3a3f4b" BorderThickness="0,0,0,1" Padding="15,10" Panel.ZIndex="100">
+            <Border.Resources>
+                <SolidColorBrush x:Key="{x:Static SystemColors.WindowTextBrushKey}" Color="Black"/>
+                <SolidColorBrush x:Key="{x:Static SystemColors.ControlTextBrushKey}" Color="Black"/>
+                <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#0078D7"/>
+            </Border.Resources>
+            
             <WrapPanel Orientation="Horizontal">
                 <Button Content="📂 Open PDF" Click="OpenPdf_Click" Foreground="White" Background="#3a3f4b" Margin="0,0,10,0" Padding="12,6" FontWeight="Bold" BorderThickness="0"/>
                 <Button Content="💾 Export Vector PDF" Click="ExportAnnotated_Click" Foreground="#00ffcc" Background="#3a3f4b" Margin="0,0,10,0" Padding="12,6" FontWeight="Bold" BorderThickness="0"/>
@@ -120,8 +134,11 @@ cat << 'EOF' > MainWindow.xaml
 
                 <AdornerDecorator>
                     <Grid x:Name="CanvasContainer" HorizontalAlignment="Left" VerticalAlignment="Top">
+                        
                         <InkCanvas x:Name="MainInkCanvas" Background="Transparent" UseCustomCursor="True" Cursor="Arrow" Focusable="True"
                                    PreviewMouseLeftButtonDown="MainInkCanvas_PreviewMouseLeftButtonDown"
+                                   PreviewMouseMove="MainInkCanvas_PreviewMouseMove"
+                                   PreviewMouseLeftButtonUp="MainInkCanvas_PreviewMouseLeftButtonUp"
                                    MouseMove="MainInkCanvas_MouseMove" MouseLeave="MainInkCanvas_MouseLeave" MouseEnter="MainInkCanvas_MouseEnter"
                                    SelectionChanged="MainInkCanvas_SelectionChanged">
                         </InkCanvas>
@@ -134,6 +151,8 @@ cat << 'EOF' > MainWindow.xaml
                 </AdornerDecorator>
                 
                 <Canvas x:Name="CursorCanvas" IsHitTestVisible="False" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Panel.ZIndex="999">
+                    <Polygon x:Name="CustomLassoPolygon" Visibility="Hidden" Stroke="#FFFF00" StrokeThickness="2" StrokeDashArray="4,4" Fill="#33FFFF00" IsHitTestVisible="False" />
+                    
                     <Ellipse x:Name="CustomDotCursor" Visibility="Hidden" IsHitTestVisible="False">
                         <Ellipse.Effect>
                             <DropShadowEffect x:Name="CursorGlow" BlurRadius="4" ShadowDepth="1" Opacity="0.6" />
@@ -146,7 +165,7 @@ cat << 'EOF' > MainWindow.xaml
 </Window>
 EOF
 
-# 5. Overwrite MainWindow.xaml.cs
+# 5. Overwrite MainWindow.xaml.cs 
 cat << 'EOF' > MainWindow.xaml.cs
 using System;
 using System.Collections.Generic;
@@ -213,6 +232,10 @@ namespace TeachingAnnotator
 
         private bool _isDarkTheme = true;
 
+        // Custom Lasso variables
+        private PointCollection _lassoPoints = new PointCollection();
+        private bool _isLassoing = false;
+
         public MainWindow()
         {
             InitializeComponent();
@@ -236,18 +259,17 @@ namespace TeachingAnnotator
             ApplyTheme();
         }
 
-        // --- SURGICAL VISUAL TREE REFLECTION (The True Yellow Box Fix) ---
+        // --- SURGICAL VISUAL TREE REFLECTION (The True Yellow Resizing Box Fix) ---
         private void MainInkCanvas_SelectionChanged(object sender, EventArgs e)
         {
-            // Delay injection until the render thread has built the hidden InnerCanvas layer
-            Dispatcher.BeginInvoke(new Action(() => ForceYellowSelectionBox(MainInkCanvas)), DispatcherPriority.Render);
+            // Delay injection until the application is fully idle and Adorner is drawn
+            Dispatcher.BeginInvoke(new Action(() => ForceYellowSelectionBox(MainInkCanvas)), DispatcherPriority.ApplicationIdle);
         }
 
         private void ForceYellowSelectionBox(DependencyObject parent)
         {
             if (parent == null) return;
 
-            // Search every visual child deep inside the InkCanvas wrapper
             int childrenCount = VisualTreeHelper.GetChildrenCount(parent);
             for (int i = 0; i < childrenCount; i++)
             {
@@ -271,8 +293,6 @@ namespace TeachingAnnotator
                         }
                     }
                 }
-                
-                // Recursively drill deeper
                 ForceYellowSelectionBox(child);
             }
         }
@@ -301,7 +321,7 @@ namespace TeachingAnnotator
                 elementsFillBrushField.SetValue(adorner, Brushes.Yellow);
             }
             
-            adorner.InvalidateVisual(); // Force the GPU to redraw it immediately
+            adorner.InvalidateVisual(); 
         }
 
         private void Theme_Click(object sender, RoutedEventArgs e)
@@ -434,11 +454,63 @@ namespace TeachingAnnotator
             }
         }
 
+        // --- THE CUSTOM YELLOW LASSO ENGINE ---
         private void MainInkCanvas_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             if (MainInkCanvas.EditingMode != InkCanvasEditingMode.None && MainInkCanvas.EditingMode != InkCanvasEditingMode.Select)
             {
                 SaveUndoState();
+            }
+
+            if (SelectBtn.IsChecked == true)
+            {
+                var hitResult = MainInkCanvas.HitTestSelection(e.GetPosition(MainInkCanvas));
+                if (hitResult == InkCanvasSelectionHitResult.None)
+                {
+                    // Starts the Custom Yellow Lasso
+                    MainInkCanvas.EditingMode = InkCanvasEditingMode.None; // Defeats the Microsoft default black lasso
+                    _isLassoing = true;
+                    _lassoPoints.Clear();
+                    _lassoPoints.Add(e.GetPosition(CursorCanvas));
+                    CustomLassoPolygon.Points = _lassoPoints;
+                    CustomLassoPolygon.Visibility = Visibility.Visible;
+                    MainInkCanvas.CaptureMouse();
+                    e.Handled = true;
+                }
+                else
+                {
+                    // Allow normal WPF resizing logic if they clicked on a selected bounding box
+                    MainInkCanvas.EditingMode = InkCanvasEditingMode.Select;
+                }
+            }
+        }
+
+        private void MainInkCanvas_PreviewMouseMove(object sender, MouseEventArgs e)
+        {
+            if (_isLassoing && e.LeftButton == MouseButtonState.Pressed)
+            {
+                _lassoPoints.Add(e.GetPosition(CursorCanvas));
+            }
+        }
+
+        private void MainInkCanvas_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            if (_isLassoing)
+            {
+                _isLassoing = false;
+                MainInkCanvas.ReleaseMouseCapture();
+                CustomLassoPolygon.Visibility = Visibility.Hidden;
+
+                if (_lassoPoints.Count > 3)
+                {
+                    // Mathematically select strokes inside the custom lasso
+                    var selected = MainInkCanvas.Strokes.HitTest(_lassoPoints, 50); 
+                    MainInkCanvas.Select(selected);
+                }
+                
+                // Restore Select Mode so the bounding box and resize handles activate
+                MainInkCanvas.EditingMode = InkCanvasEditingMode.Select;
+                e.Handled = true;
             }
         }
 
@@ -613,7 +685,7 @@ namespace TeachingAnnotator
                 }
                 else if (SelectBtn.IsChecked == true)
                 {
-                    MainInkCanvas.EditingMode = InkCanvasEditingMode.Select;
+                    MainInkCanvas.EditingMode = InkCanvasEditingMode.Select; // Ensure default is loaded if not lassoing
                 }
             }
 
@@ -637,8 +709,8 @@ namespace TeachingAnnotator
             if (LaserBtn.IsChecked == true) 
             {
                 CustomDotCursor.Fill = new SolidColorBrush(c);
-                CustomDotCursor.Stroke = new SolidColorBrush(_isDarkTheme ? Colors.White : Colors.Black);
-                CustomDotCursor.StrokeThickness = 1.5;
+                // ABSOLUTELY ZERO OUTLINE FOR THE LASER DOT
+                CustomDotCursor.StrokeThickness = 0;
 
                 CursorGlow.Color = c; 
                 CursorGlow.Opacity = 0.65; 
