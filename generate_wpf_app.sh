@@ -5,13 +5,14 @@ echo "🚀 Bootstrapping the Ultimate Chromium-Backed Annotator..."
 
 # 1. Clean environment and create a pristine .NET 8 WPF App
 rm -rf TeachingAnnotator
-dotnet new wpf -n TeachingAnnotator --force
+mkdir -p TeachingAnnotator
 cd TeachingAnnotator
+dotnet new wpf -n TeachingAnnotator --force
 
-# 2. Install the Microsoft WebView2 Engine (The magic ingredient)
+# 2. Install the Microsoft WebView2 Engine (The magic ingredient for perfect PDFs)
 dotnet add package Microsoft.Web.WebView2 --version 1.0.2420.47
 
-# 3. Overwrite .csproj 
+# 3. Overwrite .csproj
 cat << 'EOF' > TeachingAnnotator.csproj
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
@@ -26,7 +27,7 @@ cat << 'EOF' > TeachingAnnotator.csproj
 </Project>
 EOF
 
-# 4. Overwrite MainWindow.xaml (Minimal wrapper around the Chromium Engine)
+# 4. Overwrite MainWindow.xaml
 cat << 'EOF' > MainWindow.xaml
 <Window x:Class="TeachingAnnotator.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -42,7 +43,7 @@ cat << 'EOF' > MainWindow.xaml
         
         <ToolBar Grid.Row="0" Background="#1a1c23" Foreground="White" Padding="15,10">
             <Button Content="📂 Open PDF" Click="OpenPdf_Click" Foreground="White" Background="#3a3f4b" Margin="0,0,10,0" Padding="12,6" FontWeight="Bold" BorderThickness="0"/>
-            <TextBlock Text="💡 Use the built-in toolbar below to Draw, Highlight, Select Text, Search, and Save." Foreground="#00ffcc" VerticalAlignment="Center" Margin="20,0,0,0" FontWeight="Bold"/>
+            <TextBlock Text="💡 Use the built-in PDF toolbar below to Draw, Highlight, Select Text, Search, and Save." Foreground="#00ffcc" VerticalAlignment="Center" Margin="20,0,0,0" FontWeight="Bold"/>
         </ToolBar>
 
         <wv2:WebView2 Grid.Row="1" x:Name="PdfWebViewer" />
