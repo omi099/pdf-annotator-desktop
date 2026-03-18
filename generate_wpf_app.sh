@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping the Native WPF Annotator (Ultimate Visuals Edition)..."
+echo "🚀 Bootstrapping the Native WPF Annotator (Ultimate Laser & Selection Physics)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -30,7 +30,7 @@ cat << 'EOF' > TeachingAnnotator.csproj
 </Project>
 EOF
 
-# 4. Overwrite MainWindow.xaml (FIXED: AdornerDecorator sandbox to isolate Yellow selection colors)
+# 4. Overwrite MainWindow.xaml
 cat << 'EOF' > MainWindow.xaml
 <Window x:Class="TeachingAnnotator.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -118,27 +118,20 @@ cat << 'EOF' > MainWindow.xaml
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
 
-                <AdornerDecorator>
-                    <AdornerDecorator.Resources>
-                        <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#FFFF00"/>
-                        <SolidColorBrush x:Key="{x:Static SystemColors.ControlTextBrushKey}" Color="#FFFF00"/>
-                        <SolidColorBrush x:Key="{x:Static SystemColors.WindowTextBrushKey}" Color="#FFFF00"/>
-                        <SolidColorBrush x:Key="{x:Static SystemColors.ActiveBorderBrushKey}" Color="#FFFF00"/>
-                        <SolidColorBrush x:Key="{x:Static SystemColors.WindowFrameBrushKey}" Color="#FFFF00"/>
-                    </AdornerDecorator.Resources>
+                <Grid x:Name="CanvasContainer" HorizontalAlignment="Left" VerticalAlignment="Top">
                     
-                    <Grid x:Name="CanvasContainer" HorizontalAlignment="Left" VerticalAlignment="Top">
-                        <InkCanvas x:Name="MainInkCanvas" Background="Transparent" UseCustomCursor="True" Cursor="Arrow" Focusable="True"
-                                   PreviewMouseLeftButtonDown="MainInkCanvas_PreviewMouseLeftButtonDown"
-                                   MouseMove="MainInkCanvas_MouseMove" MouseLeave="MainInkCanvas_MouseLeave" MouseEnter="MainInkCanvas_MouseEnter">
-                        </InkCanvas>
-                        
-                        <InkCanvas x:Name="LaserInkCanvas" Background="Transparent" UseCustomCursor="True" Cursor="Arrow" Focusable="False" IsHitTestVisible="False"
-                                   MouseMove="MainInkCanvas_MouseMove" MouseLeave="MainInkCanvas_MouseLeave" MouseEnter="MainInkCanvas_MouseEnter"
-                                   StrokeCollected="LaserInkCanvas_StrokeCollected">
-                        </InkCanvas>
-                    </Grid>
-                </AdornerDecorator>
+                    <InkCanvas x:Name="MainInkCanvas" Background="Transparent" Foreground="#FFFF00" UseCustomCursor="True" Cursor="Arrow" Focusable="True"
+                               PreviewMouseLeftButtonDown="MainInkCanvas_PreviewMouseLeftButtonDown"
+                               MouseMove="MainInkCanvas_MouseMove" MouseLeave="MainInkCanvas_MouseLeave" MouseEnter="MainInkCanvas_MouseEnter"
+                               SelectionChanged="MainInkCanvas_SelectionChanged">
+                    </InkCanvas>
+                    
+                    <InkCanvas x:Name="LaserInkCanvas" Background="Transparent" UseCustomCursor="True" Cursor="Arrow" Focusable="False" IsHitTestVisible="False"
+                               MouseMove="MainInkCanvas_MouseMove" MouseLeave="MainInkCanvas_MouseLeave" MouseEnter="MainInkCanvas_MouseEnter"
+                               StrokeCollected="LaserInkCanvas_StrokeCollected">
+                    </InkCanvas>
+                    
+                </Grid>
                 
                 <Canvas x:Name="CursorCanvas" IsHitTestVisible="False" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Panel.ZIndex="999">
                     <Ellipse x:Name="CustomDotCursor" Visibility="Hidden" IsHitTestVisible="False">
@@ -153,13 +146,14 @@ cat << 'EOF' > MainWindow.xaml
 </Window>
 EOF
 
-# 5. Overwrite MainWindow.xaml.cs (FIXED: True color laser core + contrasting border + anti-blowout glow)
+# 5. Overwrite MainWindow.xaml.cs 
 cat << 'EOF' > MainWindow.xaml.cs
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -242,11 +236,60 @@ namespace TeachingAnnotator
             ApplyTheme();
         }
 
+        // --- SURGICAL REFLECTION OVERRIDE FOR WPF ADORNER (The Yellow Box Fix) ---
+        private void MainInkCanvas_SelectionChanged(object sender, EventArgs e)
+        {
+            // Pushed to the end of the render queue to ensure the Adorner has fully loaded
+            Dispatcher.BeginInvoke(new Action(() => ForceYellowSelectionBox()), DispatcherPriority.Loaded);
+        }
+
+        private void ForceYellowSelectionBox()
+        {
+            var layer = System.Windows.Documents.AdornerLayer.GetAdornerLayer(MainInkCanvas);
+            if (layer == null) return;
+            
+            var adorners = layer.GetAdorners(MainInkCanvas);
+            if (adorners == null) return;
+
+            foreach (var adorner in adorners)
+            {
+                if (adorner.GetType().Name == "InkCanvasSelectionAdorner")
+                {
+                    var flags = BindingFlags.NonPublic | BindingFlags.Instance;
+                    
+                    // Force Dashed Bounding Box to be Yellow
+                    var hatchPenField = adorner.GetType().GetField("_hatchPen", flags);
+                    if (hatchPenField != null)
+                    {
+                        Pen yellowDash = new Pen(Brushes.Yellow, 1.5) { DashStyle = DashStyles.Dash };
+                        hatchPenField.SetValue(adorner, yellowDash);
+                    }
+
+                    // Force Resize Handles Border to be Yellow
+                    var elementsPenField = adorner.GetType().GetField("_elementsPen", flags);
+                    if (elementsPenField != null)
+                    {
+                        Pen yellowSolid = new Pen(Brushes.Yellow, 1.5);
+                        elementsPenField.SetValue(adorner, yellowSolid);
+                    }
+
+                    // Force Resize Handles Fill to be Yellow
+                    var elementsFillBrushField = adorner.GetType().GetField("_elementsFillBrush", flags);
+                    if (elementsFillBrushField != null)
+                    {
+                        elementsFillBrushField.SetValue(adorner, Brushes.Yellow);
+                    }
+                    
+                    adorner.InvalidateVisual(); // Triggers an instant UI refresh
+                }
+            }
+        }
+
         private void Theme_Click(object sender, RoutedEventArgs e)
         {
             _isDarkTheme = !_isDarkTheme;
             ApplyTheme();
-            UpdateCustomCursorAppearance(); // Ensure cursor border updates on theme change
+            UpdateCustomCursorAppearance();
         }
 
         private void ApplyTheme()
@@ -527,10 +570,7 @@ namespace TeachingAnnotator
                 LaserInkCanvas.IsHitTestVisible = true;
                 
                 LaserInkCanvas.EditingMode = InkCanvasEditingMode.Ink;
-                // Laser line is exactly the chosen color (not white)
                 LaserInkCanvas.DefaultDrawingAttributes = new DrawingAttributes { Color = activeColor, Width = activeSize, Height = activeSize, FitToCurve = true, IgnorePressure = true };
-                
-                // Tuned Glow: Opacity strictly clamped to 0.5 to prevent additive blowout on overlap
                 LaserInkCanvas.Effect = new System.Windows.Media.Effects.DropShadowEffect { Color = activeColor, BlurRadius = 15, ShadowDepth = 0, Opacity = 0.5 };
             }
             else
@@ -577,9 +617,7 @@ namespace TeachingAnnotator
             
             if (LaserBtn.IsChecked == true) 
             {
-                CustomDotCursor.Fill = new SolidColorBrush(c); // Core is the selected color
-                
-                // Dynamic contrasting border based on theme
+                CustomDotCursor.Fill = new SolidColorBrush(c);
                 CustomDotCursor.Stroke = new SolidColorBrush(_isDarkTheme ? Colors.White : Colors.Black);
                 CustomDotCursor.StrokeThickness = 1.5;
 
@@ -638,8 +676,8 @@ namespace TeachingAnnotator
         {
             if (_laserStrokes.Count == 0) return;
 
-            // Instantly vaporize laser strokes to prevent opacity stacking
-            if ((DateTime.Now - _lastLaserActivityTime).TotalSeconds > 1.2)
+            // ARCHITECT UPGRADE: Increased duration so laser stays significantly longer (3.5 seconds)
+            if ((DateTime.Now - _lastLaserActivityTime).TotalSeconds > 3.5)
             {
                 _isUpdatingUI = true;
                 LaserInkCanvas.Strokes.Clear();
@@ -784,11 +822,11 @@ namespace TeachingAnnotator
                             }
                         }
                         wbDoc.Save(wbdlg.FileName);
-                        MessageBox.Show("Whiteboard Vector Exported Successfully!");
+                        MessageBox.Show("Multi-Page Theme Whiteboard Exported!");
                     }
                     catch (Exception ex) { MessageBox.Show("Export failed: " + ex.Message); }
                 }
-                return; 
+                return;
             }
 
             SaveFileDialog dlg = new SaveFileDialog { Filter = "PDF (*.pdf)|*.pdf", FileName = "Annotated_Document.pdf" };
