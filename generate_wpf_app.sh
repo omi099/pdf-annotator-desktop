@@ -28,7 +28,7 @@ cat << 'EOF' > TeachingAnnotator.csproj
 </Project>
 EOF
 
-# 4. Overwrite MainWindow.xaml (Added Maximized State, MainToolbar Name, & Green Lasso)
+# 4. Overwrite MainWindow.xaml (FIXED: Removed invalid Foreground property)
 cat << 'EOF' > MainWindow.xaml
 <Window x:Class="TeachingAnnotator.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -104,7 +104,7 @@ cat << 'EOF' > MainWindow.xaml
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
 
-                <InkCanvas x:Name="MainInkCanvas" Background="Transparent" Foreground="#2ecc71" UseCustomCursor="True" HorizontalAlignment="Left" VerticalAlignment="Top" Focusable="True"
+                <InkCanvas x:Name="MainInkCanvas" Background="Transparent" UseCustomCursor="True" HorizontalAlignment="Left" VerticalAlignment="Top" Focusable="True"
                            MouseMove="MainInkCanvas_MouseMove" MouseLeave="MainInkCanvas_MouseLeave" MouseEnter="MainInkCanvas_MouseEnter"
                            StrokeCollected="MainInkCanvas_StrokeCollected">
                     <InkCanvas.Resources>
@@ -131,7 +131,7 @@ cat << 'EOF' > MainWindow.xaml
 </Window>
 EOF
 
-# 5. Overwrite MainWindow.xaml.cs (Added Fullscreen & Hide Toolbar Logic)
+# 5. Overwrite MainWindow.xaml.cs 
 cat << 'EOF' > MainWindow.xaml.cs
 using System;
 using System.Collections.Generic;
