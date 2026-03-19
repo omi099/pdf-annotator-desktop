@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping Anydraw V12 (Unlocked PDF Margins & Gold Master Edition)..."
+echo "🚀 Bootstrapping Anydraw V12.1 (Zero-Error Architecture Master)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -296,12 +296,11 @@ cat << 'EOF' > MainWindow.xaml
                 <TextBox x:Name="SizeInput" Text="{Binding Value, ElementName=SizeSlider, UpdateSourceTrigger=PropertyChanged, StringFormat=F1}" Width="28" TextAlignment="Center" VerticalAlignment="Center" Margin="0,0,8,0" FontWeight="Bold" Background="Transparent" Foreground="{DynamicResource TextPrimary}" BorderThickness="0"/>
 
                 <CheckBox x:Name="PressureToggle" Content="Pressure" IsChecked="True" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" Margin="0,0,10,0" Checked="Pressure_Changed" Unchecked="Pressure_Changed" FontWeight="SemiBold" ToolTip="Enable Pen Pressure Sensitivity"/>
-                
-                <Rectangle Width="1" Fill="{DynamicResource BorderToolbar}" Margin="5,4"/>
-
-                <CheckBox x:Name="PdfCanvasToggle" Content="Unlock PDF Margins" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" Margin="0,0,10,0" Checked="PdfCanvas_Changed" Unchecked="PdfCanvas_Changed" FontWeight="SemiBold" ToolTip="Expand canvas to the right and bottom for margin notes."/>
+                <CheckBox x:Name="StrokeEraserToggle" Content="Stroke Erase" IsChecked="True" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" Margin="0,0,10,0" Checked="EraserMode_Changed" Unchecked="EraserMode_Changed" FontWeight="SemiBold" ToolTip="Uncheck to erase exact pixels instead of whole strokes."/>
 
                 <Rectangle Width="1" Fill="{DynamicResource BorderToolbar}" Margin="5,4"/>
+
+                <CheckBox x:Name="PdfCanvasToggle" Content="Unlock PDF" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" Margin="0,0,10,0" Checked="PdfCanvas_Changed" Unchecked="PdfCanvas_Changed" FontWeight="SemiBold" ToolTip="Expand canvas for margin notes"/>
 
                 <Button x:Name="PageSizeBtn" Style="{StaticResource TailwindButton}" Click="PageSizeBtn_Click" ToolTip="Canvas Size (Whiteboard Only)">
                     <StackPanel Orientation="Horizontal">
@@ -445,7 +444,7 @@ namespace TeachingAnnotator
         public int GridPattern { get; set; } = 1;
         public string CustomBgColor { get; set; } = "#15171B";
         
-        public bool UnlockPdfCanvas { get; set; } = false; // ARCHITECT FIX: Tab memory for Unlocked PDF margins
+        public bool UnlockPdfCanvas { get; set; } = false;
 
         [JsonIgnore]
         public Dictionary<int, StrokeCollection> StrokesPerPage { get; set; } = new Dictionary<int, StrokeCollection>();
@@ -461,7 +460,8 @@ namespace TeachingAnnotator
         public double LaserGlow { get; set; } = 15.0;
         public bool IsDarkTheme { get; set; } = true;
         public bool PressureEnabled { get; set; } = true;
-        public bool UnlockPdfCanvas { get; set; } = false; // Global setting memory
+        public bool StrokeEraserEnabled { get; set; } = true;
+        public bool UnlockPdfCanvas { get; set; } = false;
     }
 
     public partial class MainWindow : Window
@@ -571,6 +571,7 @@ namespace TeachingAnnotator
             }
         }
 
+        // ARCHITECT FIX: Zero-Argument PDF Memory Manager
         private async Task ManagePdfMemory()
         {
             if (_activeTab == null || string.IsNullOrEmpty(_activeTab.PdfFilePath)) return;
@@ -654,6 +655,7 @@ namespace TeachingAnnotator
             LaserDelayInput.Text = _laserFadeDelay.ToString("F1");
             LaserGlowSlider.Value = settings.LaserGlow;
             PressureToggle.IsChecked = settings.PressureEnabled;
+            StrokeEraserToggle.IsChecked = settings.StrokeEraserEnabled;
             PdfCanvasToggle.IsChecked = settings.UnlockPdfCanvas;
             _isUpdatingUI = false;
 
@@ -724,7 +726,7 @@ namespace TeachingAnnotator
                 LaserCoreColor = _laserCoreColor.ToString(),
                 LaserFadeDelay = _laserFadeDelay, LaserGlow = LaserGlowSlider.Value,
                 IsDarkTheme = _isDarkTheme,
-                PressureEnabled = PressureToggle.IsChecked == true,
+                PressureEnabled = PressureToggle.IsChecked == true, StrokeEraserEnabled = StrokeEraserToggle.IsChecked == true,
                 UnlockPdfCanvas = PdfCanvasToggle.IsChecked == true
             };
             File.WriteAllText(System.IO.Path.Combine(_appDataFolder, "settings.json"), JsonSerializer.Serialize(settings));
@@ -908,7 +910,7 @@ namespace TeachingAnnotator
                 MainScroll.ScrollToVerticalOffset(targetY);
                 
                 _isRenderingMemory = true;
-                await ManagePdfMemory(MainScroll.VerticalOffset / _zoom, MainScroll.ViewportHeight > 0 ? MainScroll.ViewportHeight / _zoom : 1080);
+                await ManagePdfMemory();
                 _isRenderingMemory = false;
             }
         }
@@ -1335,7 +1337,6 @@ namespace TeachingAnnotator
                             double actualW = Workspace.Width; 
                             double actualH = Workspace.Height;  
                             
-                            // EXPORTER FIX: Ensure infinite canvas falls back to drawn ink size
                             if (actualW >= 10000) {
                                 actualW = 1123; actualH = 794; 
                                 Rect inkBounds = Rect.Empty;
