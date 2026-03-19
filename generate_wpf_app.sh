@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping Anydraw V5.2 (100% Error-Free Hardware Polling Edition)..."
+echo "🚀 Bootstrapping Anydraw V5.3 (Perfect Hardware Keybinding Edition)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -467,7 +467,6 @@ namespace TeachingAnnotator
             LaserInkCanvas.Width = 3840; LaserInkCanvas.Height = 2160;
             CursorCanvas.Width = 3840; CursorCanvas.Height = 2160;
 
-            // THE FIX: Injecting the required hardware stroke collection handler natively
             LaserInkCanvas.Strokes.StrokesChanged += LaserInkCanvas_StrokesChanged;
 
             _laserTimer = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(33) };
@@ -483,21 +482,16 @@ namespace TeachingAnnotator
             ApplyTheme();
         }
 
-        // HARDWARE POLLING TRIGGERS
         private void LaserActivity_MouseDown(object sender, MouseButtonEventArgs e) { if (LaserBtn.IsChecked == true) _lastLaserActivityTime = DateTime.Now; }
         private void LaserActivity_StylusDown(object sender, StylusDownEventArgs e) { if (LaserBtn.IsChecked == true) _lastLaserActivityTime = DateTime.Now; }
         private void LaserActivity_StylusMove(object sender, StylusEventArgs e) { if (LaserBtn.IsChecked == true && !e.InAir) _lastLaserActivityTime = DateTime.Now; }
 
-        // THE MISSING METHOD FIXED
         private void LaserInkCanvas_StrokesChanged(object sender, System.Windows.Ink.StrokeCollectionChangedEventArgs e)
         {
             if (_isUpdatingUI) return;
             if (e.Added.Count > 0)
             {
-                foreach (var stroke in e.Added)
-                {
-                    _laserStrokes.Add(new LaserStrokeData(stroke));
-                }
+                foreach (var stroke in e.Added) _laserStrokes.Add(new LaserStrokeData(stroke));
                 _lastLaserActivityTime = DateTime.Now;
             }
         }
@@ -844,25 +838,29 @@ namespace TeachingAnnotator
 
         private void Window_KeyDown(object sender, KeyEventArgs e)
         {
-            if (Keyboard.Modifiers == ModifierKeys.Alt)
+            // ARCHITECT FIX: Windows WPF catches ALT combos as "SystemKey", not standard "Key"
+            if ((Keyboard.Modifiers & ModifierKeys.Alt) == ModifierKeys.Alt)
             {
-                if (e.Key == Key.Z)
+                if (e.SystemKey == Key.Z)
                 {
                     int idx = _tabs.IndexOf(_activeTab) - 1;
                     if (idx < 0) idx = _tabs.Count - 1;
                     SwitchToTab(_tabs[idx]);
+                    e.Handled = true;
                     return;
                 }
-                if (e.Key == Key.X)
+                if (e.SystemKey == Key.X)
                 {
                     int idx = (_tabs.IndexOf(_activeTab) + 1) % _tabs.Count;
                     SwitchToTab(_tabs[idx]);
+                    e.Handled = true;
                     return;
                 }
             }
 
             if (Keyboard.Modifiers == ModifierKeys.Control) { if (e.Key == Key.Z) { PerformUndo(); return; } if (e.Key == Key.Y) { PerformRedo(); return; } }
             if (e.Key == Key.Delete) { var s = MainInkCanvas.GetSelectedStrokes(); if (s.Count > 0) { SaveUndoState(); MainInkCanvas.Strokes.Remove(s); return; } }
+            
             if (SizeInput.IsFocused || HexInput.IsFocused || BgHexInput.IsFocused || LaserDelayInput.IsFocused || LaserGlowInput.IsFocused) return;
             
             if (e.Key == Key.Escape) { PointerBtn.IsChecked = true; return; }
