@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping Anydraw V6 (Mouse-Centered Zoom & Centered PDF Edition)..."
+echo "🚀 Bootstrapping Anydraw V7 (Absolute Gold Master & Dynamic A4 Engine)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -177,7 +177,7 @@ cat << 'EOF' > MainWindow.xaml
                 <AdornerDecorator>
                     <Grid x:Name="CanvasContainer" HorizontalAlignment="Left" VerticalAlignment="Top">
                         
-                        <Rectangle x:Name="A4Guide" Width="1122" Height="793" HorizontalAlignment="Left" VerticalAlignment="Top" Stroke="#40FFFFFF" StrokeThickness="2" StrokeDashArray="8 8" IsHitTestVisible="False" Margin="0,0,0,0"/>
+                        <Rectangle x:Name="A4Guide" Width="1122" Height="793" HorizontalAlignment="Left" VerticalAlignment="Top" Stroke="#40FFFFFF" StrokeThickness="2" StrokeDashArray="8 8" IsHitTestVisible="False"/>
 
                         <InkCanvas x:Name="MainInkCanvas" Background="Transparent" UseCustomCursor="True" Cursor="Arrow" Focusable="True"
                                    PreviewMouseLeftButtonDown="MainInkCanvas_PreviewMouseLeftButtonDown"
@@ -494,7 +494,6 @@ namespace TeachingAnnotator
             }
         }
 
-        // ARCHITECT FIX: Smart PDF scrolling updates counter
         private void MainScroll_ScrollChanged(object sender, ScrollChangedEventArgs e)
         {
             if (_activeTab != null && !string.IsNullOrEmpty(_activeTab.PdfFilePath) && _activeTab.PdfRenderedPages.Count > 0)
@@ -659,21 +658,21 @@ namespace TeachingAnnotator
                 Workspace.Width = 10000; Workspace.Height = 10000;
                 MainInkCanvas.Width = 10000; MainInkCanvas.Height = 10000;
                 LaserInkCanvas.Width = 10000; LaserInkCanvas.Height = 10000;
+                
+                // ARCHITECT FIX: Absolutely mathematically center the A4 guide
                 A4Guide.Visibility = Visibility.Visible;
+                A4Guide.Margin = new Thickness((Workspace.Width - A4Guide.Width) / 2.0, (Workspace.Height - A4Guide.Height) / 2.0, 0, 0);
             }
 
             MainInkCanvas.Strokes = _activeTab.StrokesPerPage.ContainsKey(_activeTab.CurrentPage) ? _activeTab.StrokesPerPage[_activeTab.CurrentPage].Clone() : new StrokeCollection();
             
             RenderTabsUI(); UpdatePageUI(); ApplyTheme();
             
-            // ARCHITECT FIX: Center scrollviewer on A4 box for pristine starting experience
             if (string.IsNullOrEmpty(_activeTab.PdfFilePath))
             {
                 Workspace.UpdateLayout();
-                MainScroll.ScrollToHorizontalOffset((Workspace.Width / 2) - (SystemParameters.PrimaryScreenWidth / 2));
-                MainScroll.ScrollToVerticalOffset((Workspace.Height / 2) - (SystemParameters.PrimaryScreenHeight / 2));
-                Canvas.SetLeft(A4Guide, (Workspace.Width / 2) - (A4Guide.Width / 2));
-                Canvas.SetTop(A4Guide, (Workspace.Height / 2) - (A4Guide.Height / 2));
+                MainScroll.ScrollToHorizontalOffset((Workspace.Width / 2.0) - (SystemParameters.PrimaryScreenWidth / 2.0));
+                MainScroll.ScrollToVerticalOffset((Workspace.Height / 2.0) - (SystemParameters.PrimaryScreenHeight / 2.0));
             }
         }
 
@@ -775,7 +774,7 @@ namespace TeachingAnnotator
                 Resources["TextSecondary"] = new SolidColorBrush(Color.FromRgb(161, 161, 170));
                 Resources["ButtonHoverBg"] = new SolidColorBrush(Color.FromRgb(37, 40, 45));
                 Resources["ButtonHoverText"] = new SolidColorBrush(Colors.White);
-                if (A4Guide != null) A4Guide.Stroke = new SolidColorBrush(Color.FromArgb(50, 255, 255, 255));
+                if (A4Guide != null) A4Guide.Stroke = new SolidColorBrush(Color.FromArgb(80, 255, 255, 255));
             }
             else
             {
@@ -786,7 +785,7 @@ namespace TeachingAnnotator
                 Resources["TextSecondary"] = new SolidColorBrush(Color.FromRgb(75, 85, 99)); 
                 Resources["ButtonHoverBg"] = new SolidColorBrush(Color.FromRgb(243, 244, 246));
                 Resources["ButtonHoverText"] = new SolidColorBrush(Colors.Black);
-                if (A4Guide != null) A4Guide.Stroke = new SolidColorBrush(Color.FromArgb(50, 0, 0, 0));
+                if (A4Guide != null) A4Guide.Stroke = new SolidColorBrush(Color.FromArgb(80, 0, 0, 0));
             }
 
             if (_activeTab != null && string.IsNullOrEmpty(_activeTab.PdfFilePath))
@@ -889,7 +888,6 @@ namespace TeachingAnnotator
 
         private void MainInkCanvas_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e) { if (MainInkCanvas.EditingMode != InkCanvasEditingMode.None && MainInkCanvas.EditingMode != InkCanvasEditingMode.Select) SaveUndoState(); }
 
-        // ARCHITECT FIX: Hardware math for accurate mouse-centered zoom!
         private void PerformZoom(double zoomDelta, Point? mousePos = null)
         {
             double newZoom = Math.Max(0.25, Math.Min(_zoom + zoomDelta, 10.0));
@@ -1072,6 +1070,7 @@ namespace TeachingAnnotator
             }
         }
 
+        // ARCHITECT FIX: Mathematical Dynamic A4 Canvas Expansion
         private void ExportAnnotated_Click(object sender, RoutedEventArgs e)
         {
             MessageBoxResult exportType = MessageBox.Show("Do you want to include your ink annotations in the exported PDF?\n\nYes = Export Annotated PDF\nNo = Export Clean Original Document/Grid", "Export Options", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
@@ -1095,18 +1094,28 @@ namespace TeachingAnnotator
                         {
                             StrokeCollection pageStrokes = (i == _activeTab.CurrentPage) ? MainInkCanvas.Strokes : (_activeTab.StrokesPerPage.ContainsKey(i) ? _activeTab.StrokesPerPage[i] : new StrokeCollection());
                             
-                            // ARCHITECT FIX: Dynamic A4 Dimension Math
-                            double actualW = 1122; // A4 Width
-                            double actualH = 793;  // A4 Height
-                            double originX = Canvas.GetLeft(A4Guide);
-                            double originY = Canvas.GetTop(A4Guide);
+                            double actualW = 1122; // Base A4 Width
+                            double actualH = 793;  // Base A4 Height
+                            double originX = A4Guide.Margin.Left;
+                            double originY = A4Guide.Margin.Top;
                             
                             Rect inkBounds = Rect.Empty;
                             foreach (Stroke s in pageStrokes) { inkBounds.Union(s.GetBounds()); }
+                            
+                            double minX = originX;
+                            double minY = originY;
+                            double maxX = originX + actualW;
+                            double maxY = originY + actualH;
+
                             if (inkBounds != Rect.Empty) {
-                                if (inkBounds.Right > (originX + actualW)) actualW = (inkBounds.Right - originX) + 50;
-                                if (inkBounds.Bottom > (originY + actualH)) actualH = (inkBounds.Bottom - originY) + 50;
+                                minX = Math.Min(originX, inkBounds.Left - 50);
+                                minY = Math.Min(originY, inkBounds.Top - 50);
+                                maxX = Math.Max(originX + actualW, inkBounds.Right + 50);
+                                maxY = Math.Max(originY + actualH, inkBounds.Bottom + 50);
                             }
+
+                            actualW = maxX - minX;
+                            actualH = maxY - minY;
 
                             PdfSharp.Pdf.PdfPage wbPage = wbDoc.AddPage(); 
                             wbPage.Width = XUnit.FromPoint(actualW); 
@@ -1140,7 +1149,7 @@ namespace TeachingAnnotator
                                         if (stroke.DrawingAttributes.IsHighlighter || stroke.DrawingAttributes.IgnorePressure)
                                         {
                                             XGraphicsPath path = new XGraphicsPath(); XPoint[] xPoints = new XPoint[points.Count];
-                                            for (int j = 0; j < points.Count; j++) { xPoints[j] = new XPoint(points[j].X - originX, points[j].Y - originY); }
+                                            for (int j = 0; j < points.Count; j++) { xPoints[j] = new XPoint(points[j].X - minX, points[j].Y - minY); }
                                             path.AddLines(xPoints);
                                             XLineCap cap = stroke.DrawingAttributes.IsHighlighter ? XLineCap.Square : XLineCap.Round;
                                             XPen pathPen = new XPen(color, baseThickness) { LineCap = cap, LineJoin = XLineJoin.Round };
@@ -1152,7 +1161,7 @@ namespace TeachingAnnotator
                                             {
                                                 var p1 = points[j]; var p2 = points[j + 1];
                                                 XPen segmentPen = new XPen(color, baseThickness * (p1.PressureFactor * 2.0)) { LineCap = XLineCap.Round };
-                                                gfx.DrawLine(segmentPen, p1.X - originX, p1.Y - originY, p2.X - originX, p2.Y - originY);
+                                                gfx.DrawLine(segmentPen, p1.X - minX, p1.Y - minY, p2.X - minX, p2.Y - minY);
                                             }
                                         }
                                     }
@@ -1180,7 +1189,6 @@ namespace TeachingAnnotator
                             if (i >= _activeTab.PdfRenderedPages.Count) break;
                             PdfSharp.Pdf.PdfPage pdfPage = document.Pages[i]; XGraphics gfx = XGraphics.FromPdfPage(pdfPage); PdfPageModel uiPage = _activeTab.PdfRenderedPages[i];
                             
-                            // MATH FIX for Centered PDF alignment
                             double scaleX = pdfPage.Width.Point / uiPage.Width; 
                             double scaleY = pdfPage.Height.Point / uiPage.Height;
                             double offsetX = (workspaceWidth - uiPage.Width) / 2.0;
@@ -1226,6 +1234,8 @@ namespace TeachingAnnotator
         }
 
         private void ClearInk_Click(object sender, RoutedEventArgs e) { SaveUndoState(); MainInkCanvas.Strokes.Clear(); LaserInkCanvas.Strokes.Clear(); }
+        private void PerformZoomIn() { _zoom += 0.25; ZoomTransform.ScaleX = _zoom; ZoomTransform.ScaleY = _zoom; }
+        private void PerformZoomOut() { _zoom = Math.Max(0.25, _zoom - 0.25); ZoomTransform.ScaleX = _zoom; ZoomTransform.ScaleY = _zoom; }
     }
 }
 EOF
