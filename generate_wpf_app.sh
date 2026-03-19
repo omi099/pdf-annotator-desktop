@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping Anydraw V7 (Absolute Gold Master & Dynamic A4 Engine)..."
+echo "🚀 Bootstrapping Anydraw V7 (Flawless A4 Matrix & Gold Master Edition)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -177,7 +177,10 @@ cat << 'EOF' > MainWindow.xaml
                 <AdornerDecorator>
                     <Grid x:Name="CanvasContainer" HorizontalAlignment="Left" VerticalAlignment="Top">
                         
-                        <Rectangle x:Name="A4Guide" Width="1122" Height="793" HorizontalAlignment="Left" VerticalAlignment="Top" Stroke="#40FFFFFF" StrokeThickness="2" StrokeDashArray="8 8" IsHitTestVisible="False"/>
+                        <Grid x:Name="A4GuideContainer" IsHitTestVisible="False" HorizontalAlignment="Left" VerticalAlignment="Top" Width="1123" Height="794">
+                            <Rectangle Stroke="{DynamicResource TextSecondary}" StrokeThickness="2" StrokeDashArray="6 6" Opacity="0.4"/>
+                            <TextBlock Text="A4 Boundary (297 x 210 mm)" Foreground="{DynamicResource TextSecondary}" Opacity="0.6" Margin="12" VerticalAlignment="Bottom" HorizontalAlignment="Right" FontSize="14" FontWeight="SemiBold"/>
+                        </Grid>
 
                         <InkCanvas x:Name="MainInkCanvas" Background="Transparent" UseCustomCursor="True" Cursor="Arrow" Focusable="True"
                                    PreviewMouseLeftButtonDown="MainInkCanvas_PreviewMouseLeftButtonDown"
@@ -236,7 +239,7 @@ cat << 'EOF' > MainWindow.xaml
                 <Button Style="{StaticResource TailwindButton}" Click="OpenPdf_Click" ToolTip="Upload PDF to Current Tab">
                     <Path Data="M 14 2 L 6 2 C 4.9 2 4 2.9 4 4 L 4 20 C 4 21.1 4.9 22 6 22 L 18 22 C 19.1 22 20 21.1 20 20 L 20 8 L 14 2 Z M 13 9 L 13 3.5 L 18.5 9 L 13 9 Z" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Height="18" Stretch="Uniform"/>
                 </Button>
-                <Button Style="{StaticResource TailwindButton}" Click="ExportAnnotated_Click" ToolTip="Export PDF">
+                <Button Style="{StaticResource TailwindButton}" Click="ExportAnnotated_Click" ToolTip="Export Document">
                     <Path Data="M 12 16 L 12 3 M 8 7 L 12 3 L 16 7 M 4 16 L 4 20 C 4 21.1 4.9 22 6 22 L 18 22 C 19.1 22 20 21.1 20 20 L 20 16" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Height="18" Stretch="Uniform"/>
                 </Button>
 
@@ -650,18 +653,17 @@ namespace TeachingAnnotator
                 Workspace.Height = _activeTab.PdfRenderedPages.Sum(p => p.Height) + (_activeTab.PdfRenderedPages.Count * 25);
                 MainInkCanvas.Width = Workspace.Width; MainInkCanvas.Height = Workspace.Height;
                 LaserInkCanvas.Width = Workspace.Width; LaserInkCanvas.Height = Workspace.Height;
-                A4Guide.Visibility = Visibility.Hidden;
+                A4GuideContainer.Visibility = Visibility.Hidden;
             }
             else
             {
-                // INFINITE DRAWING SPACE
                 Workspace.Width = 10000; Workspace.Height = 10000;
                 MainInkCanvas.Width = 10000; MainInkCanvas.Height = 10000;
                 LaserInkCanvas.Width = 10000; LaserInkCanvas.Height = 10000;
                 
-                // ARCHITECT FIX: Absolutely mathematically center the A4 guide
-                A4Guide.Visibility = Visibility.Visible;
-                A4Guide.Margin = new Thickness((Workspace.Width - A4Guide.Width) / 2.0, (Workspace.Height - A4Guide.Height) / 2.0, 0, 0);
+                // ARCHITECT FIX: Flawless mathematical center mapping using Grid margins
+                A4GuideContainer.Visibility = Visibility.Visible;
+                A4GuideContainer.Margin = new Thickness((Workspace.Width - 1123) / 2.0, (Workspace.Height - 794) / 2.0, 0, 0);
             }
 
             MainInkCanvas.Strokes = _activeTab.StrokesPerPage.ContainsKey(_activeTab.CurrentPage) ? _activeTab.StrokesPerPage[_activeTab.CurrentPage].Clone() : new StrokeCollection();
@@ -774,7 +776,7 @@ namespace TeachingAnnotator
                 Resources["TextSecondary"] = new SolidColorBrush(Color.FromRgb(161, 161, 170));
                 Resources["ButtonHoverBg"] = new SolidColorBrush(Color.FromRgb(37, 40, 45));
                 Resources["ButtonHoverText"] = new SolidColorBrush(Colors.White);
-                if (A4Guide != null) A4Guide.Stroke = new SolidColorBrush(Color.FromArgb(80, 255, 255, 255));
+                if (A4Guide != null) ((Rectangle)A4GuideContainer.Children[0]).Stroke = new SolidColorBrush(Color.FromArgb(80, 255, 255, 255));
             }
             else
             {
@@ -785,7 +787,7 @@ namespace TeachingAnnotator
                 Resources["TextSecondary"] = new SolidColorBrush(Color.FromRgb(75, 85, 99)); 
                 Resources["ButtonHoverBg"] = new SolidColorBrush(Color.FromRgb(243, 244, 246));
                 Resources["ButtonHoverText"] = new SolidColorBrush(Colors.Black);
-                if (A4Guide != null) A4Guide.Stroke = new SolidColorBrush(Color.FromArgb(80, 0, 0, 0));
+                if (A4Guide != null) ((Rectangle)A4GuideContainer.Children[0]).Stroke = new SolidColorBrush(Color.FromArgb(80, 0, 0, 0));
             }
 
             if (_activeTab != null && string.IsNullOrEmpty(_activeTab.PdfFilePath))
@@ -1070,7 +1072,6 @@ namespace TeachingAnnotator
             }
         }
 
-        // ARCHITECT FIX: Mathematical Dynamic A4 Canvas Expansion
         private void ExportAnnotated_Click(object sender, RoutedEventArgs e)
         {
             MessageBoxResult exportType = MessageBox.Show("Do you want to include your ink annotations in the exported PDF?\n\nYes = Export Annotated PDF\nNo = Export Clean Original Document/Grid", "Export Options", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
@@ -1094,10 +1095,11 @@ namespace TeachingAnnotator
                         {
                             StrokeCollection pageStrokes = (i == _activeTab.CurrentPage) ? MainInkCanvas.Strokes : (_activeTab.StrokesPerPage.ContainsKey(i) ? _activeTab.StrokesPerPage[i] : new StrokeCollection());
                             
-                            double actualW = 1122; // Base A4 Width
-                            double actualH = 793;  // Base A4 Height
-                            double originX = A4Guide.Margin.Left;
-                            double originY = A4Guide.Margin.Top;
+                            // ARCHITECT FIX: Mathematical Transform to perfect standard A4 points (842x595)
+                            double actualW = 1123; 
+                            double actualH = 794;  
+                            double originX = A4GuideContainer.Margin.Left;
+                            double originY = A4GuideContainer.Margin.Top;
                             
                             Rect inkBounds = Rect.Empty;
                             foreach (Stroke s in pageStrokes) { inkBounds.Union(s.GetBounds()); }
@@ -1118,9 +1120,10 @@ namespace TeachingAnnotator
                             actualH = maxY - minY;
 
                             PdfSharp.Pdf.PdfPage wbPage = wbDoc.AddPage(); 
-                            wbPage.Width = XUnit.FromPoint(actualW); 
-                            wbPage.Height = XUnit.FromPoint(actualH);
+                            wbPage.Width = XUnit.FromPresentation(actualW); 
+                            wbPage.Height = XUnit.FromPresentation(actualH);
                             XGraphics gfx = XGraphics.FromPdfPage(wbPage);
+                            gfx.ScaleTransform(72.0 / 96.0, 72.0 / 96.0); // Mathematically forces 1 WPF Pixel to exactly 1 PDF point!
 
                             gfx.DrawRectangle(new XSolidBrush(bgColor), 0, 0, actualW, actualH);
                             
