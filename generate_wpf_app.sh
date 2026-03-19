@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping Anydraw V5.3 (Perfect Hardware Keybinding Edition)..."
+echo "🚀 Bootstrapping Anydraw V6 (Dynamic A4 Boundary & Smart Pagination Edition)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -155,8 +155,8 @@ cat << 'EOF' > MainWindow.xaml
             </Grid>
         </Border>
 
-        <ScrollViewer Grid.Row="1" x:Name="MainScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" PanningMode="Both" PreviewMouseWheel="MainScroll_PreviewMouseWheel" Background="Transparent" Panel.ZIndex="10">
-            <Grid x:Name="Workspace" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="40">
+        <ScrollViewer Grid.Row="1" x:Name="MainScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" PanningMode="Both" PreviewMouseWheel="MainScroll_PreviewMouseWheel" ScrollChanged="MainScroll_ScrollChanged" Background="Transparent" Panel.ZIndex="10">
+            <Grid x:Name="Workspace" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="40">
                 <Grid.LayoutTransform>
                     <ScaleTransform x:Name="ZoomTransform" ScaleX="1" ScaleY="1"/>
                 </Grid.LayoutTransform>
@@ -176,6 +176,9 @@ cat << 'EOF' > MainWindow.xaml
 
                 <AdornerDecorator>
                     <Grid x:Name="CanvasContainer" HorizontalAlignment="Left" VerticalAlignment="Top">
+                        
+                        <Rectangle x:Name="A4Guide" Width="1920" Height="1358" HorizontalAlignment="Left" VerticalAlignment="Top" Stroke="#40FFFFFF" StrokeThickness="2" StrokeDashArray="8 8" IsHitTestVisible="False" Margin="0,0,0,0"/>
+
                         <InkCanvas x:Name="MainInkCanvas" Background="Transparent" UseCustomCursor="True" Cursor="Arrow" Focusable="True"
                                    PreviewMouseLeftButtonDown="MainInkCanvas_PreviewMouseLeftButtonDown"
                                    MouseMove="MainInkCanvas_MouseMove" MouseLeave="MainInkCanvas_MouseLeave" MouseEnter="MainInkCanvas_MouseEnter">
@@ -462,11 +465,6 @@ namespace TeachingAnnotator
             MainInkCanvas.Cursor = Cursors.Arrow;
             LaserInkCanvas.Cursor = Cursors.Arrow;
 
-            Workspace.Width = 3840; Workspace.Height = 2160;
-            MainInkCanvas.Width = 3840; MainInkCanvas.Height = 2160;
-            LaserInkCanvas.Width = 3840; LaserInkCanvas.Height = 2160;
-            CursorCanvas.Width = 3840; CursorCanvas.Height = 2160;
-
             LaserInkCanvas.Strokes.StrokesChanged += LaserInkCanvas_StrokesChanged;
 
             _laserTimer = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(33) };
@@ -493,6 +491,27 @@ namespace TeachingAnnotator
             {
                 foreach (var stroke in e.Added) _laserStrokes.Add(new LaserStrokeData(stroke));
                 _lastLaserActivityTime = DateTime.Now;
+            }
+        }
+
+        // SMART SCROLL INTERSECTION (Updates page counter as you scroll PDFs)
+        private void MainScroll_ScrollChanged(object sender, ScrollChangedEventArgs e)
+        {
+            if (_activeTab != null && !string.IsNullOrEmpty(_activeTab.PdfFilePath) && _activeTab.PdfRenderedPages.Count > 0)
+            {
+                double offset = MainScroll.VerticalOffset;
+                for (int i = _activeTab.PdfRenderedPages.Count - 1; i >= 0; i--)
+                {
+                    if (offset >= _activeTab.PdfRenderedPages[i].StartY - 100)
+                    {
+                        if (_activeTab.CurrentPage != i + 1)
+                        {
+                            _activeTab.CurrentPage = i + 1;
+                            UpdatePageUI();
+                        }
+                        break;
+                    }
+                }
             }
         }
 
@@ -632,12 +651,14 @@ namespace TeachingAnnotator
                 Workspace.Height = _activeTab.PdfRenderedPages.Sum(p => p.Height) + (_activeTab.PdfRenderedPages.Count * 25);
                 MainInkCanvas.Width = Workspace.Width; MainInkCanvas.Height = Workspace.Height;
                 LaserInkCanvas.Width = Workspace.Width; LaserInkCanvas.Height = Workspace.Height;
+                A4Guide.Visibility = Visibility.Hidden;
             }
             else
             {
-                Workspace.Width = 3840; Workspace.Height = 2160;
-                MainInkCanvas.Width = 3840; MainInkCanvas.Height = 2160;
-                LaserInkCanvas.Width = 3840; LaserInkCanvas.Height = 2160;
+                Workspace.Width = 10000; Workspace.Height = 10000;
+                MainInkCanvas.Width = 10000; MainInkCanvas.Height = 10000;
+                LaserInkCanvas.Width = 10000; LaserInkCanvas.Height = 10000;
+                A4Guide.Visibility = Visibility.Visible;
             }
 
             MainInkCanvas.Strokes = _activeTab.StrokesPerPage.ContainsKey(_activeTab.CurrentPage) ? _activeTab.StrokesPerPage[_activeTab.CurrentPage].Clone() : new StrokeCollection();
@@ -743,6 +764,7 @@ namespace TeachingAnnotator
                 Resources["TextSecondary"] = new SolidColorBrush(Color.FromRgb(161, 161, 170));
                 Resources["ButtonHoverBg"] = new SolidColorBrush(Color.FromRgb(37, 40, 45));
                 Resources["ButtonHoverText"] = new SolidColorBrush(Colors.White);
+                if (A4Guide != null) A4Guide.Stroke = new SolidColorBrush(Color.FromArgb(80, 255, 255, 255));
             }
             else
             {
@@ -753,6 +775,7 @@ namespace TeachingAnnotator
                 Resources["TextSecondary"] = new SolidColorBrush(Color.FromRgb(75, 85, 99)); 
                 Resources["ButtonHoverBg"] = new SolidColorBrush(Color.FromRgb(243, 244, 246));
                 Resources["ButtonHoverText"] = new SolidColorBrush(Colors.Black);
+                if (A4Guide != null) A4Guide.Stroke = new SolidColorBrush(Color.FromArgb(80, 0, 0, 0));
             }
 
             if (_activeTab != null && string.IsNullOrEmpty(_activeTab.PdfFilePath))
@@ -816,8 +839,29 @@ namespace TeachingAnnotator
             _undoStack.Clear(); _redoStack.Clear(); LaserInkCanvas.Strokes.Clear(); _laserStrokes.Clear();
         }
 
-        private void PrevPage_Click(object sender, RoutedEventArgs e) { if (_activeTab != null && string.IsNullOrEmpty(_activeTab.PdfFilePath) && _activeTab.CurrentPage > 1) { SaveCurrentPage(); _activeTab.CurrentPage--; LoadPage(_activeTab.CurrentPage); UpdatePageUI(); } }
-        private void NextPage_Click(object sender, RoutedEventArgs e) { if (_activeTab != null && string.IsNullOrEmpty(_activeTab.PdfFilePath) && _activeTab.CurrentPage < _activeTab.TotalPages) { SaveCurrentPage(); _activeTab.CurrentPage++; LoadPage(_activeTab.CurrentPage); UpdatePageUI(); } }
+        // SMART PAGINATION: Seamlessly scrolls PDFs or swaps Whiteboard slides!
+        private void PrevPage_Click(object sender, RoutedEventArgs e) 
+        { 
+            if (_activeTab != null) {
+                if (string.IsNullOrEmpty(_activeTab.PdfFilePath) && _activeTab.CurrentPage > 1) { 
+                    SaveCurrentPage(); _activeTab.CurrentPage--; LoadPage(_activeTab.CurrentPage); UpdatePageUI(); 
+                } else if (!string.IsNullOrEmpty(_activeTab.PdfFilePath) && _activeTab.CurrentPage > 1) {
+                    _activeTab.CurrentPage--; UpdatePageUI(); MainScroll.ScrollToVerticalOffset(_activeTab.PdfRenderedPages[_activeTab.CurrentPage - 1].StartY);
+                }
+            } 
+        }
+
+        private void NextPage_Click(object sender, RoutedEventArgs e) 
+        { 
+            if (_activeTab != null) {
+                if (string.IsNullOrEmpty(_activeTab.PdfFilePath) && _activeTab.CurrentPage < _activeTab.TotalPages) { 
+                    SaveCurrentPage(); _activeTab.CurrentPage++; LoadPage(_activeTab.CurrentPage); UpdatePageUI(); 
+                } else if (!string.IsNullOrEmpty(_activeTab.PdfFilePath) && _activeTab.CurrentPage < _activeTab.PdfRenderedPages.Count) {
+                    _activeTab.CurrentPage++; UpdatePageUI(); MainScroll.ScrollToVerticalOffset(_activeTab.PdfRenderedPages[_activeTab.CurrentPage - 1].StartY);
+                }
+            } 
+        }
+
         private void AddPage_Click(object sender, RoutedEventArgs e) { if (_activeTab == null || !string.IsNullOrEmpty(_activeTab.PdfFilePath)) return; SaveCurrentPage(); _activeTab.TotalPages++; _activeTab.CurrentPage = _activeTab.TotalPages; LoadPage(_activeTab.CurrentPage); UpdatePageUI(); }
         
         private void DeletePage_Click(object sender, RoutedEventArgs e)
@@ -834,33 +878,19 @@ namespace TeachingAnnotator
         private void PerformRedo() { if (_redoStack.Count > 0) { _isUpdatingUI = true; _undoStack.Push(MainInkCanvas.Strokes.Clone()); MainInkCanvas.Strokes = _redoStack.Pop(); _isUpdatingUI = false; } }
 
         private void MainInkCanvas_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e) { if (MainInkCanvas.EditingMode != InkCanvasEditingMode.None && MainInkCanvas.EditingMode != InkCanvasEditingMode.Select) SaveUndoState(); }
+
         private void MainScroll_PreviewMouseWheel(object sender, MouseWheelEventArgs e) { e.Handled = true; if (Keyboard.Modifiers == ModifierKeys.Control) { if (e.Delta > 0) PerformZoomIn(); else PerformZoomOut(); } else { double sf = 0.3; if (Keyboard.Modifiers == ModifierKeys.Shift) MainScroll.ScrollToHorizontalOffset(MainScroll.HorizontalOffset - (e.Delta * sf)); else MainScroll.ScrollToVerticalOffset(MainScroll.VerticalOffset - (e.Delta * sf)); } }
 
         private void Window_KeyDown(object sender, KeyEventArgs e)
         {
-            // ARCHITECT FIX: Windows WPF catches ALT combos as "SystemKey", not standard "Key"
             if ((Keyboard.Modifiers & ModifierKeys.Alt) == ModifierKeys.Alt)
             {
-                if (e.SystemKey == Key.Z)
-                {
-                    int idx = _tabs.IndexOf(_activeTab) - 1;
-                    if (idx < 0) idx = _tabs.Count - 1;
-                    SwitchToTab(_tabs[idx]);
-                    e.Handled = true;
-                    return;
-                }
-                if (e.SystemKey == Key.X)
-                {
-                    int idx = (_tabs.IndexOf(_activeTab) + 1) % _tabs.Count;
-                    SwitchToTab(_tabs[idx]);
-                    e.Handled = true;
-                    return;
-                }
+                if (e.SystemKey == Key.Z) { int idx = _tabs.IndexOf(_activeTab) - 1; if (idx < 0) idx = _tabs.Count - 1; SwitchToTab(_tabs[idx]); e.Handled = true; return; }
+                if (e.SystemKey == Key.X) { int idx = (_tabs.IndexOf(_activeTab) + 1) % _tabs.Count; SwitchToTab(_tabs[idx]); e.Handled = true; return; }
             }
 
             if (Keyboard.Modifiers == ModifierKeys.Control) { if (e.Key == Key.Z) { PerformUndo(); return; } if (e.Key == Key.Y) { PerformRedo(); return; } }
             if (e.Key == Key.Delete) { var s = MainInkCanvas.GetSelectedStrokes(); if (s.Count > 0) { SaveUndoState(); MainInkCanvas.Strokes.Remove(s); return; } }
-            
             if (SizeInput.IsFocused || HexInput.IsFocused || BgHexInput.IsFocused || LaserDelayInput.IsFocused || LaserGlowInput.IsFocused) return;
             
             if (e.Key == Key.Escape) { PointerBtn.IsChecked = true; return; }
@@ -982,6 +1012,7 @@ namespace TeachingAnnotator
                         }
                     }
                 }
+                targetTab.TotalPages = (int)pdfDoc.PageCount;
             } 
             catch { }
         }
@@ -1000,6 +1031,7 @@ namespace TeachingAnnotator
             }
         }
 
+        // DYNAMIC EXPORT: Will automatically resize page to fit ink boundaries if drawn past A4.
         private void ExportAnnotated_Click(object sender, RoutedEventArgs e)
         {
             MessageBoxResult exportType = MessageBox.Show("Do you want to include your ink annotations in the exported PDF?\n\nYes = Export Annotated PDF\nNo = Export Clean Original Document/Grid", "Export Options", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
@@ -1021,29 +1053,43 @@ namespace TeachingAnnotator
 
                         for (int i = 1; i <= _activeTab.TotalPages; i++)
                         {
-                            PdfSharp.Pdf.PdfPage wbPage = wbDoc.AddPage(); wbPage.Width = XUnit.FromPoint(1920); wbPage.Height = XUnit.FromPoint(1080);
+                            StrokeCollection pageStrokes = (i == _activeTab.CurrentPage) ? MainInkCanvas.Strokes : (_activeTab.StrokesPerPage.ContainsKey(i) ? _activeTab.StrokesPerPage[i] : new StrokeCollection());
+                            
+                            double actualW = 1920; 
+                            double actualH = 1358; 
+                            
+                            Rect inkBounds = Rect.Empty;
+                            foreach (Stroke s in pageStrokes) { inkBounds.Union(s.GetBounds()); }
+                            if (inkBounds != Rect.Empty) {
+                                if (inkBounds.Right > actualW) actualW = inkBounds.Right + 50;
+                                if (inkBounds.Bottom > actualH) actualH = inkBounds.Bottom + 50;
+                            }
+
+                            PdfSharp.Pdf.PdfPage wbPage = wbDoc.AddPage(); 
+                            wbPage.Width = XUnit.FromPoint(actualW); 
+                            wbPage.Height = XUnit.FromPoint(actualH);
                             XGraphics gfx = XGraphics.FromPdfPage(wbPage);
-                            gfx.DrawRectangle(new XSolidBrush(bgColor), 0, 0, wbPage.Width.Point, wbPage.Height.Point);
+
+                            gfx.DrawRectangle(new XSolidBrush(bgColor), 0, 0, actualW, actualH);
                             
                             if (_gridPattern == 1) {
                                 XPen minorPen = new XPen(minorGridColor, 0.5); XPen majorPen = new XPen(gridColor, 1.5);
-                                for (double x = 0; x < wbPage.Width.Point; x += 20) { XPen p = (x % 100 == 0) ? majorPen : minorPen; gfx.DrawLine(p, x, 0, x, wbPage.Height.Point); }
-                                for (double y = 0; y < wbPage.Height.Point; y += 20) { XPen p = (y % 100 == 0) ? majorPen : minorPen; gfx.DrawLine(p, 0, y, wbPage.Width.Point, y); }
+                                for (double x = 0; x < actualW; x += 20) { XPen p = (x % 100 == 0) ? majorPen : minorPen; gfx.DrawLine(p, x, 0, x, actualH); }
+                                for (double y = 0; y < actualH; y += 20) { XPen p = (y % 100 == 0) ? majorPen : minorPen; gfx.DrawLine(p, 0, y, actualW, y); }
                             } else if (_gridPattern == 2) {
                                 XSolidBrush dotBrush = new XSolidBrush(gridColor);
-                                for (double x = 20; x < wbPage.Width.Point; x += 40) for (double y = 20; y < wbPage.Height.Point; y += 40) gfx.DrawEllipse(dotBrush, x - 1.5, y - 1.5, 3, 3);
+                                for (double x = 20; x < actualW; x += 40) for (double y = 20; y < actualH; y += 40) gfx.DrawEllipse(dotBrush, x - 1.5, y - 1.5, 3, 3);
                             } else if (_gridPattern == 3) {
                                 XPen gridPen = new XPen(gridColor, 1.0);
-                                for (double y = 40; y < wbPage.Height.Point; y += 40) gfx.DrawLine(gridPen, 0, y, wbPage.Width.Point, y);
+                                for (double y = 40; y < actualH; y += 40) gfx.DrawLine(gridPen, 0, y, actualW, y);
                             }
 
                             if (exportAnnotations)
                             {
-                                StrokeCollection pageStrokes = (i == _activeTab.CurrentPage) ? MainInkCanvas.Strokes : (_activeTab.StrokesPerPage.ContainsKey(i) ? _activeTab.StrokesPerPage[i] : new StrokeCollection());
                                 foreach (Stroke stroke in pageStrokes)
                                 {
                                     XColor color = XColor.FromArgb(stroke.DrawingAttributes.Color.A, stroke.DrawingAttributes.Color.R, stroke.DrawingAttributes.Color.G, stroke.DrawingAttributes.Color.B);
-                                    double baseThickness = stroke.DrawingAttributes.Width * (wbPage.Width.Point / Workspace.Width);
+                                    double baseThickness = stroke.DrawingAttributes.Width;
                                     StylusPointCollection points = stroke.StylusPoints;
 
                                     if (points.Count > 1)
@@ -1051,7 +1097,7 @@ namespace TeachingAnnotator
                                         if (stroke.DrawingAttributes.IsHighlighter || stroke.DrawingAttributes.IgnorePressure)
                                         {
                                             XGraphicsPath path = new XGraphicsPath(); XPoint[] xPoints = new XPoint[points.Count];
-                                            for (int j = 0; j < points.Count; j++) { xPoints[j] = new XPoint(points[j].X * (wbPage.Width.Point / Workspace.Width), points[j].Y * (wbPage.Height.Point / Workspace.Height)); }
+                                            for (int j = 0; j < points.Count; j++) { xPoints[j] = new XPoint(points[j].X, points[j].Y); }
                                             path.AddLines(xPoints);
                                             XLineCap cap = stroke.DrawingAttributes.IsHighlighter ? XLineCap.Square : XLineCap.Round;
                                             XPen pathPen = new XPen(color, baseThickness) { LineCap = cap, LineJoin = XLineJoin.Round };
@@ -1063,7 +1109,7 @@ namespace TeachingAnnotator
                                             {
                                                 var p1 = points[j]; var p2 = points[j + 1];
                                                 XPen segmentPen = new XPen(color, baseThickness * (p1.PressureFactor * 2.0)) { LineCap = XLineCap.Round };
-                                                gfx.DrawLine(segmentPen, p1.X * (wbPage.Width.Point / Workspace.Width), p1.Y * (wbPage.Height.Point / Workspace.Height), p2.X * (wbPage.Width.Point / Workspace.Width), p2.Y * (wbPage.Height.Point / Workspace.Height));
+                                                gfx.DrawLine(segmentPen, p1.X, p1.Y, p2.X, p2.Y);
                                             }
                                         }
                                     }
