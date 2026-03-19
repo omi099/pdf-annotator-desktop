@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping Anydraw V3 (Zero-Error Floating Toolbar & Dynamic Logo)..."
+echo "🚀 Bootstrapping Anydraw V3 (Final Zero-Error Native Selection Edition)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -30,7 +30,7 @@ cat << 'EOF' > TeachingAnnotator.csproj
 </Project>
 EOF
 
-# 4. Overwrite MainWindow.xaml (FIXED: PressureToggle restored)
+# 4. Overwrite MainWindow.xaml
 cat << 'EOF' > MainWindow.xaml
 <Window x:Class="TeachingAnnotator.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -137,18 +137,6 @@ cat << 'EOF' > MainWindow.xaml
                 </AdornerDecorator>
                 
                 <Canvas x:Name="CursorCanvas" IsHitTestVisible="False" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Panel.ZIndex="999">
-                    <Canvas x:Name="SelectionOverlay" IsHitTestVisible="False" Visibility="Hidden">
-                        <Rectangle x:Name="CustomSelectionRect" Stroke="#FFFF00" StrokeThickness="1.5" StrokeDashArray="4 4" Fill="Transparent" />
-                        <Rectangle x:Name="H_TL" Width="9" Height="9" Stroke="#FFFF00" StrokeThickness="1.5" Fill="#282828" />
-                        <Rectangle x:Name="H_TC" Width="9" Height="9" Stroke="#FFFF00" StrokeThickness="1.5" Fill="#282828" />
-                        <Rectangle x:Name="H_TR" Width="9" Height="9" Stroke="#FFFF00" StrokeThickness="1.5" Fill="#282828" />
-                        <Rectangle x:Name="H_ML" Width="9" Height="9" Stroke="#FFFF00" StrokeThickness="1.5" Fill="#282828" />
-                        <Rectangle x:Name="H_MR" Width="9" Height="9" Stroke="#FFFF00" StrokeThickness="1.5" Fill="#282828" />
-                        <Rectangle x:Name="H_BL" Width="9" Height="9" Stroke="#FFFF00" StrokeThickness="1.5" Fill="#282828" />
-                        <Rectangle x:Name="H_BC" Width="9" Height="9" Stroke="#FFFF00" StrokeThickness="1.5" Fill="#282828" />
-                        <Rectangle x:Name="H_BR" Width="9" Height="9" Stroke="#FFFF00" StrokeThickness="1.5" Fill="#282828" />
-                    </Canvas>
-
                     <Ellipse x:Name="CustomDotCursor" Visibility="Hidden" IsHitTestVisible="False">
                         <Ellipse.Effect>
                             <DropShadowEffect x:Name="CursorGlow" BlurRadius="4" ShadowDepth="1" Opacity="0.6" />
@@ -172,19 +160,21 @@ cat << 'EOF' > MainWindow.xaml
                     <Path Data="M 2 4 A 1.5 1.5 0 1 1 2 7 A 1.5 1.5 0 1 1 2 4 Z M 2 10 A 1.5 1.5 0 1 1 2 13 A 1.5 1.5 0 1 1 2 10 Z M 2 16 A 1.5 1.5 0 1 1 2 19 A 1.5 1.5 0 1 1 2 16 Z M 8 4 A 1.5 1.5 0 1 1 8 7 A 1.5 1.5 0 1 1 8 4 Z M 8 10 A 1.5 1.5 0 1 1 8 13 A 1.5 1.5 0 1 1 8 10 Z M 8 16 A 1.5 1.5 0 1 1 8 19 A 1.5 1.5 0 1 1 8 16 Z" Fill="{DynamicResource TextSecondary}" Stretch="Uniform" Width="8"/>
                 </Border>
 
-                <Button Style="{StaticResource TailwindButton}" Click="PrevPage_Click" ToolTip="Previous Page" Padding="6,6">
-                    <Path Data="M 15 4 L 7 12 L 15 20" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="2.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Height="14" Stretch="Uniform"/>
-                </Button>
-                <TextBlock x:Name="PageCounterText" Text="1/1" Foreground="{DynamicResource Sky400}" VerticalAlignment="Center" FontWeight="Bold" Margin="4,0" Width="30" TextAlignment="Center"/>
-                <Button Style="{StaticResource TailwindButton}" Click="NextPage_Click" ToolTip="Next Page" Padding="6,6">
-                    <Path Data="M 9 4 L 17 12 L 9 20" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="2.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Height="14" Stretch="Uniform"/>
-                </Button>
-                <Button Style="{StaticResource TailwindButton}" Click="AddPage_Click" ToolTip="Add Page" Margin="0,0,8,0">
-                    <Path Data="M 14 2 L 6 2 C 4.9 2 4 2.9 4 4 L 4 20 C 4 21.1 4.9 22 6 22 L 18 22 C 19.1 22 20 21.1 20 20 L 20 8 L 14 2 Z M 12 18 L 12 14 L 8 14 L 8 12 L 12 12 L 12 8 L 14 8 L 14 12 L 18 12 L 18 14 L 14 14 L 14 18 Z" Fill="{DynamicResource Sky400}" Height="18" Stretch="Uniform"/>
-                </Button>
-                <Button Style="{StaticResource TailwindButton}" Click="DeletePage_Click" ToolTip="Delete Page" Margin="0,0,8,0">
-                    <Path Data="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" Fill="{DynamicResource Rose500}" Height="16" Stretch="Uniform"/>
-                </Button>
+                <StackPanel x:Name="PaginationPanel" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Style="{StaticResource TailwindButton}" Click="PrevPage_Click" ToolTip="Previous Page" Padding="6,6">
+                        <Path Data="M 15 4 L 7 12 L 15 20" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="2.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Height="14" Stretch="Uniform"/>
+                    </Button>
+                    <TextBlock x:Name="PageCounterText" Text="1/1" Foreground="{DynamicResource Sky400}" VerticalAlignment="Center" FontWeight="Bold" Margin="4,0" Width="30" TextAlignment="Center"/>
+                    <Button Style="{StaticResource TailwindButton}" Click="NextPage_Click" ToolTip="Next Page" Padding="6,6">
+                        <Path Data="M 9 4 L 17 12 L 9 20" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="2.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Height="14" Stretch="Uniform"/>
+                    </Button>
+                    <Button Style="{StaticResource TailwindButton}" Click="AddPage_Click" ToolTip="Add Page" Margin="0,0,8,0">
+                        <Path Data="M 14 2 L 6 2 C 4.9 2 4 2.9 4 4 L 4 20 C 4 21.1 4.9 22 6 22 L 18 22 C 19.1 22 20 21.1 20 20 L 20 8 L 14 2 Z M 12 18 L 12 14 L 8 14 L 8 12 L 12 12 L 12 8 L 14 8 L 14 12 L 18 12 L 18 14 L 14 14 L 14 18 Z" Fill="{DynamicResource Sky400}" Height="18" Stretch="Uniform"/>
+                    </Button>
+                    <Button Style="{StaticResource TailwindButton}" Click="DeletePage_Click" ToolTip="Delete Page" Margin="0,0,8,0">
+                        <Path Data="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" Fill="{DynamicResource Rose500}" Height="16" Stretch="Uniform"/>
+                    </Button>
+                </StackPanel>
 
                 <Rectangle Width="1" Fill="{DynamicResource BorderToolbar}" Margin="4,4"/>
 
@@ -287,14 +277,13 @@ cat << 'EOF' > MainWindow.xaml
 </Window>
 EOF
 
-# 5. Overwrite MainWindow.xaml.cs (FIXED: Null warnings and Dynamic Logo generation)
+# 5. Overwrite MainWindow.xaml.cs 
 cat << 'EOF' > MainWindow.xaml.cs
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -366,7 +355,7 @@ namespace TeachingAnnotator
         public MainWindow()
         {
             InitializeComponent();
-            SetAppIcon(); // Dynamically generates the Anydraw Taskbar Logo!
+            SetAppIcon(); // DYNAMIC TASKBAR LOGO GENERATOR
             
             PdfItemsControl.ItemsSource = PdfPages;
             System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
@@ -379,13 +368,6 @@ namespace TeachingAnnotator
             LaserInkCanvas.Width = 3840; LaserInkCanvas.Height = 2160;
             CursorCanvas.Width = 3840; CursorCanvas.Height = 2160;
 
-            MainInkCanvas.SelectionChanged += MainInkCanvas_SelectionChanged;
-            MainInkCanvas.SelectionMoving += MainInkCanvas_SelectionMoving;
-            MainInkCanvas.SelectionResizing += MainInkCanvas_SelectionResizing;
-            MainInkCanvas.SelectionMoved += MainInkCanvas_SelectionMoved;
-            MainInkCanvas.SelectionResized += MainInkCanvas_SelectionResized;
-            MainInkCanvas.LayoutUpdated += MainInkCanvas_LayoutUpdated;
-
             _laserTimer = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(33) };
             _laserTimer.Tick += LaserTimer_Tick;
             _laserTimer.Start();
@@ -396,7 +378,6 @@ namespace TeachingAnnotator
             ApplyTheme();
         }
 
-        // --- DYNAMIC TASKBAR LOGO GENERATOR ---
         private void SetAppIcon()
         {
             int size = 256;
@@ -404,17 +385,12 @@ namespace TeachingAnnotator
             DrawingVisual dv = new DrawingVisual();
             using (DrawingContext dc = dv.RenderOpen())
             {
-                // Dark slate background with rounded edges
                 dc.DrawRoundedRectangle(new SolidColorBrush(Color.FromRgb(15, 23, 42)), null, new Rect(0, 0, size, size), 48, 48);
-                // The Anydraw Vector Logo
                 var pathGeometry = Geometry.Parse("M12 2 L2 22 L6 22 L12 10 L18 22 L22 22 Z M7 16 L17 16 L17 18 L7 18 Z");
-                
                 TransformGroup group = new TransformGroup();
-                group.Children.Add(new ScaleTransform(8, 8)); // Scale up vector
-                group.Children.Add(new TranslateTransform(32, 32)); // Center it
+                group.Children.Add(new ScaleTransform(8, 8)); 
+                group.Children.Add(new TranslateTransform(32, 32)); 
                 pathGeometry.Transform = group;
-                
-                // Draw in Sky Blue (#38BDF8)
                 dc.DrawGeometry(new SolidColorBrush(Color.FromRgb(56, 189, 248)), null, pathGeometry);
             }
             rtb.Render(dv);
@@ -447,78 +423,6 @@ namespace TeachingAnnotator
         {
             _isDraggingToolbar = false;
             ((UIElement)sender).ReleaseMouseCapture();
-        }
-
-        private void UpdateOverlay(Rect bounds)
-        {
-            if (bounds.IsEmpty || bounds.Width == 0 || bounds.Height == 0)
-            {
-                SelectionOverlay.Visibility = Visibility.Hidden;
-                return;
-            }
-
-            SelectionOverlay.Visibility = Visibility.Visible;
-
-            double pad = 2;
-            double left = bounds.Left - pad;
-            double top = bounds.Top - pad;
-            double width = bounds.Width + (pad * 2);
-            double height = bounds.Height + (pad * 2);
-
-            CustomSelectionRect.Width = width;
-            CustomSelectionRect.Height = height;
-            Canvas.SetLeft(CustomSelectionRect, left);
-            Canvas.SetTop(CustomSelectionRect, top);
-
-            double halfW = width / 2;
-            double halfH = height / 2;
-            double hw = 4.5; 
-
-            Canvas.SetLeft(H_TL, left - hw); Canvas.SetTop(H_TL, top - hw);
-            Canvas.SetLeft(H_TC, left + halfW - hw); Canvas.SetTop(H_TC, top - hw);
-            Canvas.SetLeft(H_TR, left + width - hw); Canvas.SetTop(H_TR, top - hw);
-            
-            Canvas.SetLeft(H_ML, left - hw); Canvas.SetTop(H_ML, top + halfH - hw);
-            Canvas.SetLeft(H_MR, left + width - hw); Canvas.SetTop(H_MR, top + halfH - hw);
-            
-            Canvas.SetLeft(H_BL, left - hw); Canvas.SetTop(H_BL, top + height - hw);
-            Canvas.SetLeft(H_BC, left + halfW - hw); Canvas.SetTop(H_BC, top + height - hw);
-            Canvas.SetLeft(H_BR, left + width - hw); Canvas.SetTop(H_BR, top + height - hw);
-        }
-
-        private void MainInkCanvas_SelectionChanged(object? sender, EventArgs e) => UpdateOverlay(MainInkCanvas.GetSelectionBounds());
-        private void MainInkCanvas_SelectionMoved(object? sender, EventArgs e) => UpdateOverlay(MainInkCanvas.GetSelectionBounds());
-        private void MainInkCanvas_SelectionResized(object? sender, EventArgs e) => UpdateOverlay(MainInkCanvas.GetSelectionBounds());
-        private void MainInkCanvas_SelectionMoving(object? sender, InkCanvasSelectionEditingEventArgs e) => UpdateOverlay(e.NewRectangle);
-        private void MainInkCanvas_SelectionResizing(object? sender, InkCanvasSelectionEditingEventArgs e) => UpdateOverlay(e.NewRectangle);
-
-        private void MainInkCanvas_LayoutUpdated(object? sender, EventArgs e)
-        {
-            if (MainInkCanvas.GetSelectedStrokes().Count > 0)
-            {
-                if (VisualTreeHelper.GetChildrenCount(MainInkCanvas) > 0)
-                {
-                    var innerCanvas = VisualTreeHelper.GetChild(MainInkCanvas, 0) as UIElement;
-                    if (innerCanvas != null)
-                    {
-                        var layer = System.Windows.Documents.AdornerLayer.GetAdornerLayer(innerCanvas);
-                        if (layer != null)
-                        {
-                            var adorners = layer.GetAdorners(innerCanvas);
-                            if (adorners != null)
-                            {
-                                foreach (var adorner in adorners)
-                                {
-                                    if (adorner.GetType().Name == "InkCanvasSelectionAdorner")
-                                    {
-                                        adorner.Opacity = 0.01;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
         }
 
         private void BuildPaletteGrid()
@@ -593,7 +497,6 @@ namespace TeachingAnnotator
             }
         }
 
-        // PERFECTED FOR CS8625: object? sender, RoutedEventArgs? e
         private void Theme_Click(object? sender, RoutedEventArgs? e)
         {
             _isDarkTheme = !_isDarkTheme;
@@ -743,7 +646,6 @@ namespace TeachingAnnotator
                 _redoStack.Push(MainInkCanvas.Strokes.Clone());
                 MainInkCanvas.Strokes = _undoStack.Pop();
                 _isUpdatingUI = false;
-                UpdateOverlay(MainInkCanvas.GetSelectionBounds());
             }
         }
 
@@ -755,7 +657,6 @@ namespace TeachingAnnotator
                 _undoStack.Push(MainInkCanvas.Strokes.Clone());
                 MainInkCanvas.Strokes = _redoStack.Pop();
                 _isUpdatingUI = false;
-                UpdateOverlay(MainInkCanvas.GetSelectionBounds());
             }
         }
 
@@ -795,7 +696,6 @@ namespace TeachingAnnotator
                 {
                     SaveUndoState();
                     MainInkCanvas.Strokes.Remove(selectedStrokes);
-                    UpdateOverlay(Rect.Empty);
                     return;
                 }
             }
@@ -1013,7 +913,6 @@ namespace TeachingAnnotator
                 LaserInkCanvas.Strokes.Clear();
                 _undoStack.Clear();
                 _redoStack.Clear();
-                UpdateOverlay(Rect.Empty);
 
                 try 
                 {
@@ -1227,7 +1126,6 @@ namespace TeachingAnnotator
             SaveUndoState();
             MainInkCanvas.Strokes.Clear();
             LaserInkCanvas.Strokes.Clear();
-            UpdateOverlay(Rect.Empty);
         }
 
         private void PerformZoomIn() { _zoom += 0.25; ZoomTransform.ScaleX = _zoom; ZoomTransform.ScaleY = _zoom; }
