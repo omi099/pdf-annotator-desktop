@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping Anydraw V10 (Hard-Boundary Canvas Presets & Gold Master)..."
+echo "🚀 Bootstrapping Anydraw V11 (Independent Tab Sandboxing & Gold Master)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -178,6 +178,11 @@ cat << 'EOF' > MainWindow.xaml
                 <AdornerDecorator>
                     <Grid x:Name="CanvasContainer" HorizontalAlignment="Left" VerticalAlignment="Top">
                         
+                        <Grid x:Name="A4GuideContainer" IsHitTestVisible="False" HorizontalAlignment="Left" VerticalAlignment="Top" Width="1123" Height="794" Margin="0">
+                            <Rectangle x:Name="A4GuideRect" Stroke="{DynamicResource TextSecondary}" StrokeThickness="2" StrokeDashArray="6 6" Opacity="0.4"/>
+                            <TextBlock x:Name="A4GuideText" Text="A4 Boundary" Foreground="{DynamicResource TextSecondary}" Opacity="0.6" Margin="12" VerticalAlignment="Bottom" HorizontalAlignment="Right" FontSize="14" FontWeight="SemiBold"/>
+                        </Grid>
+
                         <InkCanvas x:Name="MainInkCanvas" Background="Transparent" UseCustomCursor="True" Cursor="Arrow" Focusable="True"
                                    PreviewMouseLeftButtonDown="MainInkCanvas_PreviewMouseLeftButtonDown"
                                    MouseMove="MainInkCanvas_MouseMove" MouseLeave="MainInkCanvas_MouseLeave" MouseEnter="MainInkCanvas_MouseEnter">
@@ -414,6 +419,7 @@ namespace TeachingAnnotator
         public LaserStrokeData(System.Windows.Ink.Stroke s) { Stroke = s; }
     }
 
+    // ARCHITECT FIX: Fully Encapsulated Independent Tab Vault
     public class WorkspaceTab
     {
         public string Id { get; set; } = Guid.NewGuid().ToString();
@@ -421,8 +427,21 @@ namespace TeachingAnnotator
         public string PdfFilePath { get; set; } = null;
         public int CurrentPage { get; set; } = 1;
         public int TotalPages { get; set; } = 1;
+        public int CanvasSizeIndex { get; set; } = 0; 
         
-        public int CanvasSizeIndex { get; set; } = 0; // ARCHITECT FIX: Remembers page size per tab
+        public double Zoom { get; set; } = 1.0;
+        public double ScrollX { get; set; } = 0;
+        public double ScrollY { get; set; } = 0;
+
+        public string ActiveTool { get; set; } = "Pen"; 
+        public double PenSize { get; set; } = 4.0;
+        public string PenColor { get; set; } = "#EF4444";
+        public double HighlightSize { get; set; } = 24.0;
+        public string HighlightColor { get; set; } = "#FFFF00";
+        public double LaserSize { get; set; } = 6.0;
+        public string LaserColor { get; set; } = "#EF4444";
+        public int GridPattern { get; set; } = 1;
+        public string CustomBgColor { get; set; } = "#15171B";
 
         [JsonIgnore]
         public Dictionary<int, StrokeCollection> StrokesPerPage { get; set; } = new Dictionary<int, StrokeCollection>();
@@ -433,18 +452,10 @@ namespace TeachingAnnotator
 
     public class AppSettings
     {
-        public double PenSize { get; set; } = 4.0;
-        public string PenColor { get; set; } = "#EF4444";
-        public double HighlightSize { get; set; } = 24.0;
-        public string HighlightColor { get; set; } = "#FFFF00";
-        public double LaserSize { get; set; } = 6.0;
-        public string LaserColor { get; set; } = "#EF4444";
         public string LaserCoreColor { get; set; } = "#FFFFFF";
         public double LaserFadeDelay { get; set; } = 1.7;
         public double LaserGlow { get; set; } = 15.0;
         public bool IsDarkTheme { get; set; } = true;
-        public int GridPattern { get; set; } = 1; 
-        public string CustomBgColor { get; set; } = "#15171B";
         public bool PressureEnabled { get; set; } = true;
         public bool StrokeEraserEnabled { get; set; } = true;
     }
@@ -631,19 +642,13 @@ namespace TeachingAnnotator
                 try { settings = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(settingsPath)) ?? new AppSettings(); } catch { }
             }
 
-            _penSize = settings.PenSize; _penColor = (Color)ColorConverter.ConvertFromString(settings.PenColor);
-            _highlightSize = settings.HighlightSize; _highlightColor = (Color)ColorConverter.ConvertFromString(settings.HighlightColor);
-            _laserSize = settings.LaserSize; _laserColor = (Color)ColorConverter.ConvertFromString(settings.LaserColor);
             _laserCoreColor = (Color)ColorConverter.ConvertFromString(settings.LaserCoreColor);
             _laserFadeDelay = settings.LaserFadeDelay;
             _isDarkTheme = settings.IsDarkTheme;
-            _gridPattern = settings.GridPattern;
-            _customBgColor = (Color)ColorConverter.ConvertFromString(settings.CustomBgColor);
-
+            
             _isUpdatingUI = true;
             LaserDelayInput.Text = _laserFadeDelay.ToString("F1");
             LaserGlowSlider.Value = settings.LaserGlow;
-            BgHexInput.Text = settings.CustomBgColor;
             PressureToggle.IsChecked = settings.PressureEnabled;
             StrokeEraserToggle.IsChecked = settings.StrokeEraserEnabled;
             _isUpdatingUI = false;
@@ -678,18 +683,43 @@ namespace TeachingAnnotator
             RenderTabsUI();
         }
 
+        // ARCHITECT FIX: Save exactly the isolated state of the tab we are currently leaving
+        private void SaveTabState()
+        {
+            if (_activeTab == null) return;
+            
+            _activeTab.Zoom = _zoom;
+            _activeTab.ScrollX = MainScroll.HorizontalOffset;
+            _activeTab.ScrollY = MainScroll.VerticalOffset;
+            
+            _activeTab.PenSize = _penSize;
+            _activeTab.PenColor = _penColor.ToString();
+            _activeTab.HighlightSize = _highlightSize;
+            _activeTab.HighlightColor = _highlightColor.ToString();
+            _activeTab.LaserSize = _laserSize;
+            _activeTab.LaserColor = _laserColor.ToString();
+            _activeTab.GridPattern = _gridPattern;
+            _activeTab.CustomBgColor = _customBgColor.ToString();
+            
+            if (PointerBtn.IsChecked == true) _activeTab.ActiveTool = "Pointer";
+            else if (SelectBtn.IsChecked == true) _activeTab.ActiveTool = "Select";
+            else if (HighlightBtn.IsChecked == true) _activeTab.ActiveTool = "Highlight";
+            else if (LaserBtn.IsChecked == true) _activeTab.ActiveTool = "Laser";
+            else if (EraserBtn.IsChecked == true) _activeTab.ActiveTool = "Eraser";
+            else _activeTab.ActiveTool = "Pen";
+            
+            _activeTab.StrokesPerPage[_activeTab.CurrentPage] = MainInkCanvas.Strokes.Clone();
+        }
+
         private void SaveState()
         {
-            if (_activeTab != null) _activeTab.StrokesPerPage[_activeTab.CurrentPage] = MainInkCanvas.Strokes.Clone();
+            SaveTabState();
 
             AppSettings settings = new AppSettings
             {
-                PenSize = _penSize, PenColor = _penColor.ToString(),
-                HighlightSize = _highlightSize, HighlightColor = _highlightColor.ToString(),
-                LaserSize = _laserSize, LaserColor = _laserColor.ToString(),
                 LaserCoreColor = _laserCoreColor.ToString(),
                 LaserFadeDelay = _laserFadeDelay, LaserGlow = LaserGlowSlider.Value,
-                IsDarkTheme = _isDarkTheme, GridPattern = _gridPattern, CustomBgColor = _customBgColor.ToString(),
+                IsDarkTheme = _isDarkTheme,
                 PressureEnabled = PressureToggle.IsChecked == true, StrokeEraserEnabled = StrokeEraserToggle.IsChecked == true
             };
             File.WriteAllText(System.IO.Path.Combine(_appDataFolder, "settings.json"), JsonSerializer.Serialize(settings));
@@ -735,7 +765,6 @@ namespace TeachingAnnotator
             }
         }
 
-        // ARCHITECT FIX: Page Size Selection Logic
         private void PageSizeBtn_Click(object sender, RoutedEventArgs e) => PageSizePopup.IsOpen = true;
 
         private void SelectPageSize_Click(object sender, RoutedEventArgs e)
@@ -756,13 +785,11 @@ namespace TeachingAnnotator
             if (!string.IsNullOrEmpty(_activeTab.PdfFilePath))
             {
                 PageSizeIndicator.Text = "PDF";
+                A4GuideContainer.Visibility = Visibility.Hidden;
                 return;
             }
 
-            double w = 10000;
-            double h = 10000;
-            string ind = "INF";
-
+            double w = 10000; double h = 10000; string ind = "INF";
             switch (_activeTab.CanvasSizeIndex)
             {
                 case 1: w = 1123; h = 794; ind = "A4"; break;
@@ -773,25 +800,57 @@ namespace TeachingAnnotator
             }
 
             PageSizeIndicator.Text = ind;
-            
             Workspace.Width = w; Workspace.Height = h;
             MainInkCanvas.Width = w; MainInkCanvas.Height = h;
             LaserInkCanvas.Width = w; LaserInkCanvas.Height = h;
             CursorCanvas.Width = w; CursorCanvas.Height = h;
 
+            if (_activeTab.CanvasSizeIndex == 0) {
+                A4GuideContainer.Visibility = Visibility.Visible;
+                A4GuideContainer.Width = 1123; A4GuideContainer.Height = 794;
+                A4GuideText.Text = "A4 Reference"; A4GuideRect.StrokeDashArray = new DoubleCollection { 6, 6 };
+            } else {
+                A4GuideContainer.Visibility = Visibility.Visible;
+                A4GuideContainer.Width = w; A4GuideContainer.Height = h;
+                A4GuideText.Text = ind + " Boundary"; A4GuideRect.StrokeDashArray = new DoubleCollection { 0 };
+            }
+
             Workspace.UpdateLayout();
-            ApplyTheme(); // Regenerates Grid properly within new bounds
+            ApplyTheme(); 
         }
 
         private async void SwitchToTab(WorkspaceTab targetTab)
         {
-            if (_activeTab != null && _activeTab != targetTab)
-            {
-                _activeTab.StrokesPerPage[_activeTab.CurrentPage] = MainInkCanvas.Strokes.Clone();
-            }
+            SaveTabState();
 
             _activeTab = targetTab;
             _undoStack.Clear(); _redoStack.Clear(); LaserInkCanvas.Strokes.Clear(); _laserStrokes.Clear();
+
+            // ARCHITECT FIX: Unpack isolated state for the incoming tab
+            _zoom = _activeTab.Zoom;
+            ZoomTransform.ScaleX = _zoom; ZoomTransform.ScaleY = _zoom;
+
+            _penSize = _activeTab.PenSize;
+            _penColor = (Color)ColorConverter.ConvertFromString(_activeTab.PenColor);
+            _highlightSize = _activeTab.HighlightSize;
+            _highlightColor = (Color)ColorConverter.ConvertFromString(_activeTab.HighlightColor);
+            _laserSize = _activeTab.LaserSize;
+            _laserColor = (Color)ColorConverter.ConvertFromString(_activeTab.LaserColor);
+            _gridPattern = _activeTab.GridPattern;
+            _customBgColor = (Color)ColorConverter.ConvertFromString(_activeTab.CustomBgColor);
+
+            _isUpdatingUI = true;
+            BgHexInput.Text = _activeTab.CustomBgColor;
+            
+            switch (_activeTab.ActiveTool) {
+                case "Pointer": PointerBtn.IsChecked = true; break;
+                case "Select": SelectBtn.IsChecked = true; break;
+                case "Highlight": HighlightBtn.IsChecked = true; break;
+                case "Laser": LaserBtn.IsChecked = true; break;
+                case "Eraser": EraserBtn.IsChecked = true; break;
+                default: PenBtn.IsChecked = true; break;
+            }
+            _isUpdatingUI = false;
 
             PdfItemsControl.ItemsSource = null;
             if (!string.IsNullOrEmpty(_activeTab.PdfFilePath) && _activeTab.PdfRenderedPages.Count == 0)
@@ -806,6 +865,7 @@ namespace TeachingAnnotator
                 Workspace.Height = _activeTab.PdfRenderedPages.Sum(p => p.Height) + (_activeTab.PdfRenderedPages.Count * 25);
                 MainInkCanvas.Width = Workspace.Width; MainInkCanvas.Height = Workspace.Height;
                 LaserInkCanvas.Width = Workspace.Width; LaserInkCanvas.Height = Workspace.Height;
+                A4GuideContainer.Visibility = Visibility.Hidden;
                 PageSizeIndicator.Text = "PDF";
             }
             else
@@ -815,17 +875,22 @@ namespace TeachingAnnotator
 
             MainInkCanvas.Strokes = _activeTab.StrokesPerPage.ContainsKey(_activeTab.CurrentPage) ? _activeTab.StrokesPerPage[_activeTab.CurrentPage].Clone() : new StrokeCollection();
             
-            RenderTabsUI(); UpdatePageUI(); ApplyTheme();
+            RenderTabsUI(); UpdatePageUI(); SyncToolToUI(); ApplyTheme();
             
             Workspace.UpdateLayout();
+
+            // ARCHITECT FIX: Restores the exact scroll position you left it at!
             if (string.IsNullOrEmpty(_activeTab.PdfFilePath))
             {
-                MainScroll.ScrollToHorizontalOffset(0);
-                MainScroll.ScrollToVerticalOffset(0);
+                MainScroll.ScrollToHorizontalOffset(_activeTab.ScrollX);
+                MainScroll.ScrollToVerticalOffset(_activeTab.ScrollY);
             }
             else
             {
-                MainScroll.ScrollToVerticalOffset(_activeTab.PdfRenderedPages[_activeTab.CurrentPage - 1].StartY * _zoom);
+                MainScroll.ScrollToHorizontalOffset(_activeTab.ScrollX);
+                double targetY = _activeTab.ScrollY > 0 ? _activeTab.ScrollY : (_activeTab.PdfRenderedPages.Count > 0 ? _activeTab.PdfRenderedPages[_activeTab.CurrentPage - 1].StartY * _zoom : 0);
+                MainScroll.ScrollToVerticalOffset(targetY);
+                
                 _ = ManagePdfMemory();
             }
         }
@@ -859,7 +924,15 @@ namespace TeachingAnnotator
 
         private void NewTab_Click(object sender, RoutedEventArgs e)
         {
-            var newTab = new WorkspaceTab(); _tabs.Add(newTab); SwitchToTab(newTab);
+            var newTab = new WorkspaceTab(); 
+            if (_activeTab != null) {
+                newTab.PenSize = _penSize; newTab.PenColor = _penColor.ToString();
+                newTab.HighlightSize = _highlightSize; newTab.HighlightColor = _highlightColor.ToString();
+                newTab.LaserSize = _laserSize; newTab.LaserColor = _laserColor.ToString();
+                newTab.GridPattern = _gridPattern; newTab.CustomBgColor = _customBgColor.ToString();
+                newTab.ActiveTool = PointerBtn.IsChecked == true ? "Pointer" : (SelectBtn.IsChecked == true ? "Select" : (HighlightBtn.IsChecked == true ? "Highlight" : (LaserBtn.IsChecked == true ? "Laser" : (EraserBtn.IsChecked == true ? "Eraser" : "Pen"))));
+            }
+            _tabs.Add(newTab); SwitchToTab(newTab);
         }
 
         private void CloseTab(WorkspaceTab tab)
@@ -955,6 +1028,7 @@ namespace TeachingAnnotator
                 Resources["TextSecondary"] = new SolidColorBrush(Color.FromRgb(161, 161, 170));
                 Resources["ButtonHoverBg"] = new SolidColorBrush(Color.FromRgb(37, 40, 45));
                 Resources["ButtonHoverText"] = new SolidColorBrush(Colors.White);
+                if (A4GuideContainer != null && A4GuideContainer.Children.Count > 0) ((Rectangle)A4GuideContainer.Children[0]).Stroke = new SolidColorBrush(Color.FromArgb(80, 255, 255, 255));
             }
             else
             {
@@ -965,23 +1039,15 @@ namespace TeachingAnnotator
                 Resources["TextSecondary"] = new SolidColorBrush(Color.FromRgb(75, 85, 99)); 
                 Resources["ButtonHoverBg"] = new SolidColorBrush(Color.FromRgb(243, 244, 246));
                 Resources["ButtonHoverText"] = new SolidColorBrush(Colors.Black);
+                if (A4GuideContainer != null && A4GuideContainer.Children.Count > 0) ((Rectangle)A4GuideContainer.Children[0]).Stroke = new SolidColorBrush(Color.FromArgb(80, 0, 0, 0));
             }
 
             if (_activeTab != null && string.IsNullOrEmpty(_activeTab.PdfFilePath))
             {
                 Color lineColor = _isDarkTheme ? Color.FromRgb(42, 45, 53) : Color.FromRgb(209, 213, 219);
                 Workspace.Background = CreateGridBrush(_customBgColor, lineColor);
-                
-                // ARCHITECT FIX: Soft Page Shadow to differentiate canvas from the abyss
-                Workspace.Effect = new System.Windows.Media.Effects.DropShadowEffect { Color = Colors.Black, BlurRadius = 25, Opacity = 0.5, ShadowDepth = 5 };
-                MainScroll.Background = (Brush)FindResource("BgPrimary");
             }
-            else 
-            {
-                Workspace.Background = new SolidColorBrush(Colors.Transparent);
-                Workspace.Effect = null;
-                MainScroll.Background = (Brush)FindResource("BgPrimary");
-            }
+            else Workspace.Background = new SolidColorBrush(Colors.Transparent);
         }
 
         private DrawingBrush CreateGridBrush(Color bgColor, Color lineColor)
@@ -1027,7 +1093,11 @@ namespace TeachingAnnotator
         }
 
         private void UpdatePageUI() { if (_activeTab == null) return; PageCounterText.Text = $"{_activeTab.CurrentPage}/{_activeTab.TotalPages}"; PaginationPanel.Visibility = string.IsNullOrEmpty(_activeTab.PdfFilePath) ? Visibility.Visible : Visibility.Collapsed; }
-        private void SaveCurrentPage() { if (_activeTab == null || !string.IsNullOrEmpty(_activeTab.PdfFilePath)) return; _activeTab.StrokesPerPage[_activeTab.CurrentPage] = MainInkCanvas.Strokes.Clone(); }
+        
+        private void SaveCurrentPage() { 
+            if (_activeTab == null || !string.IsNullOrEmpty(_activeTab.PdfFilePath)) return; 
+            _activeTab.StrokesPerPage[_activeTab.CurrentPage] = MainInkCanvas.Strokes.Clone(); 
+        }
         
         private void LoadPage(int page)
         {
@@ -1225,7 +1295,6 @@ namespace TeachingAnnotator
             }
         }
 
-        // ARCHITECT FIX: Mathematical Export strictly matching the preset boundaries
         private void ExportAnnotated_Click(object sender, RoutedEventArgs e)
         {
             MessageBoxResult exportType = MessageBox.Show("Do you want to include your ink annotations in the exported PDF?\n\nYes = Export Annotated PDF\nNo = Export Clean Original Document/Grid", "Export Options", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
@@ -1327,7 +1396,6 @@ namespace TeachingAnnotator
                             
                             double scaleX = pdfPage.Width.Point / uiPage.Width; 
                             double scaleY = pdfPage.Height.Point / uiPage.Height;
-                            double offsetX = (workspaceWidth - uiPage.Width) / 2.0;
 
                             StrokeCollection pageStrokes = (i + 1 == _activeTab.CurrentPage) ? MainInkCanvas.Strokes : (_activeTab.StrokesPerPage.ContainsKey(i + 1) ? _activeTab.StrokesPerPage[i + 1] : new StrokeCollection());
 
@@ -1345,7 +1413,7 @@ namespace TeachingAnnotator
                                         if (stroke.DrawingAttributes.IsHighlighter || stroke.DrawingAttributes.IgnorePressure)
                                         {
                                             XGraphicsPath path = new XGraphicsPath(); XPoint[] xPoints = new XPoint[points.Count];
-                                            for (int j = 0; j < points.Count; j++) { xPoints[j] = new XPoint((points[j].X - offsetX) * scaleX, (points[j].Y - uiPage.StartY) * scaleY); }
+                                            for (int j = 0; j < points.Count; j++) { xPoints[j] = new XPoint(points[j].X * scaleX, (points[j].Y - uiPage.StartY) * scaleY); }
                                             path.AddLines(xPoints);
                                             XLineCap cap = stroke.DrawingAttributes.IsHighlighter ? XLineCap.Square : XLineCap.Round;
                                             XPen pathPen = new XPen(color, baseThickness) { LineCap = cap, LineJoin = XLineJoin.Round };
@@ -1357,7 +1425,7 @@ namespace TeachingAnnotator
                                             {
                                                 var p1 = points[j]; var p2 = points[j + 1];
                                                 XPen segmentPen = new XPen(color, baseThickness * (p1.PressureFactor * 2.0)) { LineCap = XLineCap.Round };
-                                                gfx.DrawLine(segmentPen, (p1.X - offsetX) * scaleX, (p1.Y - uiPage.StartY) * scaleY, (p2.X - offsetX) * scaleX, (p2.Y - uiPage.StartY) * scaleY);
+                                                gfx.DrawLine(segmentPen, p1.X * scaleX, (p1.Y - uiPage.StartY) * scaleY, p2.X * scaleX, (p2.Y - uiPage.StartY) * scaleY);
                                             }
                                         }
                                     }
