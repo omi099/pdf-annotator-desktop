@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping the Native WPF Annotator (Ultimate Professional Gold Master)..."
+echo "🚀 Bootstrapping Anydraw V3 (Floating Toolbar & Ultimate Precision Edition)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -42,12 +42,12 @@ cat << 'EOF' > MainWindow.xaml
 
     <Window.Resources>
         <SolidColorBrush x:Key="BgPrimary" Color="#000000"/>
-        <SolidColorBrush x:Key="BgToolbar" Color="#000000"/>
-        <SolidColorBrush x:Key="BorderToolbar" Color="#334155"/>
+        <SolidColorBrush x:Key="BgToolbar" Color="#15171B"/>
+        <SolidColorBrush x:Key="BorderToolbar" Color="#2A2D35"/>
         <SolidColorBrush x:Key="TextPrimary" Color="#F8FAFC"/>
-        <SolidColorBrush x:Key="TextSecondary" Color="#CBD5E1"/>
-        <SolidColorBrush x:Key="ButtonHoverBg" Color="#334155"/>
-        <SolidColorBrush x:Key="ButtonHoverText" Color="#F8FAFC"/>
+        <SolidColorBrush x:Key="TextSecondary" Color="#A1A1AA"/>
+        <SolidColorBrush x:Key="ButtonHoverBg" Color="#25282D"/>
+        <SolidColorBrush x:Key="ButtonHoverText" Color="#FFFFFF"/>
         <SolidColorBrush x:Key="Sky400" Color="#38BDF8"/>
         <SolidColorBrush x:Key="Rose500" Color="#EF4444"/>
 
@@ -102,135 +102,8 @@ cat << 'EOF' > MainWindow.xaml
     </Window.Resources>
 
     <Grid Background="{DynamicResource BgPrimary}">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-        </Grid.RowDefinitions>
         
-        <Border x:Name="MainToolbar" Grid.Row="0" Background="{DynamicResource BgToolbar}" BorderBrush="{DynamicResource BorderToolbar}" BorderThickness="0,0,0,1" Padding="20,12" Panel.ZIndex="100">
-            <Border.Effect>
-                <DropShadowEffect Color="Black" BlurRadius="10" Opacity="0.15" ShadowDepth="2" Direction="270"/>
-            </Border.Effect>
-            
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-
-                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Path Data="M12 2 L2 22 L6 22 L12 10 L18 22 L22 22 Z M7 16 L17 16 L17 18 L7 18 Z" Fill="{DynamicResource Sky400}" Height="24" Stretch="Uniform" Margin="0,0,8,0"/>
-                    <TextBlock Text="Anydraw" FontSize="20" FontWeight="Bold" Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" Margin="0,0,24,0"/>
-                    
-                    <Rectangle Width="1" Fill="{DynamicResource BorderToolbar}" Margin="0,4,12,4"/>
-
-                    <Button Style="{StaticResource TailwindButton}" Click="OpenPdf_Click" ToolTip="Open PDF">
-                        <StackPanel Orientation="Horizontal">
-                            <Path Data="M 14 2 L 6 2 C 4.9 2 4 2.9 4 4 L 4 20 C 4 21.1 4.9 22 6 22 L 18 22 C 19.1 22 20 21.1 20 20 L 20 8 L 14 2 Z M 13 9 L 13 3.5 L 18.5 9 L 13 9 Z" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Height="18" Stretch="Uniform" Margin="0,0,6,0"/>
-                            <TextBlock Text="Open" FontWeight="SemiBold"/>
-                        </StackPanel>
-                    </Button>
-                    <Button Style="{StaticResource TailwindButton}" Click="ExportAnnotated_Click" ToolTip="Export High-Res Vector PDF">
-                        <StackPanel Orientation="Horizontal">
-                            <Path Data="M 12 16 L 12 3 M 8 7 L 12 3 L 16 7 M 4 16 L 4 20 C 4 21.1 4.9 22 6 22 L 18 22 C 19.1 22 20 21.1 20 20 L 20 16" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Height="18" Stretch="Uniform" Margin="0,0,6,0"/>
-                            <TextBlock Text="Export" FontWeight="SemiBold"/>
-                        </StackPanel>
-                    </Button>
-                </StackPanel>
-
-                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                    <RadioButton Style="{StaticResource TailwindTool}" x:Name="SelectBtn" Checked="Tool_Checked" ToolTip="Lasso Select (S)">
-                        <Path Data="M 4 10 C 6 4, 12 6, 18 8 C 22 10, 16 20, 10 18 C 4 16, 2 16, 4 10 Z M 13 13 L 20 20 M 13 13 L 13 20 M 13 13 L 20 13" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" StrokeThickness="2" StrokeDashArray="2,2" StrokeLineJoin="Round" Fill="Transparent" Height="22" Stretch="Uniform"/>
-                    </RadioButton>
-                    <RadioButton Style="{StaticResource TailwindTool}" x:Name="PenBtn" IsChecked="True" Checked="Tool_Checked" ToolTip="Pen (P)">
-                        <Path Data="M 18 4 L 20 6 L 9 17 L 4 18 L 5 13 Z M 16 6 L 18 8 M 4 18 C 6 24, 12 24, 16 20" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Height="22" Stretch="Uniform"/>
-                    </RadioButton>
-                    <RadioButton Style="{StaticResource TailwindTool}" x:Name="HighlightBtn" Checked="Tool_Checked" ToolTip="Highlighter (M)">
-                        <Path Data="M 16 4 L 20 8 L 8 20 L 2 20 L 2 14 Z M 14 6 L 18 10 M 2 14 L 8 20 M 10 20 L 22 20" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Height="22" Stretch="Uniform"/>
-                    </RadioButton>
-                    <RadioButton Style="{StaticResource TailwindTool}" x:Name="LaserBtn" Checked="Tool_Checked" ToolTip="Neon Laser (L)">
-                        <Path Data="M 7 17 L 15 9 A 2 2 0 0 1 18 12 L 10 20 A 2 2 0 0 1 7 17 Z M 13 11 A 1 1 0 1 0 14 12 A 1 1 0 0 0 13 11 M 19 3 L 20 1 M 23 7 L 25 8 M 21 5 L 23 3" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Height="22" Stretch="Uniform"/>
-                    </RadioButton>
-                    <RadioButton Style="{StaticResource TailwindTool}" x:Name="EraserBtn" Checked="Tool_Checked" ToolTip="Eraser (E)">
-                        <Path Data="M 18 4 L 22 8 L 12 18 L 6 12 Z M 12 18 L 2 18 M 6 12 L 10 16" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Height="22" Stretch="Uniform"/>
-                    </RadioButton>
-
-                    <Rectangle Width="1" Fill="{DynamicResource BorderToolbar}" Margin="12,4"/>
-
-                    <Button x:Name="ColorBtn" Style="{StaticResource TailwindButton}" Click="ColorBtn_Click" ToolTip="Tool Color">
-                        <StackPanel Orientation="Horizontal">
-                            <Ellipse x:Name="ActiveColorIndicator" Width="16" Height="16" Fill="#EF4444" Stroke="{DynamicResource TextSecondary}" StrokeThickness="1"/>
-                            <TextBlock Text="▼" FontSize="10" Margin="4,0,0,0" VerticalAlignment="Center"/>
-                        </StackPanel>
-                    </Button>
-                    <Popup x:Name="ColorPopup" StaysOpen="False" PlacementTarget="{Binding ElementName=ColorBtn}" Placement="Bottom">
-                        <Border Background="{DynamicResource BgToolbar}" BorderBrush="{DynamicResource BorderToolbar}" BorderThickness="1" CornerRadius="6" Padding="10">
-                            <Border.Effect><DropShadowEffect BlurRadius="10" Opacity="0.3" ShadowDepth="4"/></Border.Effect>
-                            <StackPanel>
-                                <TextBlock Text="Tool Hex:" Foreground="{DynamicResource TextSecondary}" FontSize="11" Margin="0,0,0,4"/>
-                                <TextBox x:Name="HexInput" Text="#EF4444" Width="100" Background="{DynamicResource BgPrimary}" Foreground="{DynamicResource TextPrimary}" BorderBrush="{DynamicResource BorderToolbar}" Padding="4" Margin="0,0,0,8" TextChanged="HexInput_TextChanged"/>
-                                <WrapPanel Width="120" x:Name="PaletteGrid"/>
-                            </StackPanel>
-                        </Border>
-                    </Popup>
-
-                    <Slider x:Name="SizeSlider" Minimum="0.5" Maximum="50" Value="4" Width="60" VerticalAlignment="Center" Margin="5,0" ValueChanged="Size_Changed" IsMoveToPointEnabled="True"/>
-                    <TextBox x:Name="SizeInput" Text="{Binding Value, ElementName=SizeSlider, UpdateSourceTrigger=PropertyChanged, StringFormat=F1}" Width="30" TextAlignment="Center" VerticalAlignment="Center" Margin="0,0,10,0" FontWeight="Bold" Background="Transparent" Foreground="{DynamicResource TextPrimary}" BorderThickness="0"/>
-
-                    <CheckBox x:Name="PressureToggle" Content="Pressure" IsChecked="True" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" Margin="0,0,10,0" Checked="Pressure_Changed" Unchecked="Pressure_Changed" FontWeight="SemiBold"/>
-                    
-                    <Rectangle Width="1" Fill="{DynamicResource BorderToolbar}" Margin="5,4"/>
-
-                    <TextBlock Text="⏱️" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" Margin="5,0"/>
-                    <TextBox x:Name="LaserDelayInput" Text="1.7" Width="30" TextAlignment="Center" VerticalAlignment="Center" Margin="0,0,10,0" FontWeight="Bold" Background="Transparent" Foreground="{DynamicResource Sky400}" BorderThickness="0" TextChanged="LaserDelayInput_TextChanged" ToolTip="Laser Fade Delay (seconds)"/>
-                </StackPanel>
-
-                <StackPanel x:Name="PaginationPanel" Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                    
-                    <Button x:Name="BgColorBtn" Style="{StaticResource TailwindButton}" Click="BgColorBtn_Click" ToolTip="Background Color">
-                        <StackPanel Orientation="Horizontal">
-                            <Rectangle x:Name="ActiveBgIndicator" Width="16" Height="16" Fill="#282828" Stroke="{DynamicResource TextSecondary}" StrokeThickness="1" RadiusX="2" RadiusY="2"/>
-                            <TextBlock Text="▼" FontSize="10" Margin="4,0,0,0" VerticalAlignment="Center"/>
-                        </StackPanel>
-                    </Button>
-                    <Popup x:Name="BgColorPopup" StaysOpen="False" PlacementTarget="{Binding ElementName=BgColorBtn}" Placement="Bottom">
-                        <Border Background="{DynamicResource BgToolbar}" BorderBrush="{DynamicResource BorderToolbar}" BorderThickness="1" CornerRadius="6" Padding="10">
-                            <Border.Effect><DropShadowEffect BlurRadius="10" Opacity="0.3" ShadowDepth="4"/></Border.Effect>
-                            <StackPanel>
-                                <TextBlock Text="Canvas Hex:" Foreground="{DynamicResource TextSecondary}" FontSize="11" Margin="0,0,0,4"/>
-                                <TextBox x:Name="BgHexInput" Text="#282828" Width="100" Background="{DynamicResource BgPrimary}" Foreground="{DynamicResource TextPrimary}" BorderBrush="{DynamicResource BorderToolbar}" Padding="4" Margin="0,0,0,8" TextChanged="BgHexInput_TextChanged"/>
-                                <WrapPanel Width="120" x:Name="BgPaletteGrid"/>
-                            </StackPanel>
-                        </Border>
-                    </Popup>
-
-                    <Button Style="{StaticResource TailwindButton}" Click="GridToggle_Click" ToolTip="Toggle Grid">
-                        <Path Data="M 3 3 L 21 3 L 21 21 L 3 21 Z M 9 3 L 9 21 M 15 3 L 15 21 M 3 9 L 21 9 M 3 15 L 21 15" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Height="16" Stretch="Uniform"/>
-                    </Button>
-
-                    <Rectangle Width="1" Fill="{DynamicResource BorderToolbar}" Margin="5,4"/>
-
-                    <Button Style="{StaticResource TailwindButton}" Click="PrevPage_Click" Content="&lt;"/>
-                    <TextBlock x:Name="PageCounterText" Text="1/1" Foreground="{DynamicResource Sky400}" VerticalAlignment="Center" FontWeight="Bold" Margin="4,0" Width="30" TextAlignment="Center"/>
-                    <Button Style="{StaticResource TailwindButton}" Click="NextPage_Click" Content="&gt;"/>
-                    <Button Style="{StaticResource TailwindButton}" Click="DeletePage_Click" ToolTip="Delete Page">
-                        <Path Data="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" Fill="{DynamicResource Rose500}" Height="14" Stretch="Uniform"/>
-                    </Button>
-
-                    <Rectangle Width="1" Fill="{DynamicResource BorderToolbar}" Margin="5,4"/>
-                    
-                    <Button Style="{StaticResource TailwindButton}" Click="Theme_Click" ToolTip="Toggle Dark/Light Mode">
-                        <Path Data="M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 0 1-4.4 2.26 5.403 5.403 0 0 1-3.14-9.8c-.44-.06-.9-.1-1.36-.1z" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Height="16" Stretch="Uniform"/>
-                    </Button>
-                    <Button Style="{StaticResource TailwindButton}" Click="ClearInk_Click" ToolTip="Clear Board">
-                        <TextBlock Text="Clear" Foreground="{DynamicResource Rose500}" FontWeight="SemiBold"/>
-                    </Button>
-                </StackPanel>
-            </Grid>
-        </Border>
-
-        <ScrollViewer Grid.Row="1" x:Name="MainScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" PanningMode="Both" PreviewMouseWheel="MainScroll_PreviewMouseWheel" Background="Transparent">
+        <ScrollViewer x:Name="MainScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" PanningMode="Both" PreviewMouseWheel="MainScroll_PreviewMouseWheel" Background="Transparent" Panel.ZIndex="10">
             <Grid x:Name="Workspace" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="40">
                 <Grid.LayoutTransform>
                     <ScaleTransform x:Name="ZoomTransform" ScaleX="1" ScaleY="1"/>
@@ -249,19 +122,34 @@ cat << 'EOF' > MainWindow.xaml
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
 
-                <Grid x:Name="CanvasContainer" HorizontalAlignment="Left" VerticalAlignment="Top">
-                    <InkCanvas x:Name="MainInkCanvas" Background="Transparent" UseCustomCursor="True" Cursor="Arrow" Focusable="True"
-                               PreviewMouseLeftButtonDown="MainInkCanvas_PreviewMouseLeftButtonDown"
-                               MouseMove="MainInkCanvas_MouseMove" MouseLeave="MainInkCanvas_MouseLeave" MouseEnter="MainInkCanvas_MouseEnter">
-                    </InkCanvas>
-                    
-                    <InkCanvas x:Name="LaserInkCanvas" Background="Transparent" UseCustomCursor="True" Cursor="Arrow" Focusable="False" IsHitTestVisible="False"
-                               MouseMove="MainInkCanvas_MouseMove" MouseLeave="MainInkCanvas_MouseLeave" MouseEnter="MainInkCanvas_MouseEnter"
-                               StrokeCollected="LaserInkCanvas_StrokeCollected">
-                    </InkCanvas>
-                </Grid>
+                <AdornerDecorator>
+                    <Grid x:Name="CanvasContainer" HorizontalAlignment="Left" VerticalAlignment="Top">
+                        <InkCanvas x:Name="MainInkCanvas" Background="Transparent" UseCustomCursor="True" Cursor="Arrow" Focusable="True"
+                                   PreviewMouseLeftButtonDown="MainInkCanvas_PreviewMouseLeftButtonDown"
+                                   MouseMove="MainInkCanvas_MouseMove" MouseLeave="MainInkCanvas_MouseLeave" MouseEnter="MainInkCanvas_MouseEnter">
+                        </InkCanvas>
+                        
+                        <InkCanvas x:Name="LaserInkCanvas" Background="Transparent" UseCustomCursor="True" Cursor="Arrow" Focusable="False" IsHitTestVisible="False"
+                                   MouseMove="MainInkCanvas_MouseMove" MouseLeave="MainInkCanvas_MouseLeave" MouseEnter="MainInkCanvas_MouseEnter"
+                                   StrokeCollected="LaserInkCanvas_StrokeCollected">
+                        </InkCanvas>
+                    </Grid>
+                </AdornerDecorator>
                 
                 <Canvas x:Name="CursorCanvas" IsHitTestVisible="False" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Panel.ZIndex="999">
+                    
+                    <Canvas x:Name="SelectionOverlay" IsHitTestVisible="False" Visibility="Hidden">
+                        <Rectangle x:Name="CustomSelectionRect" Stroke="#FFFF00" StrokeThickness="1.5" StrokeDashArray="4 4" Fill="Transparent" />
+                        <Rectangle x:Name="H_TL" Width="9" Height="9" Stroke="#FFFF00" StrokeThickness="1.5" Fill="#282828" />
+                        <Rectangle x:Name="H_TC" Width="9" Height="9" Stroke="#FFFF00" StrokeThickness="1.5" Fill="#282828" />
+                        <Rectangle x:Name="H_TR" Width="9" Height="9" Stroke="#FFFF00" StrokeThickness="1.5" Fill="#282828" />
+                        <Rectangle x:Name="H_ML" Width="9" Height="9" Stroke="#FFFF00" StrokeThickness="1.5" Fill="#282828" />
+                        <Rectangle x:Name="H_MR" Width="9" Height="9" Stroke="#FFFF00" StrokeThickness="1.5" Fill="#282828" />
+                        <Rectangle x:Name="H_BL" Width="9" Height="9" Stroke="#FFFF00" StrokeThickness="1.5" Fill="#282828" />
+                        <Rectangle x:Name="H_BC" Width="9" Height="9" Stroke="#FFFF00" StrokeThickness="1.5" Fill="#282828" />
+                        <Rectangle x:Name="H_BR" Width="9" Height="9" Stroke="#FFFF00" StrokeThickness="1.5" Fill="#282828" />
+                    </Canvas>
+
                     <Ellipse x:Name="CustomDotCursor" Visibility="Hidden" IsHitTestVisible="False">
                         <Ellipse.Effect>
                             <DropShadowEffect x:Name="CursorGlow" BlurRadius="4" ShadowDepth="1" Opacity="0.6" />
@@ -270,18 +158,141 @@ cat << 'EOF' > MainWindow.xaml
                 </Canvas>
             </Grid>
         </ScrollViewer>
+
+        <Border x:Name="MainToolbar" Background="{DynamicResource BgToolbar}" BorderBrush="{DynamicResource BorderToolbar}" BorderThickness="1" CornerRadius="16" Padding="5,8" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,30" Panel.ZIndex="100">
+            <Border.RenderTransform>
+                <TranslateTransform x:Name="ToolbarTransform" X="0" Y="0"/>
+            </Border.RenderTransform>
+            <Border.Effect>
+                <DropShadowEffect Color="Black" BlurRadius="25" Opacity="0.4" ShadowDepth="8" Direction="270"/>
+            </Border.Effect>
+            
+            <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                
+                <Border Background="Transparent" Cursor="SizeAll" MouseLeftButtonDown="ToolbarDrag_MouseDown" MouseMove="ToolbarDrag_MouseMove" MouseLeftButtonUp="ToolbarDrag_MouseUp" Padding="8,10" Margin="4,0,8,0" ToolTip="Drag Toolbar">
+                    <Path Data="M 2 4 A 1.5 1.5 0 1 1 2 7 A 1.5 1.5 0 1 1 2 4 Z M 2 10 A 1.5 1.5 0 1 1 2 13 A 1.5 1.5 0 1 1 2 10 Z M 2 16 A 1.5 1.5 0 1 1 2 19 A 1.5 1.5 0 1 1 2 16 Z M 8 4 A 1.5 1.5 0 1 1 8 7 A 1.5 1.5 0 1 1 8 4 Z M 8 10 A 1.5 1.5 0 1 1 8 13 A 1.5 1.5 0 1 1 8 10 Z M 8 16 A 1.5 1.5 0 1 1 8 19 A 1.5 1.5 0 1 1 8 16 Z" Fill="{DynamicResource TextSecondary}" Stretch="Uniform" Width="8"/>
+                </Border>
+
+                <Button Style="{StaticResource TailwindButton}" Click="PrevPage_Click" ToolTip="Previous Page" Padding="6,6">
+                    <Path Data="M 15 4 L 7 12 L 15 20" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="2.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Height="14" Stretch="Uniform"/>
+                </Button>
+                <TextBlock x:Name="PageCounterText" Text="1/1" Foreground="{DynamicResource Sky400}" VerticalAlignment="Center" FontWeight="Bold" Margin="4,0" Width="30" TextAlignment="Center"/>
+                <Button Style="{StaticResource TailwindButton}" Click="NextPage_Click" ToolTip="Next Page" Padding="6,6">
+                    <Path Data="M 9 4 L 17 12 L 9 20" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="2.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Height="14" Stretch="Uniform"/>
+                </Button>
+                <Button Style="{StaticResource TailwindButton}" Click="AddPage_Click" ToolTip="Add Page" Margin="0,0,8,0">
+                    <Path Data="M 14 2 L 6 2 C 4.9 2 4 2.9 4 4 L 4 20 C 4 21.1 4.9 22 6 22 L 18 22 C 19.1 22 20 21.1 20 20 L 20 8 L 14 2 Z M 12 18 L 12 14 L 8 14 L 8 12 L 12 12 L 12 8 L 14 8 L 14 12 L 18 12 L 18 14 L 14 14 L 14 18 Z" Fill="{DynamicResource Sky400}" Height="18" Stretch="Uniform"/>
+                </Button>
+                <Button Style="{StaticResource TailwindButton}" Click="DeletePage_Click" ToolTip="Delete Page" Margin="0,0,8,0">
+                    <Path Data="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" Fill="{DynamicResource Rose500}" Height="16" Stretch="Uniform"/>
+                </Button>
+
+                <Rectangle Width="1" Fill="{DynamicResource BorderToolbar}" Margin="4,4"/>
+
+                <Button Style="{StaticResource TailwindButton}" Click="OpenPdf_Click" ToolTip="Open PDF">
+                    <Path Data="M 14 2 L 6 2 C 4.9 2 4 2.9 4 4 L 4 20 C 4 21.1 4.9 22 6 22 L 18 22 C 19.1 22 20 21.1 20 20 L 20 8 L 14 2 Z M 13 9 L 13 3.5 L 18.5 9 L 13 9 Z" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Height="18" Stretch="Uniform"/>
+                </Button>
+                <Button Style="{StaticResource TailwindButton}" Click="ExportAnnotated_Click" ToolTip="Export PDF">
+                    <Path Data="M 12 16 L 12 3 M 8 7 L 12 3 L 16 7 M 4 16 L 4 20 C 4 21.1 4.9 22 6 22 L 18 22 C 19.1 22 20 21.1 20 20 L 20 16" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Height="18" Stretch="Uniform"/>
+                </Button>
+
+                <Rectangle Width="1" Fill="{DynamicResource BorderToolbar}" Margin="12,4"/>
+
+                <RadioButton Style="{StaticResource TailwindTool}" x:Name="SelectBtn" Checked="Tool_Checked" ToolTip="Lasso Select (S)">
+                    <Path Data="M 4 10 C 6 4, 12 6, 18 8 C 22 10, 16 20, 10 18 C 4 16, 2 16, 4 10 Z M 13 13 L 20 20 M 13 13 L 13 20 M 13 13 L 20 13" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" StrokeThickness="2" StrokeDashArray="2,2" StrokeLineJoin="Round" Fill="Transparent" Height="22" Stretch="Uniform"/>
+                </RadioButton>
+                <RadioButton Style="{StaticResource TailwindTool}" x:Name="PenBtn" IsChecked="True" Checked="Tool_Checked" ToolTip="Pen (P)">
+                    <Path Data="M 18 4 L 20 6 L 9 17 L 4 18 L 5 13 Z M 16 6 L 18 8 M 4 18 C 6 24, 12 24, 16 20" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Height="22" Stretch="Uniform"/>
+                </RadioButton>
+                <RadioButton Style="{StaticResource TailwindTool}" x:Name="HighlightBtn" Checked="Tool_Checked" ToolTip="Highlighter (M)">
+                    <Path Data="M 16 4 L 20 8 L 8 20 L 2 20 L 2 14 Z M 14 6 L 18 10 M 2 14 L 8 20 M 10 20 L 22 20" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Height="22" Stretch="Uniform"/>
+                </RadioButton>
+                <RadioButton Style="{StaticResource TailwindTool}" x:Name="LaserBtn" Checked="Tool_Checked" ToolTip="Neon Laser (L)">
+                    <Path Data="M 7 17 L 15 9 A 2 2 0 0 1 18 12 L 10 20 A 2 2 0 0 1 7 17 Z M 13 11 A 1 1 0 1 0 14 12 A 1 1 0 0 0 13 11 M 19 3 L 20 1 M 23 7 L 25 8 M 21 5 L 23 3" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Height="22" Stretch="Uniform"/>
+                </RadioButton>
+                <RadioButton Style="{StaticResource TailwindTool}" x:Name="EraserBtn" Checked="Tool_Checked" ToolTip="Eraser (E)">
+                    <Path Data="M 18 4 L 22 8 L 12 18 L 6 12 Z M 12 18 L 2 18 M 6 12 L 10 16" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Height="22" Stretch="Uniform"/>
+                </RadioButton>
+
+                <Rectangle Width="1" Fill="{DynamicResource BorderToolbar}" Margin="12,4"/>
+
+                <Button x:Name="ColorBtn" Style="{StaticResource TailwindButton}" Click="ColorBtn_Click" ToolTip="Main Color">
+                    <StackPanel Orientation="Horizontal">
+                        <Ellipse x:Name="ActiveColorIndicator" Width="16" Height="16" Fill="#EF4444" Stroke="{DynamicResource BorderToolbar}" StrokeThickness="1"/>
+                        <TextBlock Text="▼" FontSize="9" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+                
+                <Button x:Name="CoreColorBtn" Style="{StaticResource TailwindButton}" Click="CoreColorBtn_Click" ToolTip="Laser Core Color">
+                    <StackPanel Orientation="Horizontal">
+                        <Ellipse x:Name="ActiveCoreColorIndicator" Width="16" Height="16" Fill="#FFFFFF" Stroke="{DynamicResource BorderToolbar}" StrokeThickness="1"/>
+                        <TextBlock Text="▼" FontSize="9" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+
+                <Popup x:Name="ColorPopup" StaysOpen="False" PlacementTarget="{Binding ElementName=ColorBtn}" Placement="Top" VerticalOffset="-10">
+                    <Border Background="{DynamicResource BgToolbar}" BorderBrush="{DynamicResource BorderToolbar}" BorderThickness="1" CornerRadius="6" Padding="10">
+                        <Border.Effect><DropShadowEffect BlurRadius="10" Opacity="0.3" ShadowDepth="4"/></Border.Effect>
+                        <StackPanel>
+                            <TextBlock x:Name="PopupColorLabel" Text="Color Hex:" Foreground="{DynamicResource TextSecondary}" FontSize="11" Margin="0,0,0,4"/>
+                            <TextBox x:Name="HexInput" Text="#EF4444" Width="100" Background="{DynamicResource BgPrimary}" Foreground="{DynamicResource TextPrimary}" BorderBrush="{DynamicResource BorderToolbar}" Padding="4" Margin="0,0,0,8" TextChanged="HexInput_TextChanged"/>
+                            <WrapPanel Width="120" x:Name="PaletteGrid"/>
+                        </StackPanel>
+                    </Border>
+                </Popup>
+
+                <Slider x:Name="SizeSlider" Minimum="0.5" Maximum="50" Value="4" Width="60" VerticalAlignment="Center" Margin="5,0" ValueChanged="Size_Changed" IsMoveToPointEnabled="True"/>
+                <TextBox x:Name="SizeInput" Text="{Binding Value, ElementName=SizeSlider, UpdateSourceTrigger=PropertyChanged, StringFormat=F1}" Width="28" TextAlignment="Center" VerticalAlignment="Center" Margin="0,0,8,0" FontWeight="Bold" Background="Transparent" Foreground="{DynamicResource TextPrimary}" BorderThickness="0"/>
+
+                <CheckBox x:Name="StrokeEraserToggle" Content="Stroke Erase" IsChecked="True" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" Margin="0,0,10,0" Checked="EraserMode_Changed" Unchecked="EraserMode_Changed" FontWeight="SemiBold" ToolTip="Uncheck to erase exact pixels instead of whole strokes."/>
+
+                <Rectangle Width="1" Fill="{DynamicResource BorderToolbar}" Margin="5,4"/>
+
+                <Button x:Name="BgColorBtn" Style="{StaticResource TailwindButton}" Click="BgColorBtn_Click" ToolTip="Background Color">
+                    <StackPanel Orientation="Horizontal">
+                        <Rectangle x:Name="ActiveBgIndicator" Width="16" Height="16" Fill="#151515" Stroke="{DynamicResource BorderToolbar}" StrokeThickness="1" RadiusX="2" RadiusY="2"/>
+                        <TextBlock Text="▼" FontSize="9" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+                <Popup x:Name="BgColorPopup" StaysOpen="False" PlacementTarget="{Binding ElementName=BgColorBtn}" Placement="Top" VerticalOffset="-10">
+                    <Border Background="{DynamicResource BgToolbar}" BorderBrush="{DynamicResource BorderToolbar}" BorderThickness="1" CornerRadius="6" Padding="10">
+                        <Border.Effect><DropShadowEffect BlurRadius="10" Opacity="0.3" ShadowDepth="4"/></Border.Effect>
+                        <StackPanel>
+                            <TextBlock Text="Canvas Hex:" Foreground="{DynamicResource TextSecondary}" FontSize="11" Margin="0,0,0,4"/>
+                            <TextBox x:Name="BgHexInput" Text="#151515" Width="100" Background="{DynamicResource BgPrimary}" Foreground="{DynamicResource TextPrimary}" BorderBrush="{DynamicResource BorderToolbar}" Padding="4" Margin="0,0,0,8" TextChanged="BgHexInput_TextChanged"/>
+                            <WrapPanel Width="120" x:Name="BgPaletteGrid"/>
+                        </StackPanel>
+                    </Border>
+                </Popup>
+
+                <Button Style="{StaticResource TailwindButton}" Click="GridToggle_Click" ToolTip="Toggle Grid">
+                    <Path Data="M 3 3 L 21 3 L 21 21 L 3 21 Z M 9 3 L 9 21 M 15 3 L 15 21 M 3 9 L 21 9 M 3 15 L 21 15" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Height="16" Stretch="Uniform"/>
+                </Button>
+
+                <TextBlock Text="⏱️" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" Margin="5,0"/>
+                <TextBox x:Name="LaserDelayInput" Text="1.7" Width="28" TextAlignment="Center" VerticalAlignment="Center" Margin="0,0,10,0" FontWeight="Bold" Background="Transparent" Foreground="{DynamicResource Sky400}" BorderThickness="0" TextChanged="LaserDelayInput_TextChanged" ToolTip="Laser Fade Delay (seconds)"/>
+                
+                <Rectangle Width="1" Fill="{DynamicResource BorderToolbar}" Margin="0,4,12,4"/>
+                
+                <Button Style="{StaticResource TailwindButton}" Click="Theme_Click" ToolTip="Toggle Dark/Light Mode">
+                    <Path Data="M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 0 1-4.4 2.26 5.403 5.403 0 0 1-3.14-9.8c-.44-.06-.9-.1-1.36-.1z" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Height="16" Stretch="Uniform"/>
+                </Button>
+                <Button Style="{StaticResource TailwindButton}" Click="ClearInk_Click" ToolTip="Clear Board">
+                    <TextBlock Text="Clear" Foreground="{DynamicResource Rose500}" FontWeight="SemiBold"/>
+                </Button>
+            </WrapPanel>
+        </Border>
     </Grid>
 </Window>
 EOF
 
-# 5. Overwrite MainWindow.xaml.cs
+# 5. Overwrite MainWindow.xaml.cs 
 cat << 'EOF' > MainWindow.xaml.cs
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -329,6 +340,7 @@ namespace TeachingAnnotator
         private Color _highlightColor = Colors.Yellow;
         private double _laserSize = 6.0;
         private Color _laserColor = Color.FromRgb(239, 68, 68);
+        private Color _laserCoreColor = Colors.White;
 
         private List<LaserStrokeData> _laserStrokes = new List<LaserStrokeData>();
         private DispatcherTimer _laserTimer;
@@ -344,7 +356,11 @@ namespace TeachingAnnotator
 
         private bool _isDarkTheme = true;
         private bool _showGrid = true;
-        private Color _customBgColor = Color.FromRgb(40, 40, 40); 
+        private Color _customBgColor = Color.FromRgb(21, 23, 27); // Professional #15171B
+
+        // Dragging Logic
+        private bool _isDraggingToolbar = false;
+        private Point _toolbarDragStart;
 
         public MainWindow()
         {
@@ -360,6 +376,13 @@ namespace TeachingAnnotator
             LaserInkCanvas.Width = 3840; LaserInkCanvas.Height = 2160;
             CursorCanvas.Width = 3840; CursorCanvas.Height = 2160;
 
+            MainInkCanvas.SelectionChanged += MainInkCanvas_SelectionChanged;
+            MainInkCanvas.SelectionMoving += MainInkCanvas_SelectionMoving;
+            MainInkCanvas.SelectionResizing += MainInkCanvas_SelectionResizing;
+            MainInkCanvas.SelectionMoved += MainInkCanvas_SelectionMoved;
+            MainInkCanvas.SelectionResized += MainInkCanvas_SelectionResized;
+            MainInkCanvas.LayoutUpdated += MainInkCanvas_LayoutUpdated;
+
             _laserTimer = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(33) };
             _laserTimer.Tick += LaserTimer_Tick;
             _laserTimer.Start();
@@ -370,6 +393,109 @@ namespace TeachingAnnotator
             ApplyTheme();
         }
 
+        // --- TOOLBAR DRAGGING LOGIC ---
+        private void ToolbarDrag_MouseDown(object sender, MouseButtonEventArgs e)
+        {
+            _isDraggingToolbar = true;
+            _toolbarDragStart = e.GetPosition(this);
+            ((UIElement)sender).CaptureMouse();
+        }
+
+        private void ToolbarDrag_MouseMove(object sender, MouseEventArgs e)
+        {
+            if (_isDraggingToolbar)
+            {
+                Point current = e.GetPosition(this);
+                double diffX = current.X - _toolbarDragStart.X;
+                double diffY = current.Y - _toolbarDragStart.Y;
+
+                ToolbarTransform.X += diffX;
+                ToolbarTransform.Y += diffY;
+
+                _toolbarDragStart = current;
+            }
+        }
+
+        private void ToolbarDrag_MouseUp(object sender, MouseButtonEventArgs e)
+        {
+            _isDraggingToolbar = false;
+            ((UIElement)sender).ReleaseMouseCapture();
+        }
+
+        // --- GHOST OVERLAY (FOR YELLOW RESIZE HANDLES, NATIVE LASSO INTACT) ---
+        private void UpdateOverlay(Rect bounds)
+        {
+            if (bounds.IsEmpty || bounds.Width == 0 || bounds.Height == 0)
+            {
+                SelectionOverlay.Visibility = Visibility.Hidden;
+                return;
+            }
+
+            SelectionOverlay.Visibility = Visibility.Visible;
+
+            double pad = 2;
+            double left = bounds.Left - pad;
+            double top = bounds.Top - pad;
+            double width = bounds.Width + (pad * 2);
+            double height = bounds.Height + (pad * 2);
+
+            CustomSelectionRect.Width = width;
+            CustomSelectionRect.Height = height;
+            Canvas.SetLeft(CustomSelectionRect, left);
+            Canvas.SetTop(CustomSelectionRect, top);
+
+            double halfW = width / 2;
+            double halfH = height / 2;
+            double hw = 4.5; 
+
+            Canvas.SetLeft(H_TL, left - hw); Canvas.SetTop(H_TL, top - hw);
+            Canvas.SetLeft(H_TC, left + halfW - hw); Canvas.SetTop(H_TC, top - hw);
+            Canvas.SetLeft(H_TR, left + width - hw); Canvas.SetTop(H_TR, top - hw);
+            
+            Canvas.SetLeft(H_ML, left - hw); Canvas.SetTop(H_ML, top + halfH - hw);
+            Canvas.SetLeft(H_MR, left + width - hw); Canvas.SetTop(H_MR, top + halfH - hw);
+            
+            Canvas.SetLeft(H_BL, left - hw); Canvas.SetTop(H_BL, top + height - hw);
+            Canvas.SetLeft(H_BC, left + halfW - hw); Canvas.SetTop(H_BC, top + height - hw);
+            Canvas.SetLeft(H_BR, left + width - hw); Canvas.SetTop(H_BR, top + height - hw);
+        }
+
+        private void MainInkCanvas_SelectionChanged(object? sender, EventArgs e) => UpdateOverlay(MainInkCanvas.GetSelectionBounds());
+        private void MainInkCanvas_SelectionMoved(object? sender, EventArgs e) => UpdateOverlay(MainInkCanvas.GetSelectionBounds());
+        private void MainInkCanvas_SelectionResized(object? sender, EventArgs e) => UpdateOverlay(MainInkCanvas.GetSelectionBounds());
+        private void MainInkCanvas_SelectionMoving(object? sender, InkCanvasSelectionEditingEventArgs e) => UpdateOverlay(e.NewRectangle);
+        private void MainInkCanvas_SelectionResizing(object? sender, InkCanvasSelectionEditingEventArgs e) => UpdateOverlay(e.NewRectangle);
+
+        private void MainInkCanvas_LayoutUpdated(object? sender, EventArgs e)
+        {
+            if (MainInkCanvas.GetSelectedStrokes().Count > 0)
+            {
+                if (VisualTreeHelper.GetChildrenCount(MainInkCanvas) > 0)
+                {
+                    var innerCanvas = VisualTreeHelper.GetChild(MainInkCanvas, 0) as UIElement;
+                    if (innerCanvas != null)
+                    {
+                        var layer = System.Windows.Documents.AdornerLayer.GetAdornerLayer(innerCanvas);
+                        if (layer != null)
+                        {
+                            var adorners = layer.GetAdorners(innerCanvas);
+                            if (adorners != null)
+                            {
+                                foreach (var adorner in adorners)
+                                {
+                                    if (adorner.GetType().Name == "InkCanvasSelectionAdorner")
+                                    {
+                                        adorner.Opacity = 0.01;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- PALETTES ---
         private void BuildPaletteGrid()
         {
             string[] toolHexes = { "#EF4444", "#3B82F6", "#22C55E", "#EAB308", "#A855F7", "#F97316", "#EC4899", "#14B8A6", "#FFFFFF", "#000000" };
@@ -380,7 +506,7 @@ namespace TeachingAnnotator
                 PaletteGrid.Children.Add(r);
             }
 
-            string[] bgHexes = { "#282828", "#1E1E1E", "#000000", "#111827", "#0F172A", "#FFFFFF", "#F8FAFC", "#F3F4F6", "#FEF3C7", "#ECFEFF" };
+            string[] bgHexes = { "#15171B", "#1E1E1E", "#282828", "#000000", "#111827", "#0F172A", "#FFFFFF", "#F8FAFC", "#F3F4F6", "#FEF3C7" };
             foreach (string hex in bgHexes)
             {
                 Rectangle r = new Rectangle { Width = 20, Height = 20, Margin = new Thickness(2), RadiusX = 4, RadiusY = 4, Fill = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex)), Cursor = Cursors.Hand };
@@ -389,7 +515,9 @@ namespace TeachingAnnotator
             }
         }
 
-        private void ColorBtn_Click(object sender, RoutedEventArgs e) => ColorPopup.IsOpen = true;
+        private bool _isEditingCoreColor = false;
+        private void ColorBtn_Click(object sender, RoutedEventArgs e) { _isEditingCoreColor = false; PopupColorLabel.Text = "Color Hex:"; HexInput.Text = ((SolidColorBrush)ActiveColorIndicator.Fill).Color.ToString(); ColorPopup.IsOpen = true; }
+        private void CoreColorBtn_Click(object sender, RoutedEventArgs e) { _isEditingCoreColor = true; PopupColorLabel.Text = "Core Hex:"; HexInput.Text = ((SolidColorBrush)ActiveCoreColorIndicator.Fill).Color.ToString(); ColorPopup.IsOpen = true; }
         private void BgColorBtn_Click(object sender, RoutedEventArgs e) => BgColorPopup.IsOpen = true;
 
         private void HexInput_TextChanged(object sender, TextChangedEventArgs e)
@@ -397,10 +525,18 @@ namespace TeachingAnnotator
             try
             {
                 Color c = (Color)ColorConverter.ConvertFromString(HexInput.Text);
-                ActiveColorIndicator.Fill = new SolidColorBrush(c);
-                if (PenBtn.IsChecked == true) _penColor = c;
-                else if (HighlightBtn.IsChecked == true) _highlightColor = c;
-                else if (LaserBtn.IsChecked == true) _laserColor = c;
+                if (_isEditingCoreColor)
+                {
+                    _laserCoreColor = c;
+                    ActiveCoreColorIndicator.Fill = new SolidColorBrush(c);
+                }
+                else
+                {
+                    ActiveColorIndicator.Fill = new SolidColorBrush(c);
+                    if (PenBtn.IsChecked == true) _penColor = c;
+                    else if (HighlightBtn.IsChecked == true) _highlightColor = c;
+                    else if (LaserBtn.IsChecked == true) _laserColor = c;
+                }
                 ApplyPenAttributes();
             }
             catch { }
@@ -435,7 +571,7 @@ namespace TeachingAnnotator
         private void Theme_Click(object sender, RoutedEventArgs e)
         {
             _isDarkTheme = !_isDarkTheme;
-            if (_isDarkTheme) { BgHexInput.Text = "#282828"; } else { BgHexInput.Text = "#FFFFFF"; }
+            if (_isDarkTheme) { BgHexInput.Text = "#15171B"; } else { BgHexInput.Text = "#FFFFFF"; }
             ApplyTheme();
             UpdateCustomCursorAppearance();
         }
@@ -444,28 +580,29 @@ namespace TeachingAnnotator
         {
             if (_isDarkTheme)
             {
-                Resources["BgPrimary"] = new SolidColorBrush(Colors.Black); // Pure black outer
-                Resources["BgToolbar"] = new SolidColorBrush(Colors.Black);
-                Resources["BorderToolbar"] = new SolidColorBrush(Color.FromRgb(51, 65, 85));
+                Resources["BgPrimary"] = new SolidColorBrush(Colors.Black); 
+                Resources["BgToolbar"] = new SolidColorBrush(Color.FromRgb(21, 23, 27)); // #15171B UI
+                Resources["BorderToolbar"] = new SolidColorBrush(Color.FromRgb(42, 45, 53)); // #2A2D35
                 Resources["TextPrimary"] = new SolidColorBrush(Color.FromRgb(248, 250, 252));
-                Resources["TextSecondary"] = new SolidColorBrush(Color.FromRgb(203, 213, 225));
-                Resources["ButtonHoverBg"] = new SolidColorBrush(Color.FromRgb(51, 65, 85));
+                Resources["TextSecondary"] = new SolidColorBrush(Color.FromRgb(161, 161, 170));
+                Resources["ButtonHoverBg"] = new SolidColorBrush(Color.FromRgb(37, 40, 45));
                 Resources["ButtonHoverText"] = new SolidColorBrush(Colors.White);
             }
             else
             {
                 Resources["BgPrimary"] = new SolidColorBrush(Color.FromRgb(243, 244, 246));
-                Resources["BgToolbar"] = new SolidColorBrush(Color.FromRgb(243, 244, 246));
-                Resources["BorderToolbar"] = new SolidColorBrush(Color.FromRgb(209, 213, 219));
+                Resources["BgToolbar"] = new SolidColorBrush(Colors.White);
+                Resources["BorderToolbar"] = new SolidColorBrush(Color.FromRgb(229, 231, 235));
                 Resources["TextPrimary"] = new SolidColorBrush(Colors.Black); 
-                Resources["TextSecondary"] = new SolidColorBrush(Color.FromRgb(55, 65, 81)); 
-                Resources["ButtonHoverBg"] = new SolidColorBrush(Color.FromRgb(229, 231, 235));
+                Resources["TextSecondary"] = new SolidColorBrush(Color.FromRgb(75, 85, 99)); 
+                Resources["ButtonHoverBg"] = new SolidColorBrush(Color.FromRgb(243, 244, 246));
                 Resources["ButtonHoverText"] = new SolidColorBrush(Colors.Black);
             }
 
             if (string.IsNullOrEmpty(_currentPdfPath))
             {
-                Color lineColor = _isDarkTheme ? Color.FromRgb(60, 60, 60) : Color.FromRgb(229, 231, 235);
+                // Subtle professional grid lines
+                Color lineColor = _isDarkTheme ? Color.FromRgb(34, 34, 34) : Color.FromRgb(229, 231, 235);
                 Workspace.Background = CreateGridBrush(_customBgColor, lineColor);
             }
         }
@@ -511,7 +648,7 @@ namespace TeachingAnnotator
 
         private void UpdatePageUI()
         {
-            PageCounterText.Text = $"{_currentPage} / {_totalPages}";
+            PageCounterText.Text = $"{_currentPage}/{_totalPages}";
         }
 
         private void PrevPage_Click(object sender, RoutedEventArgs e)
@@ -535,6 +672,16 @@ namespace TeachingAnnotator
                 LoadPage(_currentPage);
                 UpdatePageUI();
             }
+        }
+
+        private void AddPage_Click(object sender, RoutedEventArgs e)
+        {
+            if (!string.IsNullOrEmpty(_currentPdfPath)) return;
+            SaveCurrentPage();
+            _totalPages++;
+            _currentPage = _totalPages;
+            LoadPage(_currentPage);
+            UpdatePageUI();
         }
 
         private void DeletePage_Click(object sender, RoutedEventArgs e)
@@ -571,6 +718,7 @@ namespace TeachingAnnotator
                 _redoStack.Push(MainInkCanvas.Strokes.Clone());
                 MainInkCanvas.Strokes = _undoStack.Pop();
                 _isUpdatingUI = false;
+                UpdateOverlay(MainInkCanvas.GetSelectionBounds());
             }
         }
 
@@ -582,6 +730,7 @@ namespace TeachingAnnotator
                 _undoStack.Push(MainInkCanvas.Strokes.Clone());
                 MainInkCanvas.Strokes = _redoStack.Pop();
                 _isUpdatingUI = false;
+                UpdateOverlay(MainInkCanvas.GetSelectionBounds());
             }
         }
 
@@ -621,23 +770,18 @@ namespace TeachingAnnotator
                 {
                     SaveUndoState();
                     MainInkCanvas.Strokes.Remove(selectedStrokes);
+                    UpdateOverlay(Rect.Empty);
                     return;
                 }
             }
 
             if (SizeInput.IsFocused || HexInput.IsFocused || BgHexInput.IsFocused || LaserDelayInput.IsFocused) return;
 
+            if (e.Key == Key.H) MainToolbar.Visibility = MainToolbar.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
+            
             if (e.Key == Key.T) { Theme_Click(null, null); return; }
-
             if (e.Key == Key.OemComma) SizeSlider.Value = Math.Max(SizeSlider.Minimum, SizeSlider.Value - 1.0);
             if (e.Key == Key.OemPeriod) SizeSlider.Value = Math.Min(SizeSlider.Maximum, SizeSlider.Value + 1.0);
-
-            if (e.Key == Key.F)
-            {
-                if (this.WindowStyle == WindowStyle.None) { this.WindowStyle = WindowStyle.SingleBorderWindow; this.WindowState = WindowState.Normal; this.Topmost = false; }
-                else { this.WindowStyle = WindowStyle.None; this.WindowState = WindowState.Maximized; this.Topmost = true; }
-            }
-            if (e.Key == Key.H) MainToolbar.Visibility = MainToolbar.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
             if (e.Key == Key.P) PenBtn.IsChecked = true;
             else if (e.Key == Key.M) HighlightBtn.IsChecked = true; 
             else if (e.Key == Key.E) EraserBtn.IsChecked = true;
@@ -661,8 +805,6 @@ namespace TeachingAnnotator
             ApplyPenAttributes();
         }
 
-        private void Color_Changed(object sender, SelectionChangedEventArgs e) { }
-
         private void Size_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
             if (_isUpdatingUI) return;
@@ -674,6 +816,7 @@ namespace TeachingAnnotator
         }
 
         private void Pressure_Changed(object sender, RoutedEventArgs e) => ApplyPenAttributes();
+        private void EraserMode_Changed(object sender, RoutedEventArgs e) => ApplyPenAttributes();
 
         private void ApplyPenAttributes()
         {
@@ -689,7 +832,7 @@ namespace TeachingAnnotator
                 LaserInkCanvas.IsHitTestVisible = true;
                 
                 LaserInkCanvas.EditingMode = InkCanvasEditingMode.Ink;
-                LaserInkCanvas.DefaultDrawingAttributes = new DrawingAttributes { Color = Colors.White, Width = activeSize, Height = activeSize, FitToCurve = true, IgnorePressure = true };
+                LaserInkCanvas.DefaultDrawingAttributes = new DrawingAttributes { Color = _laserCoreColor, Width = activeSize, Height = activeSize, FitToCurve = true, IgnorePressure = true, StylusTip = StylusTip.Ellipse };
                 LaserInkCanvas.Effect = new System.Windows.Media.Effects.DropShadowEffect { Color = activeColor, BlurRadius = 15, ShadowDepth = 0, Opacity = 1.0 };
             }
             else
@@ -700,16 +843,26 @@ namespace TeachingAnnotator
                 if (PenBtn.IsChecked == true)
                 {
                     MainInkCanvas.EditingMode = InkCanvasEditingMode.Ink;
-                    MainInkCanvas.DefaultDrawingAttributes = new DrawingAttributes { Color = activeColor, Width = activeSize, Height = activeSize, FitToCurve = true, IgnorePressure = ignorePressure };
+                    MainInkCanvas.DefaultDrawingAttributes = new DrawingAttributes { Color = activeColor, Width = activeSize, Height = activeSize, FitToCurve = true, IgnorePressure = ignorePressure, StylusTip = StylusTip.Ellipse };
                 }
                 else if (HighlightBtn.IsChecked == true)
                 {
                     MainInkCanvas.EditingMode = InkCanvasEditingMode.Ink;
-                    MainInkCanvas.DefaultDrawingAttributes = new DrawingAttributes { Color = Color.FromArgb(120, activeColor.R, activeColor.G, activeColor.B), Width = activeSize * 4, Height = activeSize * 4, StylusTip = StylusTip.Rectangle, IsHighlighter = true, IgnorePressure = true };
+                    // ROUNDED HIGHLIGHTER
+                    MainInkCanvas.DefaultDrawingAttributes = new DrawingAttributes { Color = Color.FromArgb(120, activeColor.R, activeColor.G, activeColor.B), Width = activeSize * 4, Height = activeSize * 4, StylusTip = StylusTip.Ellipse, IsHighlighter = true, IgnorePressure = true };
                 }
                 else if (EraserBtn.IsChecked == true)
                 {
-                    MainInkCanvas.EditingMode = InkCanvasEditingMode.EraseByStroke;
+                    // DYNAMIC ERASER TOGGLE (Stroke vs Normal Point)
+                    if (StrokeEraserToggle.IsChecked == true)
+                    {
+                        MainInkCanvas.EditingMode = InkCanvasEditingMode.EraseByStroke;
+                    }
+                    else
+                    {
+                        MainInkCanvas.EditingMode = InkCanvasEditingMode.EraseByPoint;
+                        MainInkCanvas.EraserShape = new EllipseStylusShape(activeSize * 4, activeSize * 4);
+                    }
                 }
                 else if (SelectBtn.IsChecked == true)
                 {
@@ -736,7 +889,7 @@ namespace TeachingAnnotator
             
             if (LaserBtn.IsChecked == true) 
             {
-                CustomDotCursor.Fill = new SolidColorBrush(Colors.White); // ZERO OUTLINE, PURE WHITE DOT
+                CustomDotCursor.Fill = new SolidColorBrush(_laserCoreColor);
                 CustomDotCursor.StrokeThickness = 0; 
                 CursorGlow.Color = c; 
                 CursorGlow.Opacity = 1.0; 
@@ -745,7 +898,7 @@ namespace TeachingAnnotator
             } 
             else if (EraserBtn.IsChecked == true) 
             {
-                size = 20; 
+                if (StrokeEraserToggle.IsChecked == true) size = 20; else size *= 4;
                 CustomDotCursor.StrokeThickness = 1;
                 CustomDotCursor.Stroke = new SolidColorBrush(Colors.Black);
                 CustomDotCursor.Fill = new SolidColorBrush(Color.FromArgb(100, 255, 255, 255));
@@ -812,8 +965,7 @@ namespace TeachingAnnotator
                     }
                     else
                     {
-                        // Fading the White core opacity safely
-                        ls.Stroke.DrawingAttributes.Color = Color.FromArgb((byte)Math.Max(0, ls.Life), 255, 255, 255);
+                        ls.Stroke.DrawingAttributes.Color = Color.FromArgb((byte)Math.Max(0, ls.Life), _laserCoreColor.R, _laserCoreColor.G, _laserCoreColor.B);
                     }
                 }
                 else
@@ -821,7 +973,7 @@ namespace TeachingAnnotator
                     if (ls.Life < 255)
                     {
                         ls.Life = 255;
-                        ls.Stroke.DrawingAttributes.Color = Color.FromArgb(255, 255, 255, 255);
+                        ls.Stroke.DrawingAttributes.Color = Color.FromArgb(255, _laserCoreColor.R, _laserCoreColor.G, _laserCoreColor.B);
                     }
                 }
             }
@@ -838,6 +990,7 @@ namespace TeachingAnnotator
                 LaserInkCanvas.Strokes.Clear();
                 _undoStack.Clear();
                 _redoStack.Clear();
+                UpdateOverlay(Rect.Empty);
 
                 try 
                 {
@@ -882,7 +1035,6 @@ namespace TeachingAnnotator
                     }
 
                     Workspace.Background = new SolidColorBrush(Colors.Transparent);
-                    PaginationPanel.Visibility = Visibility.Collapsed;
                     
                     Workspace.Width = maxWidth; Workspace.Height = currentY;
                     MainInkCanvas.Width = maxWidth; MainInkCanvas.Height = currentY;
@@ -896,6 +1048,10 @@ namespace TeachingAnnotator
 
         private void ExportAnnotated_Click(object sender, RoutedEventArgs e)
         {
+            MessageBoxResult exportType = MessageBox.Show("Do you want to include your ink annotations in the exported PDF?\n\nYes = Export Annotated PDF\nNo = Export Clean Original Document/Grid", "Export Options", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
+            if (exportType == MessageBoxResult.Cancel) return;
+            bool exportAnnotations = (exportType == MessageBoxResult.Yes);
+
             if (string.IsNullOrEmpty(_currentPdfPath)) 
             { 
                 SaveFileDialog wbdlg = new SaveFileDialog { Filter = "PDF (*.pdf)|*.pdf", FileName = "Anydraw_Whiteboard.pdf" };
@@ -906,8 +1062,8 @@ namespace TeachingAnnotator
                         SaveCurrentPage();
                         PdfSharp.Pdf.PdfDocument wbDoc = new PdfSharp.Pdf.PdfDocument();
                         
-                        XColor bgColor = _isDarkTheme ? XColor.FromArgb(255, _customBgColor.R, _customBgColor.G, _customBgColor.B) : XColor.FromArgb(255, 255, 255, 255);
-                        XColor gridColor = _isDarkTheme ? XColor.FromArgb(255, 60, 60, 60) : XColor.FromArgb(255, 229, 231, 235);
+                        XColor bgColor = XColor.FromArgb(255, _customBgColor.R, _customBgColor.G, _customBgColor.B);
+                        XColor gridColor = _isDarkTheme ? XColor.FromArgb(255, 34, 34, 34) : XColor.FromArgb(255, 229, 231, 235);
 
                         for (int i = 1; i <= _totalPages; i++)
                         {
@@ -923,42 +1079,45 @@ namespace TeachingAnnotator
                                 for (double y = 0; y < wbPage.Height.Point; y += 40) gfx.DrawLine(gridPen, 0, y, wbPage.Width.Point, y);
                             }
 
-                            double scaleX = wbPage.Width.Point / Workspace.Width;
-                            double scaleY = wbPage.Height.Point / Workspace.Height;
-
-                            StrokeCollection pageStrokes = (i == _currentPage) ? MainInkCanvas.Strokes : 
-                                (_whiteboardPages.ContainsKey(i) ? _whiteboardPages[i] : new StrokeCollection());
-
-                            foreach (Stroke stroke in pageStrokes)
+                            if (exportAnnotations)
                             {
-                                XColor color = XColor.FromArgb(stroke.DrawingAttributes.Color.A, stroke.DrawingAttributes.Color.R, stroke.DrawingAttributes.Color.G, stroke.DrawingAttributes.Color.B);
-                                double baseThickness = stroke.DrawingAttributes.Width * scaleX;
-                                StylusPointCollection points = stroke.StylusPoints;
+                                double scaleX = wbPage.Width.Point / Workspace.Width;
+                                double scaleY = wbPage.Height.Point / Workspace.Height;
 
-                                if (points.Count > 1)
+                                StrokeCollection pageStrokes = (i == _currentPage) ? MainInkCanvas.Strokes : 
+                                    (_whiteboardPages.ContainsKey(i) ? _whiteboardPages[i] : new StrokeCollection());
+
+                                foreach (Stroke stroke in pageStrokes)
                                 {
-                                    if (stroke.DrawingAttributes.IsHighlighter || stroke.DrawingAttributes.IgnorePressure)
+                                    XColor color = XColor.FromArgb(stroke.DrawingAttributes.Color.A, stroke.DrawingAttributes.Color.R, stroke.DrawingAttributes.Color.G, stroke.DrawingAttributes.Color.B);
+                                    double baseThickness = stroke.DrawingAttributes.Width * scaleX;
+                                    StylusPointCollection points = stroke.StylusPoints;
+
+                                    if (points.Count > 1)
                                     {
-                                        XGraphicsPath path = new XGraphicsPath();
-                                        XPoint[] xPoints = new XPoint[points.Count];
-                                        for (int j = 0; j < points.Count; j++) { xPoints[j] = new XPoint(points[j].X * scaleX, points[j].Y * scaleY); }
-                                        path.AddLines(xPoints);
-                                        
-                                        XLineCap cap = stroke.DrawingAttributes.IsHighlighter ? XLineCap.Square : XLineCap.Round;
-                                        XPen pathPen = new XPen(color, baseThickness) { LineCap = cap, LineJoin = XLineJoin.Round };
-                                        gfx.DrawPath(pathPen, path);
-                                    }
-                                    else
-                                    {
-                                        for (int j = 0; j < points.Count - 1; j++)
+                                        if (stroke.DrawingAttributes.IsHighlighter || stroke.DrawingAttributes.IgnorePressure)
                                         {
-                                            var p1 = points[j]; var p2 = points[j + 1];
-                                            double x1 = p1.X * scaleX; double y1 = p1.Y * scaleY;
-                                            double x2 = p2.X * scaleX; double y2 = p2.Y * scaleY;
-                                            double pFactor = p1.PressureFactor * 2.0;
+                                            XGraphicsPath path = new XGraphicsPath();
+                                            XPoint[] xPoints = new XPoint[points.Count];
+                                            for (int j = 0; j < points.Count; j++) { xPoints[j] = new XPoint(points[j].X * scaleX, points[j].Y * scaleY); }
+                                            path.AddLines(xPoints);
                                             
-                                            XPen segmentPen = new XPen(color, baseThickness * pFactor) { LineCap = XLineCap.Round };
-                                            gfx.DrawLine(segmentPen, x1, y1, x2, y2);
+                                            XLineCap cap = stroke.DrawingAttributes.IsHighlighter ? XLineCap.Square : XLineCap.Round;
+                                            XPen pathPen = new XPen(color, baseThickness) { LineCap = cap, LineJoin = XLineJoin.Round };
+                                            gfx.DrawPath(pathPen, path);
+                                        }
+                                        else
+                                        {
+                                            for (int j = 0; j < points.Count - 1; j++)
+                                            {
+                                                var p1 = points[j]; var p2 = points[j + 1];
+                                                double x1 = p1.X * scaleX; double y1 = p1.Y * scaleY;
+                                                double x2 = p2.X * scaleX; double y2 = p2.Y * scaleY;
+                                                double pFactor = p1.PressureFactor * 2.0;
+                                                
+                                                XPen segmentPen = new XPen(color, baseThickness * pFactor) { LineCap = XLineCap.Round };
+                                                gfx.DrawLine(segmentPen, x1, y1, x2, y2);
+                                            }
                                         }
                                     }
                                 }
@@ -972,64 +1131,67 @@ namespace TeachingAnnotator
                 return;
             }
 
-            SaveFileDialog dlg = new SaveFileDialog { Filter = "PDF (*.pdf)|*.pdf", FileName = "Anydraw_Annotated_Document.pdf" };
-            if (dlg.ShowDialog() == true)
+            SaveFileDialog annotatedDlg = new SaveFileDialog { Filter = "PDF (*.pdf)|*.pdf", FileName = exportAnnotations ? "Anydraw_Annotated_Document.pdf" : "Anydraw_Clean_Document.pdf" };
+            if (annotatedDlg.ShowDialog() == true)
             {
                 try
                 {
                     PdfSharp.Pdf.PdfDocument document = PdfReader.Open(_currentPdfPath, PdfDocumentOpenMode.Modify);
 
-                    for (int i = 0; i < document.Pages.Count; i++)
+                    if (exportAnnotations)
                     {
-                        if (i >= PdfPages.Count) break;
-                        
-                        PdfSharp.Pdf.PdfPage pdfPage = document.Pages[i];
-                        XGraphics gfx = XGraphics.FromPdfPage(pdfPage);
-                        PdfPageModel uiPage = PdfPages[i];
-
-                        double scaleX = pdfPage.Width.Point / uiPage.Width;
-                        double scaleY = pdfPage.Height.Point / uiPage.Height;
-
-                        foreach (Stroke stroke in MainInkCanvas.Strokes)
+                        for (int i = 0; i < document.Pages.Count; i++)
                         {
-                            Rect bounds = stroke.GetBounds();
-                            if (bounds.Bottom >= uiPage.StartY && bounds.Top <= (uiPage.StartY + uiPage.Height))
-                            {
-                                XColor color = XColor.FromArgb(stroke.DrawingAttributes.Color.A, stroke.DrawingAttributes.Color.R, stroke.DrawingAttributes.Color.G, stroke.DrawingAttributes.Color.B);
-                                double baseThickness = stroke.DrawingAttributes.Width * scaleX;
-                                StylusPointCollection points = stroke.StylusPoints;
+                            if (i >= PdfPages.Count) break;
+                            
+                            PdfSharp.Pdf.PdfPage pdfPage = document.Pages[i];
+                            XGraphics gfx = XGraphics.FromPdfPage(pdfPage);
+                            PdfPageModel uiPage = PdfPages[i];
 
-                                if (points.Count > 1)
+                            double scaleX = pdfPage.Width.Point / uiPage.Width;
+                            double scaleY = pdfPage.Height.Point / uiPage.Height;
+
+                            foreach (Stroke stroke in MainInkCanvas.Strokes)
+                            {
+                                Rect bounds = stroke.GetBounds();
+                                if (bounds.Bottom >= uiPage.StartY && bounds.Top <= (uiPage.StartY + uiPage.Height))
                                 {
-                                    if (stroke.DrawingAttributes.IsHighlighter || stroke.DrawingAttributes.IgnorePressure)
+                                    XColor color = XColor.FromArgb(stroke.DrawingAttributes.Color.A, stroke.DrawingAttributes.Color.R, stroke.DrawingAttributes.Color.G, stroke.DrawingAttributes.Color.B);
+                                    double baseThickness = stroke.DrawingAttributes.Width * scaleX;
+                                    StylusPointCollection points = stroke.StylusPoints;
+
+                                    if (points.Count > 1)
                                     {
-                                        XGraphicsPath path = new XGraphicsPath();
-                                        XPoint[] xPoints = new XPoint[points.Count];
-                                        for (int j = 0; j < points.Count; j++) { xPoints[j] = new XPoint(points[j].X * scaleX, (points[j].Y - uiPage.StartY) * scaleY); }
-                                        path.AddLines(xPoints);
-                                        
-                                        XLineCap cap = stroke.DrawingAttributes.IsHighlighter ? XLineCap.Square : XLineCap.Round;
-                                        XPen pathPen = new XPen(color, baseThickness) { LineCap = cap, LineJoin = XLineJoin.Round };
-                                        gfx.DrawPath(pathPen, path);
-                                    }
-                                    else
-                                    {
-                                        for (int j = 0; j < points.Count - 1; j++)
+                                        if (stroke.DrawingAttributes.IsHighlighter || stroke.DrawingAttributes.IgnorePressure)
                                         {
-                                            var p1 = points[j]; var p2 = points[j + 1];
-                                            double x1 = p1.X * scaleX; double y1 = (p1.Y - uiPage.StartY) * scaleY;
-                                            double x2 = p2.X * scaleX; double y2 = (p2.Y - uiPage.StartY) * scaleY;
-                                            double pFactor = p1.PressureFactor * 2.0;
+                                            XGraphicsPath path = new XGraphicsPath();
+                                            XPoint[] xPoints = new XPoint[points.Count];
+                                            for (int j = 0; j < points.Count; j++) { xPoints[j] = new XPoint(points[j].X * scaleX, (points[j].Y - uiPage.StartY) * scaleY); }
+                                            path.AddLines(xPoints);
                                             
-                                            XPen segmentPen = new XPen(color, baseThickness * pFactor) { LineCap = XLineCap.Round };
-                                            gfx.DrawLine(segmentPen, x1, y1, x2, y2);
+                                            XLineCap cap = stroke.DrawingAttributes.IsHighlighter ? XLineCap.Square : XLineCap.Round;
+                                            XPen pathPen = new XPen(color, baseThickness) { LineCap = cap, LineJoin = XLineJoin.Round };
+                                            gfx.DrawPath(pathPen, path);
+                                        }
+                                        else
+                                        {
+                                            for (int j = 0; j < points.Count - 1; j++)
+                                            {
+                                                var p1 = points[j]; var p2 = points[j + 1];
+                                                double x1 = p1.X * scaleX; double y1 = (p1.Y - uiPage.StartY) * scaleY;
+                                                double x2 = p2.X * scaleX; double y2 = (p2.Y - uiPage.StartY) * scaleY;
+                                                double pFactor = p1.PressureFactor * 2.0;
+                                                
+                                                XPen segmentPen = new XPen(color, baseThickness * pFactor) { LineCap = XLineCap.Round };
+                                                gfx.DrawLine(segmentPen, x1, y1, x2, y2);
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
                     }
-                    document.Save(dlg.FileName);
+                    document.Save(annotatedDlg.FileName);
                     MessageBox.Show("Vector PDF Exported Successfully!");
                 }
                 catch (Exception ex) { MessageBox.Show("Export failed: " + ex.Message); }
@@ -1041,6 +1203,7 @@ namespace TeachingAnnotator
             SaveUndoState();
             MainInkCanvas.Strokes.Clear();
             LaserInkCanvas.Strokes.Clear();
+            UpdateOverlay(Rect.Empty);
         }
 
         private void PerformZoomIn() { _zoom += 0.25; ZoomTransform.ScaleX = _zoom; ZoomTransform.ScaleY = _zoom; }
