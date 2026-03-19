@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping the Native WPF Annotator (Ultimate Laser Physics Edition)..."
+echo "🚀 Bootstrapping the Native WPF Annotator (Smooth Dissolve Laser Edition)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -41,6 +41,10 @@ cat << 'EOF' > MainWindow.xaml
         KeyDown="Window_KeyDown" FontFamily="Segoe UI, Helvetica, Arial, sans-serif">
 
     <Window.Resources>
+        <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#FFFF00"/>
+        <SolidColorBrush x:Key="{x:Static SystemColors.WindowFrameBrushKey}" Color="#FFFF00"/>
+        <SolidColorBrush x:Key="{x:Static SystemColors.ActiveBorderBrushKey}" Color="#FFFF00"/>
+
         <SolidColorBrush x:Key="Slate300" Color="#CBD5E1"/>
         <SolidColorBrush x:Key="Slate50" Color="#F8FAFC"/>
         <SolidColorBrush x:Key="Sky400" Color="#38BDF8"/>
@@ -253,7 +257,7 @@ cat << 'EOF' > MainWindow.xaml
 </Window>
 EOF
 
-# 5. Overwrite MainWindow.xaml.cs
+# 5. Overwrite MainWindow.xaml.cs 
 cat << 'EOF' > MainWindow.xaml.cs
 using System;
 using System.Collections.Generic;
@@ -776,7 +780,7 @@ namespace TeachingAnnotator
             if (LaserBtn.IsChecked == true) 
             {
                 CustomDotCursor.Fill = new SolidColorBrush(c);
-                CustomDotCursor.StrokeThickness = 0; // ZERO OUTLINE FOR LASER DOT
+                CustomDotCursor.StrokeThickness = 0;
 
                 CursorGlow.Color = c; 
                 CursorGlow.Opacity = 0.65; 
@@ -829,7 +833,7 @@ namespace TeachingAnnotator
             _lastLaserActivityTime = DateTime.Now; 
         }
 
-        // --- HYPER ACCURATE TAIL-SHRINKING LASER DISSOLVE ---
+        // --- HYPER ACCURATE FADE-ONLY LASER DISSOLVE ---
         private void LaserTimer_Tick(object? sender, EventArgs e)
         {
             if (_laserStrokes.Count == 0) return;
@@ -838,22 +842,12 @@ namespace TeachingAnnotator
             {
                 var ls = _laserStrokes[i];
                 
-                if ((DateTime.Now - ls.CreatedAt).TotalSeconds > 0.8)
+                // Wait 2.0 seconds before fading
+                if ((DateTime.Now - ls.CreatedAt).TotalSeconds > 2.0)
                 {
-                    ls.Life -= 12; // Smooth fade
+                    ls.Life -= 15; // Smooth opacity dissolve (no tail shrinking)
 
-                    // Physics: Eat the tail of the stroke so it shrinks out of existence
-                    try 
-                    {
-                        if (ls.Stroke.StylusPoints.Count > 5)
-                        {
-                            ls.Stroke.StylusPoints.RemoveAt(0);
-                            ls.Stroke.StylusPoints.RemoveAt(0);
-                            ls.Stroke.StylusPoints.RemoveAt(0);
-                        }
-                    } catch { }
-
-                    if (ls.Life <= 0 || ls.Stroke.StylusPoints.Count <= 2)
+                    if (ls.Life <= 0)
                     {
                         _isUpdatingUI = true;
                         LaserInkCanvas.Strokes.Remove(ls.Stroke);
@@ -862,6 +856,7 @@ namespace TeachingAnnotator
                     }
                     else
                     {
+                        // Apply accurate dissolve to the entire line simultaneously
                         var c = ls.Stroke.DrawingAttributes.Color;
                         ls.Stroke.DrawingAttributes.Color = Color.FromArgb((byte)Math.Max(0, ls.Life), c.R, c.G, c.B);
                     }
