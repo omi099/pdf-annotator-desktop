@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping Anydraw V3 (Final Zero-Error Native Selection Edition)..."
+echo "🚀 Bootstrapping Anydraw V3 (100% Stable Core Edition)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -284,6 +284,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -355,7 +356,6 @@ namespace TeachingAnnotator
         public MainWindow()
         {
             InitializeComponent();
-            SetAppIcon(); // DYNAMIC TASKBAR LOGO GENERATOR
             
             PdfItemsControl.ItemsSource = PdfPages;
             System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
@@ -376,25 +376,6 @@ namespace TeachingAnnotator
             SyncToolToUI();
             UpdatePageUI();
             ApplyTheme();
-        }
-
-        private void SetAppIcon()
-        {
-            int size = 256;
-            RenderTargetBitmap rtb = new RenderTargetBitmap(size, size, 96, 96, PixelFormats.Pbgra32);
-            DrawingVisual dv = new DrawingVisual();
-            using (DrawingContext dc = dv.RenderOpen())
-            {
-                dc.DrawRoundedRectangle(new SolidColorBrush(Color.FromRgb(15, 23, 42)), null, new Rect(0, 0, size, size), 48, 48);
-                var pathGeometry = Geometry.Parse("M12 2 L2 22 L6 22 L12 10 L18 22 L22 22 Z M7 16 L17 16 L17 18 L7 18 Z");
-                TransformGroup group = new TransformGroup();
-                group.Children.Add(new ScaleTransform(8, 8)); 
-                group.Children.Add(new TranslateTransform(32, 32)); 
-                pathGeometry.Transform = group;
-                dc.DrawGeometry(new SolidColorBrush(Color.FromRgb(56, 189, 248)), null, pathGeometry);
-            }
-            rtb.Render(dv);
-            this.Icon = BitmapFrame.Create(rtb);
         }
 
         private void ToolbarDrag_MouseDown(object sender, MouseButtonEventArgs e)
