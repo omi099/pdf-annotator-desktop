@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping Anydraw V12.1 (Zero-Error Architecture Master)..."
+echo "🚀 Bootstrapping Anydraw V13 (Deadlock Annihilator & PDF Caching Edition)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -447,6 +447,9 @@ namespace TeachingAnnotator
         public bool UnlockPdfCanvas { get; set; } = false;
 
         [JsonIgnore]
+        public Windows.Data.Pdf.PdfDocument Document { get; set; }
+
+        [JsonIgnore]
         public Dictionary<int, StrokeCollection> StrokesPerPage { get; set; } = new Dictionary<int, StrokeCollection>();
         
         [JsonIgnore]
@@ -563,43 +566,47 @@ namespace TeachingAnnotator
             {
                 _activeTab.CurrentPage = detectedPage;
                 UpdatePageUI();
-
-                if (!_isRenderingMemory)
-                {
-                    _ = ManagePdfMemory();
-                }
             }
+
+            _ = ManagePdfMemory();
         }
 
-        // ARCHITECT FIX: Zero-Argument PDF Memory Manager
+        // ARCHITECT FIX: Deadlock strictly removed, caching implemented!
         private async Task ManagePdfMemory()
         {
-            if (_activeTab == null || string.IsNullOrEmpty(_activeTab.PdfFilePath)) return;
+            if (_activeTab == null || _activeTab.Document == null) return;
+            if (_isRenderingMemory) return;
 
-            while (_isRenderingMemory) { await Task.Delay(50); } 
             _isRenderingMemory = true;
-
-            int centerPage = _activeTab.CurrentPage;
             bool changed = false;
 
             try
             {
-                StorageFile file = await StorageFile.GetFileFromPathAsync(_activeTab.PdfFilePath);
-                Windows.Data.Pdf.PdfDocument pdfDoc = await Windows.Data.Pdf.PdfDocument.LoadFromFileAsync(file);
+                int centerPage = _activeTab.CurrentPage;
+                double unscaledOffset = MainScroll.VerticalOffset / _zoom;
+                double viewportHeight = (MainScroll.ViewportHeight > 0 ? MainScroll.ViewportHeight : 1080) / _zoom;
+                
+                double buffer = viewportHeight * 1.0; 
+                double topBound = unscaledOffset - buffer;
+                double bottomBound = unscaledOffset + viewportHeight + buffer;
 
                 for (int i = 0; i < _activeTab.PdfRenderedPages.Count; i++)
                 {
-                    if (centerPage != _activeTab.CurrentPage) break; 
-
                     var pageModel = _activeTab.PdfRenderedPages[i];
-                    bool isVisible = Math.Abs((i + 1) - centerPage) <= 1; 
+                    double pageTop = pageModel.StartY;
+                    double pageBottom = pageModel.StartY + pageModel.Height;
+
+                    bool isVisible = (pageBottom >= topBound && pageTop <= bottomBound);
 
                     if (isVisible && pageModel.ImageSource == null)
                     {
-                        using (var page = pdfDoc.GetPage((uint)i))
+                        using (var page = _activeTab.Document.GetPage((uint)i))
                         using (var stream = new InMemoryRandomAccessStream())
                         {
-                            var options = new Windows.Data.Pdf.PdfPageRenderOptions { DestinationWidth = (uint)(page.Size.Width * 3.0), DestinationHeight = (uint)(page.Size.Height * 3.0) };
+                            var options = new Windows.Data.Pdf.PdfPageRenderOptions { 
+                                DestinationWidth = (uint)pageModel.Width, 
+                                DestinationHeight = (uint)pageModel.Height 
+                            };
                             await page.RenderToStreamAsync(stream, options);
 
                             var reader = new DataReader(stream.GetInputStreamAt(0));
@@ -614,7 +621,7 @@ namespace TeachingAnnotator
                                 bitmap.CacheOption = BitmapCacheOption.OnLoad; 
                                 bitmap.StreamSource = ms; 
                                 bitmap.EndInit();
-                                bitmap.Freeze(); 
+                                bitmap.Freeze(); // Absolute strict thread safety
                                 pageModel.ImageSource = bitmap;
                             }
                         }
@@ -628,14 +635,12 @@ namespace TeachingAnnotator
                 }
             }
             catch { }
-
-            _isRenderingMemory = false;
-            if (changed) GC.Collect(0, GCCollectionMode.Optimized);
-
-            if (centerPage != _activeTab.CurrentPage)
+            finally
             {
-                _ = ManagePdfMemory();
+                _isRenderingMemory = false;
             }
+
+            if (changed) GC.Collect(0, GCCollectionMode.Optimized);
         }
 
         private void LoadState()
@@ -792,7 +797,6 @@ namespace TeachingAnnotator
             RefreshWorkspaceBounds();
         }
 
-        // ARCHITECT FIX: Unlocked PDF Margins Engine
         private void RefreshWorkspaceBounds()
         {
             if (_activeTab == null) return;
@@ -909,9 +913,7 @@ namespace TeachingAnnotator
                 double targetY = _activeTab.ScrollY > 0 ? _activeTab.ScrollY : (_activeTab.PdfRenderedPages.Count > 0 ? _activeTab.PdfRenderedPages[_activeTab.CurrentPage - 1].StartY * _zoom : 0);
                 MainScroll.ScrollToVerticalOffset(targetY);
                 
-                _isRenderingMemory = true;
-                await ManagePdfMemory();
-                _isRenderingMemory = false;
+                _ = ManagePdfMemory();
             }
         }
 
@@ -920,12 +922,12 @@ namespace TeachingAnnotator
             try 
             {
                 StorageFile file = await StorageFile.GetFileFromPathAsync(filePath);
-                Windows.Data.Pdf.PdfDocument pdfDoc = await Windows.Data.Pdf.PdfDocument.LoadFromFileAsync(file);
+                targetTab.Document = await Windows.Data.Pdf.PdfDocument.LoadFromFileAsync(file);
 
                 double currentY = 0;
-                for (uint i = 0; i < pdfDoc.PageCount; i++)
+                for (uint i = 0; i < targetTab.Document.PageCount; i++)
                 {
-                    using (Windows.Data.Pdf.PdfPage page = pdfDoc.GetPage(i))
+                    using (Windows.Data.Pdf.PdfPage page = targetTab.Document.GetPage(i))
                     {
                         targetTab.PdfRenderedPages.Add(new PdfPageModel 
                         { 
@@ -937,7 +939,7 @@ namespace TeachingAnnotator
                         currentY += (page.Size.Height * 3.0) + 25; 
                     }
                 }
-                targetTab.TotalPages = (int)pdfDoc.PageCount;
+                targetTab.TotalPages = (int)targetTab.Document.PageCount;
             } 
             catch { }
         }
