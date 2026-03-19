@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping Anydraw V3 (100% Stable Core Edition)..."
+echo "🚀 Bootstrapping Anydraw V3 (Absolute Gold Master Edition)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -241,7 +241,7 @@ cat << 'EOF' > MainWindow.xaml
 
                 <Button x:Name="BgColorBtn" Style="{StaticResource TailwindButton}" Click="BgColorBtn_Click" ToolTip="Background Color">
                     <StackPanel Orientation="Horizontal">
-                        <Rectangle x:Name="ActiveBgIndicator" Width="16" Height="16" Fill="#151515" Stroke="{DynamicResource BorderToolbar}" StrokeThickness="1" RadiusX="2" RadiusY="2"/>
+                        <Rectangle x:Name="ActiveBgIndicator" Width="16" Height="16" Fill="#282828" Stroke="{DynamicResource BorderToolbar}" StrokeThickness="1" RadiusX="2" RadiusY="2"/>
                         <TextBlock Text="▼" FontSize="9" Margin="4,0,0,0" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Button>
@@ -250,7 +250,7 @@ cat << 'EOF' > MainWindow.xaml
                         <Border.Effect><DropShadowEffect BlurRadius="10" Opacity="0.3" ShadowDepth="4"/></Border.Effect>
                         <StackPanel>
                             <TextBlock Text="Canvas Hex:" Foreground="{DynamicResource TextSecondary}" FontSize="11" Margin="0,0,0,4"/>
-                            <TextBox x:Name="BgHexInput" Text="#151515" Width="100" Background="{DynamicResource BgPrimary}" Foreground="{DynamicResource TextPrimary}" BorderBrush="{DynamicResource BorderToolbar}" Padding="4" Margin="0,0,0,8" TextChanged="BgHexInput_TextChanged"/>
+                            <TextBox x:Name="BgHexInput" Text="#282828" Width="100" Background="{DynamicResource BgPrimary}" Foreground="{DynamicResource TextPrimary}" BorderBrush="{DynamicResource BorderToolbar}" Padding="4" Margin="0,0,0,8" TextChanged="BgHexInput_TextChanged"/>
                             <WrapPanel Width="120" x:Name="BgPaletteGrid"/>
                         </StackPanel>
                     </Border>
@@ -348,7 +348,7 @@ namespace TeachingAnnotator
 
         private bool _isDarkTheme = true;
         private bool _showGrid = true;
-        private Color _customBgColor = Color.FromRgb(21, 23, 27); 
+        private Color _customBgColor = Color.FromRgb(40, 40, 40); // #282828 default dark mode canvas
 
         private bool _isDraggingToolbar = false;
         private Point _toolbarDragStart;
@@ -481,7 +481,7 @@ namespace TeachingAnnotator
         private void Theme_Click(object? sender, RoutedEventArgs? e)
         {
             _isDarkTheme = !_isDarkTheme;
-            if (_isDarkTheme) { BgHexInput.Text = "#15171B"; } else { BgHexInput.Text = "#FFFFFF"; }
+            if (_isDarkTheme) { BgHexInput.Text = "#282828"; } else { BgHexInput.Text = "#FFFFFF"; }
             ApplyTheme();
             UpdateCustomCursorAppearance();
         }
