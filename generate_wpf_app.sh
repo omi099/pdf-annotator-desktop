@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping Anydraw V7.2 (True Zero Top-Left Anchor Edition)..."
+echo "🚀 Bootstrapping Anydraw V8 (Sliding-Window RAM Virtualization & True Zero Anchor)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -156,7 +156,8 @@ cat << 'EOF' > MainWindow.xaml
         </Border>
 
         <ScrollViewer Grid.Row="1" x:Name="MainScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" PanningMode="Both" PreviewMouseWheel="MainScroll_PreviewMouseWheel" ScrollChanged="MainScroll_ScrollChanged" Background="Transparent" Panel.ZIndex="10">
-            <Grid x:Name="Workspace" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="40">
+            
+            <Grid x:Name="Workspace" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="0">
                 <Grid.LayoutTransform>
                     <ScaleTransform x:Name="ZoomTransform" ScaleX="1" ScaleY="1"/>
                 </Grid.LayoutTransform>
@@ -164,7 +165,7 @@ cat << 'EOF' > MainWindow.xaml
                 <ItemsControl x:Name="PdfItemsControl">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Border Background="White" Margin="0,0,0,25" CornerRadius="4" HorizontalAlignment="Left">
+                            <Border Background="White" Margin="0,0,0,25" CornerRadius="0" HorizontalAlignment="Left">
                                 <Border.Effect>
                                     <DropShadowEffect Color="Black" BlurRadius="15" Opacity="0.5" Direction="270" ShadowDepth="5"/>
                                 </Border.Effect>
@@ -177,7 +178,7 @@ cat << 'EOF' > MainWindow.xaml
                 <AdornerDecorator>
                     <Grid x:Name="CanvasContainer" HorizontalAlignment="Left" VerticalAlignment="Top">
                         
-                        <Grid x:Name="A4GuideContainer" IsHitTestVisible="False" HorizontalAlignment="Left" VerticalAlignment="Top" Width="1123" Height="794">
+                        <Grid x:Name="A4GuideContainer" IsHitTestVisible="False" HorizontalAlignment="Left" VerticalAlignment="Top" Width="1123" Height="794" Margin="0">
                             <Rectangle Stroke="{DynamicResource TextSecondary}" StrokeThickness="2" StrokeDashArray="6 6" Opacity="0.4"/>
                             <TextBlock Text="A4 Boundary (297 x 210 mm)" Foreground="{DynamicResource TextSecondary}" Opacity="0.6" Margin="12" VerticalAlignment="Bottom" HorizontalAlignment="Right" FontSize="14" FontWeight="SemiBold"/>
                         </Grid>
@@ -349,6 +350,7 @@ cat << 'EOF' > MainWindow.xaml.cs
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -372,12 +374,23 @@ using PdfSharp.Drawing;
 
 namespace TeachingAnnotator
 {
-    public class PdfPageModel
+    // ARCHITECT FIX: UI Notification added to instantly update images when loaded dynamically
+    public class PdfPageModel : INotifyPropertyChanged
     {
-        public BitmapImage ImageSource { get; set; }
+        private BitmapImage _imageSource;
+        public BitmapImage ImageSource 
+        { 
+            get => _imageSource; 
+            set { _imageSource = value; OnPropertyChanged(nameof(ImageSource)); } 
+        }
+        
         public double Width { get; set; }
         public double Height { get; set; }
         public double StartY { get; set; }
+        public int PageNumber { get; set; }
+
+        public event PropertyChangedEventHandler PropertyChanged;
+        protected void OnPropertyChanged(string name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
     }
 
     public class LaserStrokeData
@@ -468,11 +481,6 @@ namespace TeachingAnnotator
             MainInkCanvas.Cursor = Cursors.Arrow;
             LaserInkCanvas.Cursor = Cursors.Arrow;
 
-            Workspace.Width = 10000; Workspace.Height = 10000;
-            MainInkCanvas.Width = 10000; MainInkCanvas.Height = 10000;
-            LaserInkCanvas.Width = 10000; LaserInkCanvas.Height = 10000;
-            CursorCanvas.Width = 10000; CursorCanvas.Height = 10000;
-
             LaserInkCanvas.Strokes.StrokesChanged += LaserInkCanvas_StrokesChanged;
 
             _laserTimer = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(33) };
@@ -502,22 +510,29 @@ namespace TeachingAnnotator
             }
         }
 
-        private void MainScroll_ScrollChanged(object sender, ScrollChangedEventArgs e)
+        // ARCHITECT FIX: Calculates which page is active and triggers the Sliding Window RAM Manager
+        private async void MainScroll_ScrollChanged(object sender, ScrollChangedEventArgs e)
         {
             if (_activeTab != null && !string.IsNullOrEmpty(_activeTab.PdfFilePath) && _activeTab.PdfRenderedPages.Count > 0)
             {
                 double offset = MainScroll.VerticalOffset;
+                int detectedPage = 1;
                 for (int i = _activeTab.PdfRenderedPages.Count - 1; i >= 0; i--)
                 {
                     if (offset >= _activeTab.PdfRenderedPages[i].StartY - 200)
                     {
-                        if (_activeTab.CurrentPage != i + 1)
-                        {
-                            _activeTab.CurrentPage = i + 1;
-                            UpdatePageUI();
-                        }
+                        detectedPage = i + 1;
                         break;
                     }
+                }
+
+                if (_activeTab.CurrentPage != detectedPage)
+                {
+                    _activeTab.CurrentPage = detectedPage;
+                    UpdatePageUI();
+                    
+                    // Fire & Forget: Asynchronously load images for current page +/- 1 and drop the rest!
+                    _ = RenderVisiblePages(detectedPage);
                 }
             }
         }
@@ -659,6 +674,9 @@ namespace TeachingAnnotator
                 MainInkCanvas.Width = Workspace.Width; MainInkCanvas.Height = Workspace.Height;
                 LaserInkCanvas.Width = Workspace.Width; LaserInkCanvas.Height = Workspace.Height;
                 A4GuideContainer.Visibility = Visibility.Hidden;
+                
+                // Trigger the initial 3-page render
+                await RenderVisiblePages(_activeTab.CurrentPage);
             }
             else
             {
@@ -666,9 +684,8 @@ namespace TeachingAnnotator
                 MainInkCanvas.Width = 10000; MainInkCanvas.Height = 10000;
                 LaserInkCanvas.Width = 10000; LaserInkCanvas.Height = 10000;
                 
-                // ARCHITECT FIX: True Zero (0,0) Top-Left Anchoring for A4 Canvas
                 A4GuideContainer.Visibility = Visibility.Visible;
-                A4GuideContainer.Margin = new Thickness(0, 0, 0, 0);
+                A4GuideContainer.Margin = new Thickness(0, 0, 0, 0); // ARCHITECT FIX: True zero left-top positioning!
             }
 
             MainInkCanvas.Strokes = _activeTab.StrokesPerPage.ContainsKey(_activeTab.CurrentPage) ? _activeTab.StrokesPerPage[_activeTab.CurrentPage].Clone() : new StrokeCollection();
@@ -677,11 +694,97 @@ namespace TeachingAnnotator
             
             if (string.IsNullOrEmpty(_activeTab.PdfFilePath))
             {
-                // ARCHITECT FIX: Viewport spawns precisely at Top-Left (0,0)
                 Workspace.UpdateLayout();
                 MainScroll.ScrollToHorizontalOffset(0);
                 MainScroll.ScrollToVerticalOffset(0);
             }
+            else
+            {
+                Workspace.UpdateLayout();
+                MainScroll.ScrollToVerticalOffset(_activeTab.PdfRenderedPages[_activeTab.CurrentPage - 1].StartY);
+            }
+        }
+
+        // ARCHITECT FIX: The Sliding-Window Memory Manager! Decodes 3 pages, trashes the rest.
+        private async Task RenderVisiblePages(int centerPageNumber)
+        {
+            if (_activeTab == null || string.IsNullOrEmpty(_activeTab.PdfFilePath)) return;
+
+            try
+            {
+                StorageFile file = await StorageFile.GetFileFromPathAsync(_activeTab.PdfFilePath);
+                Windows.Data.Pdf.PdfDocument pdfDoc = await Windows.Data.Pdf.PdfDocument.LoadFromFileAsync(file);
+
+                for (int i = 0; i < _activeTab.PdfRenderedPages.Count; i++)
+                {
+                    var pageModel = _activeTab.PdfRenderedPages[i];
+                    bool shouldBeRendered = Math.Abs((i + 1) - centerPageNumber) <= 1; // Exactly 3 Pages (N-1, N, N+1)
+
+                    if (shouldBeRendered && pageModel.ImageSource == null)
+                    {
+                        using (var page = pdfDoc.GetPage((uint)i))
+                        using (var stream = new InMemoryRandomAccessStream())
+                        {
+                            var options = new Windows.Data.Pdf.PdfPageRenderOptions { DestinationWidth = (uint)pageModel.Width, DestinationHeight = (uint)pageModel.Height };
+                            await page.RenderToStreamAsync(stream, options);
+
+                            var reader = new DataReader(stream.GetInputStreamAt(0));
+                            await reader.LoadAsync((uint)stream.Size);
+                            byte[] buffer = new byte[stream.Size];
+                            reader.ReadBytes(buffer);
+
+                            using (var ms = new MemoryStream(buffer))
+                            {
+                                var bitmap = new BitmapImage();
+                                bitmap.BeginInit(); 
+                                bitmap.CacheOption = BitmapCacheOption.OnLoad; 
+                                bitmap.StreamSource = ms; 
+                                bitmap.EndInit();
+                                bitmap.Freeze(); // CRITICAL FIX: Allows Background Threads to pass memory safely to UI
+                                pageModel.ImageSource = bitmap;
+                            }
+                        }
+                    }
+                    else if (!shouldBeRendered && pageModel.ImageSource != null)
+                    {
+                        // Instantly dumps the image out of RAM when you scroll past it!
+                        pageModel.ImageSource = null;
+                    }
+                }
+                
+                GC.Collect(); // Force garbage collector to instantly reclaim discarded memory
+            }
+            catch { }
+        }
+
+        // PRE-LOADS PDF METADATA ONLY (Blazing Fast)
+        private async Task LoadPdfIntoTab(string filePath, WorkspaceTab targetTab)
+        {
+            try 
+            {
+                StorageFile file = await StorageFile.GetFileFromPathAsync(filePath);
+                Windows.Data.Pdf.PdfDocument pdfDoc = await Windows.Data.Pdf.PdfDocument.LoadFromFileAsync(file);
+
+                double currentY = 0;
+                for (uint i = 0; i < pdfDoc.PageCount; i++)
+                {
+                    using (Windows.Data.Pdf.PdfPage page = pdfDoc.GetPage(i))
+                    {
+                        // We do NOT render the image here! We only measure it.
+                        targetTab.PdfRenderedPages.Add(new PdfPageModel 
+                        { 
+                            ImageSource = null, 
+                            Width = page.Size.Width * 3.0, // High-DPI Scale
+                            Height = page.Size.Height * 3.0, 
+                            StartY = currentY,
+                            PageNumber = (int)i + 1
+                        });
+                        currentY += (page.Size.Height * 3.0) + 25; 
+                    }
+                }
+                targetTab.TotalPages = (int)pdfDoc.PageCount;
+            } 
+            catch { }
         }
 
         private void NewTab_Click(object sender, RoutedEventArgs e)
@@ -1027,43 +1130,6 @@ namespace TeachingAnnotator
             }
         }
 
-        private async Task LoadPdfIntoTab(string filePath, WorkspaceTab targetTab)
-        {
-            try 
-            {
-                StorageFile file = await StorageFile.GetFileFromPathAsync(filePath);
-                Windows.Data.Pdf.PdfDocument pdfDoc = await Windows.Data.Pdf.PdfDocument.LoadFromFileAsync(file);
-
-                double currentY = 0;
-                for (uint i = 0; i < pdfDoc.PageCount; i++)
-                {
-                    using (Windows.Data.Pdf.PdfPage page = pdfDoc.GetPage(i))
-                    {
-                        using (var stream = new InMemoryRandomAccessStream())
-                        {
-                            var options = new Windows.Data.Pdf.PdfPageRenderOptions { DestinationWidth = (uint)(page.Size.Width * 3.0), DestinationHeight = (uint)(page.Size.Height * 3.0) };
-                            await page.RenderToStreamAsync(stream, options);
-
-                            var reader = new DataReader(stream.GetInputStreamAt(0));
-                            await reader.LoadAsync((uint)stream.Size);
-                            byte[] buffer = new byte[stream.Size];
-                            reader.ReadBytes(buffer);
-
-                            using (var ms = new MemoryStream(buffer))
-                            {
-                                var bitmap = new BitmapImage();
-                                bitmap.BeginInit(); bitmap.CacheOption = BitmapCacheOption.OnLoad; bitmap.StreamSource = ms; bitmap.EndInit();
-                                targetTab.PdfRenderedPages.Add(new PdfPageModel { ImageSource = bitmap, Width = page.Size.Width, Height = page.Size.Height, StartY = currentY });
-                                currentY += page.Size.Height + 25; 
-                            }
-                        }
-                    }
-                }
-                targetTab.TotalPages = (int)pdfDoc.PageCount;
-            } 
-            catch { }
-        }
-
         private async void OpenPdf_Click(object sender, RoutedEventArgs e)
         {
             OpenFileDialog dlg = new OpenFileDialog { Filter = "PDF Files (*.pdf)|*.pdf" };
@@ -1104,7 +1170,6 @@ namespace TeachingAnnotator
                             double actualW = 1123; 
                             double actualH = 794;  
                             
-                            // ARCHITECT FIX: Top-Left (0,0) Export Origin Anchor
                             double originX = 0; 
                             double originY = 0; 
                             
@@ -1193,7 +1258,6 @@ namespace TeachingAnnotator
                     PdfSharp.Pdf.PdfDocument document = PdfReader.Open(_activeTab.PdfFilePath, PdfDocumentOpenMode.Modify);
                     if (exportAnnotations)
                     {
-                        double workspaceWidth = Workspace.Width;
                         for (int i = 0; i < document.Pages.Count; i++)
                         {
                             if (i >= _activeTab.PdfRenderedPages.Count) break;
@@ -1201,7 +1265,6 @@ namespace TeachingAnnotator
                             
                             double scaleX = pdfPage.Width.Point / uiPage.Width; 
                             double scaleY = pdfPage.Height.Point / uiPage.Height;
-                            double offsetX = (workspaceWidth - uiPage.Width) / 2.0;
 
                             StrokeCollection pageStrokes = (i + 1 == _activeTab.CurrentPage) ? MainInkCanvas.Strokes : (_activeTab.StrokesPerPage.ContainsKey(i + 1) ? _activeTab.StrokesPerPage[i + 1] : new StrokeCollection());
 
@@ -1219,7 +1282,7 @@ namespace TeachingAnnotator
                                         if (stroke.DrawingAttributes.IsHighlighter || stroke.DrawingAttributes.IgnorePressure)
                                         {
                                             XGraphicsPath path = new XGraphicsPath(); XPoint[] xPoints = new XPoint[points.Count];
-                                            for (int j = 0; j < points.Count; j++) { xPoints[j] = new XPoint((points[j].X - offsetX) * scaleX, (points[j].Y - uiPage.StartY) * scaleY); }
+                                            for (int j = 0; j < points.Count; j++) { xPoints[j] = new XPoint(points[j].X * scaleX, (points[j].Y - uiPage.StartY) * scaleY); }
                                             path.AddLines(xPoints);
                                             XLineCap cap = stroke.DrawingAttributes.IsHighlighter ? XLineCap.Square : XLineCap.Round;
                                             XPen pathPen = new XPen(color, baseThickness) { LineCap = cap, LineJoin = XLineJoin.Round };
@@ -1231,7 +1294,7 @@ namespace TeachingAnnotator
                                             {
                                                 var p1 = points[j]; var p2 = points[j + 1];
                                                 XPen segmentPen = new XPen(color, baseThickness * (p1.PressureFactor * 2.0)) { LineCap = XLineCap.Round };
-                                                gfx.DrawLine(segmentPen, (p1.X - offsetX) * scaleX, (p1.Y - uiPage.StartY) * scaleY, (p2.X - offsetX) * scaleX, (p2.Y - uiPage.StartY) * scaleY);
+                                                gfx.DrawLine(segmentPen, p1.X * scaleX, (p1.Y - uiPage.StartY) * scaleY, p2.X * scaleX, (p2.Y - uiPage.StartY) * scaleY);
                                             }
                                         }
                                     }
