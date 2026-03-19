@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping Anydraw V7 (Flawless A4 Matrix & Gold Master Edition)..."
+echo "🚀 Bootstrapping Anydraw V8 (Enterprise PDF Virtualization & Zero-Lag Edition)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -155,29 +155,24 @@ cat << 'EOF' > MainWindow.xaml
             </Grid>
         </Border>
 
-        <ScrollViewer Grid.Row="1" x:Name="MainScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" PanningMode="Both" PreviewMouseWheel="MainScroll_PreviewMouseWheel" ScrollChanged="MainScroll_ScrollChanged" Background="Transparent" Panel.ZIndex="10">
-            <Grid x:Name="Workspace" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="40">
+        <ScrollViewer Grid.Row="1" x:Name="MainScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" PanningMode="Both" PreviewMouseWheel="MainScroll_PreviewMouseWheel" Background="Transparent" Panel.ZIndex="10">
+            
+            <Grid x:Name="Workspace" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="50">
                 <Grid.LayoutTransform>
                     <ScaleTransform x:Name="ZoomTransform" ScaleX="1" ScaleY="1"/>
                 </Grid.LayoutTransform>
                 
-                <ItemsControl x:Name="PdfItemsControl">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <Border Background="White" Margin="0,0,0,25" CornerRadius="4" HorizontalAlignment="Center">
-                                <Border.Effect>
-                                    <DropShadowEffect Color="Black" BlurRadius="15" Opacity="0.5" Direction="270" ShadowDepth="5"/>
-                                </Border.Effect>
-                                <Image Source="{Binding ImageSource}" Width="{Binding Width}" Height="{Binding Height}" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality"/>
-                            </Border>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                <Border x:Name="PdfPageBorder" Background="White" Visibility="Hidden" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" CornerRadius="4">
+                    <Border.Effect>
+                        <DropShadowEffect Color="Black" BlurRadius="15" Opacity="0.5" Direction="270" ShadowDepth="5"/>
+                    </Border.Effect>
+                    <Image x:Name="PdfSinglePageImage" Stretch="Fill" RenderOptions.BitmapScalingMode="HighQuality"/>
+                </Border>
 
                 <AdornerDecorator>
-                    <Grid x:Name="CanvasContainer" HorizontalAlignment="Left" VerticalAlignment="Top">
+                    <Grid x:Name="CanvasContainer" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
                         
-                        <Grid x:Name="A4GuideContainer" IsHitTestVisible="False" HorizontalAlignment="Left" VerticalAlignment="Top" Width="1123" Height="794">
+                        <Grid x:Name="A4GuideContainer" IsHitTestVisible="False" HorizontalAlignment="Center" VerticalAlignment="Center" Width="1123" Height="794">
                             <Rectangle Stroke="{DynamicResource TextSecondary}" StrokeThickness="2" StrokeDashArray="6 6" Opacity="0.4"/>
                             <TextBlock Text="A4 Boundary (297 x 210 mm)" Foreground="{DynamicResource TextSecondary}" Opacity="0.6" Margin="12" VerticalAlignment="Bottom" HorizontalAlignment="Right" FontSize="14" FontWeight="SemiBold"/>
                         </Grid>
@@ -239,7 +234,7 @@ cat << 'EOF' > MainWindow.xaml
                 <Button Style="{StaticResource TailwindButton}" Click="OpenPdf_Click" ToolTip="Upload PDF to Current Tab">
                     <Path Data="M 14 2 L 6 2 C 4.9 2 4 2.9 4 4 L 4 20 C 4 21.1 4.9 22 6 22 L 18 22 C 19.1 22 20 21.1 20 20 L 20 8 L 14 2 Z M 13 9 L 13 3.5 L 18.5 9 L 13 9 Z" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Height="18" Stretch="Uniform"/>
                 </Button>
-                <Button Style="{StaticResource TailwindButton}" Click="ExportAnnotated_Click" ToolTip="Export Document">
+                <Button Style="{StaticResource TailwindButton}" Click="ExportAnnotated_Click" ToolTip="Export PDF">
                     <Path Data="M 12 16 L 12 3 M 8 7 L 12 3 L 16 7 M 4 16 L 4 20 C 4 21.1 4.9 22 6 22 L 18 22 C 19.1 22 20 21.1 20 20 L 20 16" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Height="18" Stretch="Uniform"/>
                 </Button>
 
@@ -372,14 +367,6 @@ using PdfSharp.Drawing;
 
 namespace TeachingAnnotator
 {
-    public class PdfPageModel
-    {
-        public BitmapImage ImageSource { get; set; }
-        public double Width { get; set; }
-        public double Height { get; set; }
-        public double StartY { get; set; }
-    }
-
     public class LaserStrokeData
     {
         public System.Windows.Ink.Stroke Stroke { get; set; }
@@ -398,9 +385,6 @@ namespace TeachingAnnotator
         
         [JsonIgnore]
         public Dictionary<int, StrokeCollection> StrokesPerPage { get; set; } = new Dictionary<int, StrokeCollection>();
-        
-        [JsonIgnore]
-        public ObservableCollection<PdfPageModel> PdfRenderedPages { get; set; } = new ObservableCollection<PdfPageModel>();
     }
 
     public class AppSettings
@@ -494,26 +478,6 @@ namespace TeachingAnnotator
             {
                 foreach (var stroke in e.Added) _laserStrokes.Add(new LaserStrokeData(stroke));
                 _lastLaserActivityTime = DateTime.Now;
-            }
-        }
-
-        private void MainScroll_ScrollChanged(object sender, ScrollChangedEventArgs e)
-        {
-            if (_activeTab != null && !string.IsNullOrEmpty(_activeTab.PdfFilePath) && _activeTab.PdfRenderedPages.Count > 0)
-            {
-                double offset = MainScroll.VerticalOffset;
-                for (int i = _activeTab.PdfRenderedPages.Count - 1; i >= 0; i--)
-                {
-                    if (offset >= _activeTab.PdfRenderedPages[i].StartY - 200)
-                    {
-                        if (_activeTab.CurrentPage != i + 1)
-                        {
-                            _activeTab.CurrentPage = i + 1;
-                            UpdatePageUI();
-                        }
-                        break;
-                    }
-                }
             }
         }
 
@@ -640,28 +604,19 @@ namespace TeachingAnnotator
             _activeTab = targetTab;
             _undoStack.Clear(); _redoStack.Clear(); LaserInkCanvas.Strokes.Clear(); _laserStrokes.Clear();
 
-            PdfItemsControl.ItemsSource = null;
-            if (!string.IsNullOrEmpty(_activeTab.PdfFilePath) && _activeTab.PdfRenderedPages.Count == 0)
+            if (!string.IsNullOrEmpty(_activeTab.PdfFilePath))
             {
-                await LoadPdfIntoTab(_activeTab.PdfFilePath, _activeTab);
-            }
-            PdfItemsControl.ItemsSource = _activeTab.PdfRenderedPages;
-            
-            if (_activeTab.PdfRenderedPages.Count > 0)
-            {
-                Workspace.Width = _activeTab.PdfRenderedPages.Max(p => p.Width);
-                Workspace.Height = _activeTab.PdfRenderedPages.Sum(p => p.Height) + (_activeTab.PdfRenderedPages.Count * 25);
-                MainInkCanvas.Width = Workspace.Width; MainInkCanvas.Height = Workspace.Height;
-                LaserInkCanvas.Width = Workspace.Width; LaserInkCanvas.Height = Workspace.Height;
-                A4GuideContainer.Visibility = Visibility.Hidden;
+                await RenderSinglePdfPage(_activeTab.PdfFilePath, _activeTab.CurrentPage);
             }
             else
             {
+                PdfPageBorder.Visibility = Visibility.Hidden;
+                PdfSinglePageImage.Source = null;
+                
                 Workspace.Width = 10000; Workspace.Height = 10000;
                 MainInkCanvas.Width = 10000; MainInkCanvas.Height = 10000;
                 LaserInkCanvas.Width = 10000; LaserInkCanvas.Height = 10000;
                 
-                // ARCHITECT FIX: Flawless mathematical center mapping using Grid margins
                 A4GuideContainer.Visibility = Visibility.Visible;
                 A4GuideContainer.Margin = new Thickness((Workspace.Width - 1123) / 2.0, (Workspace.Height - 794) / 2.0, 0, 0);
             }
@@ -676,6 +631,49 @@ namespace TeachingAnnotator
                 MainScroll.ScrollToHorizontalOffset((Workspace.Width / 2.0) - (SystemParameters.PrimaryScreenWidth / 2.0));
                 MainScroll.ScrollToVerticalOffset((Workspace.Height / 2.0) - (SystemParameters.PrimaryScreenHeight / 2.0));
             }
+        }
+
+        // ARCHITECT FIX: Loads ONLY the current page to completely eliminate massive PDF memory spikes
+        private async Task RenderSinglePdfPage(string filePath, int pageNumber)
+        {
+            try 
+            {
+                StorageFile file = await StorageFile.GetFileFromPathAsync(filePath);
+                Windows.Data.Pdf.PdfDocument pdfDoc = await Windows.Data.Pdf.PdfDocument.LoadFromFileAsync(file);
+                _activeTab.TotalPages = (int)pdfDoc.PageCount;
+
+                using (Windows.Data.Pdf.PdfPage page = pdfDoc.GetPage((uint)(pageNumber - 1)))
+                {
+                    using (var stream = new InMemoryRandomAccessStream())
+                    {
+                        var options = new Windows.Data.Pdf.PdfPageRenderOptions { DestinationWidth = (uint)(page.Size.Width * 3.0), DestinationHeight = (uint)(page.Size.Height * 3.0) };
+                        await page.RenderToStreamAsync(stream, options);
+
+                        var reader = new DataReader(stream.GetInputStreamAt(0));
+                        await reader.LoadAsync((uint)stream.Size);
+                        byte[] buffer = new byte[stream.Size];
+                        reader.ReadBytes(buffer);
+
+                        using (var ms = new MemoryStream(buffer))
+                        {
+                            var bitmap = new BitmapImage();
+                            bitmap.BeginInit(); bitmap.CacheOption = BitmapCacheOption.OnLoad; bitmap.StreamSource = ms; bitmap.EndInit();
+                            
+                            PdfSinglePageImage.Source = bitmap;
+                            PdfSinglePageImage.Width = page.Size.Width;
+                            PdfSinglePageImage.Height = page.Size.Height;
+                            
+                            Workspace.Width = page.Size.Width; Workspace.Height = page.Size.Height;
+                            MainInkCanvas.Width = page.Size.Width; MainInkCanvas.Height = page.Size.Height;
+                            LaserInkCanvas.Width = page.Size.Width; LaserInkCanvas.Height = page.Size.Height;
+                            
+                            PdfPageBorder.Visibility = Visibility.Visible;
+                            A4GuideContainer.Visibility = Visibility.Hidden;
+                        }
+                    }
+                }
+            } 
+            catch { }
         }
 
         private void NewTab_Click(object sender, RoutedEventArgs e)
@@ -776,7 +774,7 @@ namespace TeachingAnnotator
                 Resources["TextSecondary"] = new SolidColorBrush(Color.FromRgb(161, 161, 170));
                 Resources["ButtonHoverBg"] = new SolidColorBrush(Color.FromRgb(37, 40, 45));
                 Resources["ButtonHoverText"] = new SolidColorBrush(Colors.White);
-                if (A4Guide != null) ((Rectangle)A4GuideContainer.Children[0]).Stroke = new SolidColorBrush(Color.FromArgb(80, 255, 255, 255));
+                if (A4GuideContainer != null && A4GuideContainer.Children.Count > 0) ((Rectangle)A4GuideContainer.Children[0]).Stroke = new SolidColorBrush(Color.FromArgb(80, 255, 255, 255));
             }
             else
             {
@@ -787,7 +785,7 @@ namespace TeachingAnnotator
                 Resources["TextSecondary"] = new SolidColorBrush(Color.FromRgb(75, 85, 99)); 
                 Resources["ButtonHoverBg"] = new SolidColorBrush(Color.FromRgb(243, 244, 246));
                 Resources["ButtonHoverText"] = new SolidColorBrush(Colors.Black);
-                if (A4Guide != null) ((Rectangle)A4GuideContainer.Children[0]).Stroke = new SolidColorBrush(Color.FromArgb(80, 0, 0, 0));
+                if (A4GuideContainer != null && A4GuideContainer.Children.Count > 0) ((Rectangle)A4GuideContainer.Children[0]).Stroke = new SolidColorBrush(Color.FromArgb(80, 0, 0, 0));
             }
 
             if (_activeTab != null && string.IsNullOrEmpty(_activeTab.PdfFilePath))
@@ -840,12 +838,18 @@ namespace TeachingAnnotator
             return new DrawingBrush { TileMode = TileMode.Tile, Viewport = new Rect(0, 0, 100, 100), ViewportUnits = BrushMappingMode.Absolute, Drawing = mainGroup };
         }
 
-        private void UpdatePageUI() { if (_activeTab == null) return; PageCounterText.Text = $"{_activeTab.CurrentPage}/{_activeTab.TotalPages}"; PaginationPanel.Visibility = string.IsNullOrEmpty(_activeTab.PdfFilePath) ? Visibility.Visible : Visibility.Collapsed; }
-        private void SaveCurrentPage() { if (_activeTab == null || !string.IsNullOrEmpty(_activeTab.PdfFilePath)) return; _activeTab.StrokesPerPage[_activeTab.CurrentPage] = MainInkCanvas.Strokes.Clone(); }
+        private void UpdatePageUI() { if (_activeTab == null) return; PageCounterText.Text = $"{_activeTab.CurrentPage}/{_activeTab.TotalPages}"; }
+        private void SaveCurrentPage() { if (_activeTab == null) return; _activeTab.StrokesPerPage[_activeTab.CurrentPage] = MainInkCanvas.Strokes.Clone(); }
         
-        private void LoadPage(int page)
+        private async void LoadPage(int page)
         {
             if (_activeTab == null) return;
+
+            if (!string.IsNullOrEmpty(_activeTab.PdfFilePath))
+            {
+                await RenderSinglePdfPage(_activeTab.PdfFilePath, page);
+            }
+
             if (_activeTab.StrokesPerPage.ContainsKey(page)) MainInkCanvas.Strokes = _activeTab.StrokesPerPage[page].Clone();
             else MainInkCanvas.Strokes.Clear();
             _undoStack.Clear(); _redoStack.Clear(); LaserInkCanvas.Strokes.Clear(); _laserStrokes.Clear();
@@ -853,23 +857,15 @@ namespace TeachingAnnotator
 
         private void PrevPage_Click(object sender, RoutedEventArgs e) 
         { 
-            if (_activeTab != null) {
-                if (string.IsNullOrEmpty(_activeTab.PdfFilePath) && _activeTab.CurrentPage > 1) { 
-                    SaveCurrentPage(); _activeTab.CurrentPage--; LoadPage(_activeTab.CurrentPage); UpdatePageUI(); 
-                } else if (!string.IsNullOrEmpty(_activeTab.PdfFilePath) && _activeTab.CurrentPage > 1) {
-                    _activeTab.CurrentPage--; UpdatePageUI(); MainScroll.ScrollToVerticalOffset(_activeTab.PdfRenderedPages[_activeTab.CurrentPage - 1].StartY);
-                }
+            if (_activeTab != null && _activeTab.CurrentPage > 1) { 
+                SaveCurrentPage(); _activeTab.CurrentPage--; LoadPage(_activeTab.CurrentPage); UpdatePageUI(); 
             } 
         }
 
         private void NextPage_Click(object sender, RoutedEventArgs e) 
         { 
-            if (_activeTab != null) {
-                if (string.IsNullOrEmpty(_activeTab.PdfFilePath) && _activeTab.CurrentPage < _activeTab.TotalPages) { 
-                    SaveCurrentPage(); _activeTab.CurrentPage++; LoadPage(_activeTab.CurrentPage); UpdatePageUI(); 
-                } else if (!string.IsNullOrEmpty(_activeTab.PdfFilePath) && _activeTab.CurrentPage < _activeTab.PdfRenderedPages.Count) {
-                    _activeTab.CurrentPage++; UpdatePageUI(); MainScroll.ScrollToVerticalOffset(_activeTab.PdfRenderedPages[_activeTab.CurrentPage - 1].StartY);
-                }
+            if (_activeTab != null && _activeTab.CurrentPage < _activeTab.TotalPages) { 
+                SaveCurrentPage(); _activeTab.CurrentPage++; LoadPage(_activeTab.CurrentPage); UpdatePageUI(); 
             } 
         }
 
@@ -1021,43 +1017,6 @@ namespace TeachingAnnotator
             }
         }
 
-        private async Task LoadPdfIntoTab(string filePath, WorkspaceTab targetTab)
-        {
-            try 
-            {
-                StorageFile file = await StorageFile.GetFileFromPathAsync(filePath);
-                Windows.Data.Pdf.PdfDocument pdfDoc = await Windows.Data.Pdf.PdfDocument.LoadFromFileAsync(file);
-
-                double currentY = 0;
-                for (uint i = 0; i < pdfDoc.PageCount; i++)
-                {
-                    using (Windows.Data.Pdf.PdfPage page = pdfDoc.GetPage(i))
-                    {
-                        using (var stream = new InMemoryRandomAccessStream())
-                        {
-                            var options = new Windows.Data.Pdf.PdfPageRenderOptions { DestinationWidth = (uint)(page.Size.Width * 3.0), DestinationHeight = (uint)(page.Size.Height * 3.0) };
-                            await page.RenderToStreamAsync(stream, options);
-
-                            var reader = new DataReader(stream.GetInputStreamAt(0));
-                            await reader.LoadAsync((uint)stream.Size);
-                            byte[] buffer = new byte[stream.Size];
-                            reader.ReadBytes(buffer);
-
-                            using (var ms = new MemoryStream(buffer))
-                            {
-                                var bitmap = new BitmapImage();
-                                bitmap.BeginInit(); bitmap.CacheOption = BitmapCacheOption.OnLoad; bitmap.StreamSource = ms; bitmap.EndInit();
-                                targetTab.PdfRenderedPages.Add(new PdfPageModel { ImageSource = bitmap, Width = page.Size.Width, Height = page.Size.Height, StartY = currentY });
-                                currentY += page.Size.Height + 25; 
-                            }
-                        }
-                    }
-                }
-                targetTab.TotalPages = (int)pdfDoc.PageCount;
-            } 
-            catch { }
-        }
-
         private async void OpenPdf_Click(object sender, RoutedEventArgs e)
         {
             OpenFileDialog dlg = new OpenFileDialog { Filter = "PDF Files (*.pdf)|*.pdf" };
@@ -1095,7 +1054,6 @@ namespace TeachingAnnotator
                         {
                             StrokeCollection pageStrokes = (i == _activeTab.CurrentPage) ? MainInkCanvas.Strokes : (_activeTab.StrokesPerPage.ContainsKey(i) ? _activeTab.StrokesPerPage[i] : new StrokeCollection());
                             
-                            // ARCHITECT FIX: Mathematical Transform to perfect standard A4 points (842x595)
                             double actualW = 1123; 
                             double actualH = 794;  
                             double originX = A4GuideContainer.Margin.Left;
@@ -1123,7 +1081,7 @@ namespace TeachingAnnotator
                             wbPage.Width = XUnit.FromPresentation(actualW); 
                             wbPage.Height = XUnit.FromPresentation(actualH);
                             XGraphics gfx = XGraphics.FromPdfPage(wbPage);
-                            gfx.ScaleTransform(72.0 / 96.0, 72.0 / 96.0); // Mathematically forces 1 WPF Pixel to exactly 1 PDF point!
+                            gfx.ScaleTransform(72.0 / 96.0, 72.0 / 96.0); 
 
                             gfx.DrawRectangle(new XSolidBrush(bgColor), 0, 0, actualW, actualH);
                             
@@ -1196,34 +1154,32 @@ namespace TeachingAnnotator
                             double scaleY = pdfPage.Height.Point / uiPage.Height;
                             double offsetX = (workspaceWidth - uiPage.Width) / 2.0;
 
-                            foreach (Stroke stroke in MainInkCanvas.Strokes)
-                            {
-                                Rect bounds = stroke.GetBounds();
-                                if (bounds.Bottom >= uiPage.StartY && bounds.Top <= (uiPage.StartY + uiPage.Height))
-                                {
-                                    XColor color = XColor.FromArgb(stroke.DrawingAttributes.Color.A, stroke.DrawingAttributes.Color.R, stroke.DrawingAttributes.Color.G, stroke.DrawingAttributes.Color.B);
-                                    double baseThickness = stroke.DrawingAttributes.Width * scaleX;
-                                    StylusPointCollection points = stroke.StylusPoints;
+                            StrokeCollection pageStrokes = (i + 1 == _activeTab.CurrentPage) ? MainInkCanvas.Strokes : (_activeTab.StrokesPerPage.ContainsKey(i + 1) ? _activeTab.StrokesPerPage[i + 1] : new StrokeCollection());
 
-                                    if (points.Count > 1)
+                            foreach (Stroke stroke in pageStrokes)
+                            {
+                                XColor color = XColor.FromArgb(stroke.DrawingAttributes.Color.A, stroke.DrawingAttributes.Color.R, stroke.DrawingAttributes.Color.G, stroke.DrawingAttributes.Color.B);
+                                double baseThickness = stroke.DrawingAttributes.Width * scaleX;
+                                StylusPointCollection points = stroke.StylusPoints;
+
+                                if (points.Count > 1)
+                                {
+                                    if (stroke.DrawingAttributes.IsHighlighter || stroke.DrawingAttributes.IgnorePressure)
                                     {
-                                        if (stroke.DrawingAttributes.IsHighlighter || stroke.DrawingAttributes.IgnorePressure)
+                                        XGraphicsPath path = new XGraphicsPath(); XPoint[] xPoints = new XPoint[points.Count];
+                                        for (int j = 0; j < points.Count; j++) { xPoints[j] = new XPoint((points[j].X - offsetX) * scaleX, points[j].Y * scaleY); }
+                                        path.AddLines(xPoints);
+                                        XLineCap cap = stroke.DrawingAttributes.IsHighlighter ? XLineCap.Square : XLineCap.Round;
+                                        XPen pathPen = new XPen(color, baseThickness) { LineCap = cap, LineJoin = XLineJoin.Round };
+                                        gfx.DrawPath(pathPen, path);
+                                    }
+                                    else
+                                    {
+                                        for (int j = 0; j < points.Count - 1; j++)
                                         {
-                                            XGraphicsPath path = new XGraphicsPath(); XPoint[] xPoints = new XPoint[points.Count];
-                                            for (int j = 0; j < points.Count; j++) { xPoints[j] = new XPoint((points[j].X - offsetX) * scaleX, (points[j].Y - uiPage.StartY) * scaleY); }
-                                            path.AddLines(xPoints);
-                                            XLineCap cap = stroke.DrawingAttributes.IsHighlighter ? XLineCap.Square : XLineCap.Round;
-                                            XPen pathPen = new XPen(color, baseThickness) { LineCap = cap, LineJoin = XLineJoin.Round };
-                                            gfx.DrawPath(pathPen, path);
-                                        }
-                                        else
-                                        {
-                                            for (int j = 0; j < points.Count - 1; j++)
-                                            {
-                                                var p1 = points[j]; var p2 = points[j + 1];
-                                                XPen segmentPen = new XPen(color, baseThickness * (p1.PressureFactor * 2.0)) { LineCap = XLineCap.Round };
-                                                gfx.DrawLine(segmentPen, (p1.X - offsetX) * scaleX, (p1.Y - uiPage.StartY) * scaleY, (p2.X - offsetX) * scaleX, (p2.Y - uiPage.StartY) * scaleY);
-                                            }
+                                            var p1 = points[j]; var p2 = points[j + 1];
+                                            XPen segmentPen = new XPen(color, baseThickness * (p1.PressureFactor * 2.0)) { LineCap = XLineCap.Round };
+                                            gfx.DrawLine(segmentPen, (p1.X - offsetX) * scaleX, p1.Y * scaleY, (p2.X - offsetX) * scaleX, p2.Y * scaleY);
                                         }
                                     }
                                 }
