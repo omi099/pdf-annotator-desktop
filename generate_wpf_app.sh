@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping Anydraw V4.1 (Stateful Persistence & Laser Polling Edition)..."
+echo "🚀 Bootstrapping Anydraw V5 (Multi-Grid, Kiosk Mode & Pointer Edition)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -239,6 +239,9 @@ cat << 'EOF' > MainWindow.xaml
 
                 <Rectangle Width="1" Fill="{DynamicResource BorderToolbar}" Margin="12,4"/>
 
+                <RadioButton Style="{StaticResource TailwindTool}" x:Name="PointerBtn" Checked="Tool_Checked" ToolTip="Mouse Pointer (Esc)">
+                    <Path Data="M 6 4 L 14 24 L 17 17 L 24 14 Z" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Height="22" Stretch="Uniform"/>
+                </RadioButton>
                 <RadioButton Style="{StaticResource TailwindTool}" x:Name="SelectBtn" Checked="Tool_Checked" ToolTip="Lasso Select (S)">
                     <Path Data="M 4 10 C 6 4, 12 6, 18 8 C 22 10, 16 20, 10 18 C 4 16, 2 16, 4 10 Z M 13 13 L 20 20 M 13 13 L 13 20 M 13 13 L 20 13" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" StrokeThickness="2" StrokeDashArray="2,2" StrokeLineJoin="Round" Fill="Transparent" Height="22" Stretch="Uniform"/>
                 </RadioButton>
@@ -292,7 +295,7 @@ cat << 'EOF' > MainWindow.xaml
 
                 <Button x:Name="BgColorBtn" Style="{StaticResource TailwindButton}" Click="BgColorBtn_Click" ToolTip="Background Color">
                     <StackPanel Orientation="Horizontal">
-                        <Rectangle x:Name="ActiveBgIndicator" Width="16" Height="16" Fill="#15171B" Stroke="{DynamicResource BorderToolbar}" StrokeThickness="1" RadiusX="2" RadiusY="2"/>
+                        <Rectangle x:Name="ActiveBgIndicator" Width="16" Height="16" Fill="#151515" Stroke="{DynamicResource BorderToolbar}" StrokeThickness="1" RadiusX="2" RadiusY="2"/>
                         <TextBlock Text="▼" FontSize="9" Margin="4,0,0,0" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Button>
@@ -301,22 +304,26 @@ cat << 'EOF' > MainWindow.xaml
                         <Border.Effect><DropShadowEffect BlurRadius="10" Opacity="0.3" ShadowDepth="4"/></Border.Effect>
                         <StackPanel>
                             <TextBlock Text="Canvas Hex:" Foreground="{DynamicResource TextSecondary}" FontSize="11" Margin="0,0,0,4"/>
-                            <TextBox x:Name="BgHexInput" Text="#15171B" Width="100" Background="{DynamicResource BgPrimary}" Foreground="{DynamicResource TextPrimary}" BorderBrush="{DynamicResource BorderToolbar}" Padding="4" Margin="0,0,0,8" TextChanged="BgHexInput_TextChanged"/>
+                            <TextBox x:Name="BgHexInput" Text="#151515" Width="100" Background="{DynamicResource BgPrimary}" Foreground="{DynamicResource TextPrimary}" BorderBrush="{DynamicResource BorderToolbar}" Padding="4" Margin="0,0,0,8" TextChanged="BgHexInput_TextChanged"/>
                             <WrapPanel Width="120" x:Name="BgPaletteGrid"/>
                         </StackPanel>
                     </Border>
                 </Popup>
 
-                <Button Style="{StaticResource TailwindButton}" Click="GridToggle_Click" ToolTip="Toggle Grid">
+                <Button Style="{StaticResource TailwindButton}" Click="GridToggle_Click" ToolTip="Cycle Grid Patterns (G)">
                     <Path Data="M 3 3 L 21 3 L 21 21 L 3 21 Z M 9 3 L 9 21 M 15 3 L 15 21 M 3 9 L 21 9 M 3 15 L 21 15" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Height="16" Stretch="Uniform"/>
                 </Button>
 
                 <TextBlock Text="⏱️" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" Margin="5,0"/>
                 <TextBox x:Name="LaserDelayInput" Text="1.7" Width="28" TextAlignment="Center" VerticalAlignment="Center" Margin="0,0,10,0" FontWeight="Bold" Background="Transparent" Foreground="{DynamicResource Sky400}" BorderThickness="0" TextChanged="LaserDelayInput_TextChanged" ToolTip="Laser Fade Delay (seconds)"/>
                 
+                <TextBlock Text="🌟" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" Margin="5,0" ToolTip="Laser Glow Intensity"/>
+                <Slider x:Name="LaserGlowSlider" Minimum="1" Maximum="50" Value="15" Width="40" VerticalAlignment="Center" Margin="0,0,5,0" ValueChanged="Size_Changed" IsMoveToPointEnabled="True"/>
+                <TextBox x:Name="LaserGlowInput" Text="{Binding Value, ElementName=LaserGlowSlider, UpdateSourceTrigger=PropertyChanged, StringFormat=F1}" Width="28" TextAlignment="Center" VerticalAlignment="Center" Margin="0,0,10,0" FontWeight="Bold" Background="Transparent" Foreground="{DynamicResource Sky400}" BorderThickness="0"/>
+
                 <Rectangle Width="1" Fill="{DynamicResource BorderToolbar}" Margin="0,4,12,4"/>
                 
-                <Button Style="{StaticResource TailwindButton}" Click="FullScreen_Click" ToolTip="Full Screen (F)">
+                <Button Style="{StaticResource TailwindButton}" Click="FullScreen_Click" ToolTip="Cycle Full Screen Modes (F)">
                     <Path Data="M 3 3 L 9 3 L 9 5 L 5 5 L 5 9 L 3 9 Z M 21 3 L 15 3 L 15 5 L 19 5 L 19 9 L 21 9 Z M 3 21 L 9 21 L 9 19 L 5 19 L 5 15 L 3 15 Z M 21 21 L 15 21 L 15 19 L 19 19 L 19 15 L 21 15 Z" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Height="16" Stretch="Uniform"/>
                 </Button>
                 <Button Style="{StaticResource TailwindButton}" Click="Theme_Click" ToolTip="Toggle Dark/Light Mode">
@@ -383,10 +390,10 @@ namespace TeachingAnnotator
         public int CurrentPage { get; set; } = 1;
         public int TotalPages { get; set; } = 1;
         
-        [JsonIgnore] // ARCHITECT FIX: Prevents JSON serializer from crashing on pure memory objects
+        [JsonIgnore]
         public Dictionary<int, StrokeCollection> StrokesPerPage { get; set; } = new Dictionary<int, StrokeCollection>();
         
-        [JsonIgnore] // ARCHITECT FIX: Prevents JSON serializer from crashing on BitmapImages
+        [JsonIgnore]
         public ObservableCollection<PdfPageModel> PdfRenderedPages { get; set; } = new ObservableCollection<PdfPageModel>();
     }
 
@@ -400,8 +407,9 @@ namespace TeachingAnnotator
         public string LaserColor { get; set; } = "#EF4444";
         public string LaserCoreColor { get; set; } = "#FFFFFF";
         public double LaserFadeDelay { get; set; } = 1.7;
+        public double LaserGlow { get; set; } = 15.0;
         public bool IsDarkTheme { get; set; } = true;
-        public bool ShowGrid { get; set; } = true;
+        public int GridPattern { get; set; } = 1; // 0=None, 1=Square, 2=Dots, 3=Lines
         public string CustomBgColor { get; set; } = "#15171B";
         public bool PressureEnabled { get; set; } = true;
         public bool StrokeEraserEnabled { get; set; } = true;
@@ -416,7 +424,7 @@ namespace TeachingAnnotator
         private bool _isUpdatingUI = false;
         private bool _appLoaded = false;
         private bool _isEditingCoreColor = false;
-        private bool _isFullScreen = false;
+        private int _fullScreenLevel = 1; // 0=Normal, 1=Maximized, 2=Kiosk
 
         private double _penSize;
         private Color _penColor;
@@ -427,7 +435,7 @@ namespace TeachingAnnotator
         private Color _laserCoreColor;
         private double _laserFadeDelay;
         private bool _isDarkTheme;
-        private bool _showGrid;
+        private int _gridPattern;
         private Color _customBgColor;
 
         private List<LaserStrokeData> _laserStrokes = new List<LaserStrokeData>();
@@ -487,11 +495,12 @@ namespace TeachingAnnotator
             _laserCoreColor = (Color)ColorConverter.ConvertFromString(settings.LaserCoreColor);
             _laserFadeDelay = settings.LaserFadeDelay;
             _isDarkTheme = settings.IsDarkTheme;
-            _showGrid = settings.ShowGrid;
+            _gridPattern = settings.GridPattern;
             _customBgColor = (Color)ColorConverter.ConvertFromString(settings.CustomBgColor);
 
             _isUpdatingUI = true;
             LaserDelayInput.Text = _laserFadeDelay.ToString("F1");
+            LaserGlowSlider.Value = settings.LaserGlow;
             BgHexInput.Text = settings.CustomBgColor;
             PressureToggle.IsChecked = settings.PressureEnabled;
             StrokeEraserToggle.IsChecked = settings.StrokeEraserEnabled;
@@ -537,8 +546,8 @@ namespace TeachingAnnotator
                 HighlightSize = _highlightSize, HighlightColor = _highlightColor.ToString(),
                 LaserSize = _laserSize, LaserColor = _laserColor.ToString(),
                 LaserCoreColor = _laserCoreColor.ToString(),
-                LaserFadeDelay = _laserFadeDelay,
-                IsDarkTheme = _isDarkTheme, ShowGrid = _showGrid, CustomBgColor = _customBgColor.ToString(),
+                LaserFadeDelay = _laserFadeDelay, LaserGlow = LaserGlowSlider.Value,
+                IsDarkTheme = _isDarkTheme, GridPattern = _gridPattern, CustomBgColor = _customBgColor.ToString(),
                 PressureEnabled = PressureToggle.IsChecked == true, StrokeEraserEnabled = StrokeEraserToggle.IsChecked == true
             };
             File.WriteAllText(System.IO.Path.Combine(_appDataFolder, "settings.json"), JsonSerializer.Serialize(settings));
@@ -617,7 +626,7 @@ namespace TeachingAnnotator
 
             MainInkCanvas.Strokes = _activeTab.StrokesPerPage.ContainsKey(_activeTab.CurrentPage) ? _activeTab.StrokesPerPage[_activeTab.CurrentPage].Clone() : new StrokeCollection();
             
-            RenderTabsUI(); UpdatePageUI();
+            RenderTabsUI(); UpdatePageUI(); ApplyTheme();
         }
 
         private void NewTab_Click(object sender, RoutedEventArgs e)
@@ -637,9 +646,25 @@ namespace TeachingAnnotator
 
         private void ToggleFullScreen()
         {
-            _isFullScreen = !_isFullScreen;
-            if (_isFullScreen) { this.WindowStyle = WindowStyle.None; this.WindowState = WindowState.Maximized; this.Topmost = true; }
-            else { this.WindowStyle = WindowStyle.SingleBorderWindow; this.WindowState = WindowState.Maximized; this.Topmost = false; }
+            _fullScreenLevel = (_fullScreenLevel + 1) % 3;
+            if (_fullScreenLevel == 0)
+            {
+                this.WindowStyle = WindowStyle.SingleBorderWindow;
+                this.WindowState = WindowState.Normal;
+                this.Topmost = false;
+            }
+            else if (_fullScreenLevel == 1)
+            {
+                this.WindowStyle = WindowStyle.SingleBorderWindow;
+                this.WindowState = WindowState.Maximized;
+                this.Topmost = false;
+            }
+            else
+            {
+                this.WindowStyle = WindowStyle.None;
+                this.WindowState = WindowState.Maximized;
+                this.Topmost = true;
+            }
         }
 
         private void ToolbarDrag_MouseDown(object sender, MouseButtonEventArgs e) { _isDraggingToolbar = true; _toolbarDragStart = e.GetPosition(this); ((UIElement)sender).CaptureMouse(); }
@@ -671,7 +696,13 @@ namespace TeachingAnnotator
         }
 
         private void BgHexInput_TextChanged(object sender, TextChangedEventArgs e) { if (!_appLoaded) return; try { _customBgColor = (Color)ColorConverter.ConvertFromString(BgHexInput.Text); ActiveBgIndicator.Fill = new SolidColorBrush(_customBgColor); ApplyTheme(); } catch { } }
-        private void GridToggle_Click(object sender, RoutedEventArgs e) { _showGrid = !_showGrid; ApplyTheme(); }
+        
+        private void GridToggle_Click(object sender, RoutedEventArgs e) 
+        { 
+            _gridPattern = (_gridPattern + 1) % 4; // 0=None, 1=Square, 2=Dots, 3=Lines
+            ApplyTheme(); 
+        }
+
         private void LaserDelayInput_TextChanged(object sender, TextChangedEventArgs e) { if (!_appLoaded) return; if (double.TryParse(LaserDelayInput.Text, out double val)) _laserFadeDelay = val; }
 
         private void Theme_Click(object sender, RoutedEventArgs e)
@@ -706,7 +737,7 @@ namespace TeachingAnnotator
 
             if (_activeTab != null && string.IsNullOrEmpty(_activeTab.PdfFilePath))
             {
-                Color lineColor = _isDarkTheme ? Color.FromRgb(34, 34, 34) : Color.FromRgb(229, 231, 235);
+                Color lineColor = _isDarkTheme ? Color.FromRgb(42, 45, 53) : Color.FromRgb(209, 213, 219);
                 Workspace.Background = CreateGridBrush(_customBgColor, lineColor);
             }
             else Workspace.Background = new SolidColorBrush(Colors.Transparent);
@@ -718,7 +749,7 @@ namespace TeachingAnnotator
             GeometryDrawing bgDrawing = new GeometryDrawing { Brush = new SolidColorBrush(bgColor), Geometry = new RectangleGeometry(new Rect(0, 0, 40, 40)) };
             DrawingGroup mainGroup = new DrawingGroup(); mainGroup.Children.Add(bgDrawing);
 
-            if (_showGrid)
+            if (_gridPattern == 1) // Squares
             {
                 GeometryDrawing lineDrawing = new GeometryDrawing { Pen = new Pen(new SolidColorBrush(lineColor), 1) };
                 GeometryGroup group = new GeometryGroup();
@@ -726,6 +757,19 @@ namespace TeachingAnnotator
                 group.Children.Add(new LineGeometry(new Point(0, 0), new Point(40, 0)));
                 lineDrawing.Geometry = group; mainGroup.Children.Add(lineDrawing);
             }
+            else if (_gridPattern == 2) // Dots
+            {
+                GeometryDrawing dotDrawing = new GeometryDrawing { Brush = new SolidColorBrush(lineColor), Geometry = new EllipseGeometry(new Point(20, 20), 1.5, 1.5) };
+                mainGroup.Children.Add(dotDrawing);
+            }
+            else if (_gridPattern == 3) // Lines
+            {
+                GeometryDrawing lineDrawing = new GeometryDrawing { Pen = new Pen(new SolidColorBrush(lineColor), 1) };
+                GeometryGroup group = new GeometryGroup();
+                group.Children.Add(new LineGeometry(new Point(0, 40), new Point(40, 40)));
+                lineDrawing.Geometry = group; mainGroup.Children.Add(lineDrawing);
+            }
+            
             brush.Drawing = mainGroup; return brush;
         }
 
@@ -762,11 +806,31 @@ namespace TeachingAnnotator
 
         private void Window_KeyDown(object sender, KeyEventArgs e)
         {
+            if (Keyboard.Modifiers == ModifierKeys.Alt)
+            {
+                if (e.Key == Key.Z)
+                {
+                    int idx = _tabs.IndexOf(_activeTab) - 1;
+                    if (idx < 0) idx = _tabs.Count - 1;
+                    SwitchToTab(_tabs[idx]);
+                    return;
+                }
+                if (e.Key == Key.X)
+                {
+                    int idx = (_tabs.IndexOf(_activeTab) + 1) % _tabs.Count;
+                    SwitchToTab(_tabs[idx]);
+                    return;
+                }
+            }
+
             if (Keyboard.Modifiers == ModifierKeys.Control) { if (e.Key == Key.Z) { PerformUndo(); return; } if (e.Key == Key.Y) { PerformRedo(); return; } }
             if (e.Key == Key.Delete) { var s = MainInkCanvas.GetSelectedStrokes(); if (s.Count > 0) { SaveUndoState(); MainInkCanvas.Strokes.Remove(s); return; } }
-            if (SizeInput.IsFocused || HexInput.IsFocused || BgHexInput.IsFocused || LaserDelayInput.IsFocused) return;
+            if (SizeInput.IsFocused || HexInput.IsFocused || BgHexInput.IsFocused || LaserDelayInput.IsFocused || LaserGlowInput.IsFocused) return;
+            
+            if (e.Key == Key.Escape) { PointerBtn.IsChecked = true; return; }
             if (e.Key == Key.H) MainToolbar.Visibility = MainToolbar.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
             if (e.Key == Key.F) { ToggleFullScreen(); return; }
+            if (e.Key == Key.G) { GridToggle_Click(null, null); return; }
             if (e.Key == Key.T) { Theme_Click(this, new RoutedEventArgs()); return; }
             if (e.Key == Key.OemComma) SizeSlider.Value = Math.Max(SizeSlider.Minimum, SizeSlider.Value - 1.0);
             if (e.Key == Key.OemPeriod) SizeSlider.Value = Math.Min(SizeSlider.Maximum, SizeSlider.Value + 1.0);
@@ -781,14 +845,19 @@ namespace TeachingAnnotator
 
         private void ApplyPenAttributes()
         {
-            if (MainInkCanvas == null || LaserInkCanvas == null || ActiveColorIndicator == null || SizeSlider == null) return;
+            if (MainInkCanvas == null || LaserInkCanvas == null || ActiveColorIndicator == null || SizeSlider == null || LaserGlowSlider == null) return;
             bool ignorePressure = PressureToggle.IsChecked == false; Color activeColor = ((SolidColorBrush)ActiveColorIndicator.Fill).Color; double activeSize = SizeSlider.Value;
 
-            if (LaserBtn.IsChecked == true)
+            if (PointerBtn.IsChecked == true)
+            {
+                MainInkCanvas.IsHitTestVisible = true; LaserInkCanvas.IsHitTestVisible = false;
+                MainInkCanvas.EditingMode = InkCanvasEditingMode.None;
+            }
+            else if (LaserBtn.IsChecked == true)
             {
                 MainInkCanvas.IsHitTestVisible = false; LaserInkCanvas.IsHitTestVisible = true; LaserInkCanvas.EditingMode = InkCanvasEditingMode.Ink;
                 LaserInkCanvas.DefaultDrawingAttributes = new DrawingAttributes { Color = _laserCoreColor, Width = activeSize, Height = activeSize, FitToCurve = true, IgnorePressure = true, StylusTip = StylusTip.Ellipse };
-                LaserInkCanvas.Effect = new System.Windows.Media.Effects.DropShadowEffect { Color = activeColor, BlurRadius = 15, ShadowDepth = 0, Opacity = 1.0 };
+                LaserInkCanvas.Effect = new System.Windows.Media.Effects.DropShadowEffect { Color = activeColor, BlurRadius = LaserGlowSlider.Value, ShadowDepth = 0, Opacity = 1.0 };
             }
             else
             {
@@ -803,11 +872,11 @@ namespace TeachingAnnotator
 
         private void UpdateCustomCursorAppearance()
         {
-            if (SelectBtn.IsChecked == true) { CustomDotCursor.Visibility = Visibility.Hidden; return; }
+            if (SelectBtn.IsChecked == true || PointerBtn.IsChecked == true) { CustomDotCursor.Visibility = Visibility.Hidden; return; }
             double size = SizeSlider.Value; Color c = ((SolidColorBrush)ActiveColorIndicator.Fill).Color;
             if (HighlightBtn.IsChecked == true) { size *= 4; c = Color.FromArgb(120, c.R, c.G, c.B); }
             
-            if (LaserBtn.IsChecked == true) { CustomDotCursor.Fill = new SolidColorBrush(_laserCoreColor); CustomDotCursor.StrokeThickness = 0; CursorGlow.Color = c; CursorGlow.Opacity = 1.0; CursorGlow.BlurRadius = 15; CursorGlow.ShadowDepth = 0; } 
+            if (LaserBtn.IsChecked == true) { CustomDotCursor.Fill = new SolidColorBrush(_laserCoreColor); CustomDotCursor.StrokeThickness = 0; CursorGlow.Color = c; CursorGlow.Opacity = 1.0; CursorGlow.BlurRadius = LaserGlowSlider.Value; CursorGlow.ShadowDepth = 0; } 
             else if (EraserBtn.IsChecked == true) { if (StrokeEraserToggle.IsChecked == true) size = 20; else size *= 4; CustomDotCursor.StrokeThickness = 1; CustomDotCursor.Stroke = new SolidColorBrush(Colors.Black); CustomDotCursor.Fill = new SolidColorBrush(Color.FromArgb(100, 255, 255, 255)); CursorGlow.Opacity = 0.0; } 
             else { CustomDotCursor.StrokeThickness = 0; CustomDotCursor.Fill = new SolidColorBrush(Color.FromArgb(150, c.R, c.G, c.B)); CursorGlow.Color = Colors.Black; CursorGlow.Opacity = 0.5; CursorGlow.BlurRadius = 4; CursorGlow.ShadowDepth = 1; }
             CustomDotCursor.Width = size; CustomDotCursor.Height = size;
@@ -815,16 +884,15 @@ namespace TeachingAnnotator
 
         private void MainInkCanvas_MouseMove(object sender, MouseEventArgs e)
         {
-            if (SelectBtn.IsChecked == true) return;
+            if (SelectBtn.IsChecked == true || PointerBtn.IsChecked == true) return;
             CustomDotCursor.Visibility = Visibility.Visible; Point p = e.GetPosition(CursorCanvas); Canvas.SetLeft(CustomDotCursor, p.X - (CustomDotCursor.Width / 2)); Canvas.SetTop(CustomDotCursor, p.Y - (CustomDotCursor.Height / 2));
         }
 
         private void MainInkCanvas_MouseLeave(object sender, MouseEventArgs e) => CustomDotCursor.Visibility = Visibility.Hidden;
-        private void MainInkCanvas_MouseEnter(object sender, MouseEventArgs e) { if (SelectBtn.IsChecked != true) CustomDotCursor.Visibility = Visibility.Visible; }
+        private void MainInkCanvas_MouseEnter(object sender, MouseEventArgs e) { if (SelectBtn.IsChecked != true && PointerBtn.IsChecked != true) CustomDotCursor.Visibility = Visibility.Visible; }
 
-        private void LaserInkCanvas_StrokeCollected(object sender, InkCanvasStrokeCollectedEventArgs e) { _laserStrokes.Add(new LaserStrokeData(e.Stroke)); _lastLaserActivityTime = DateTime.Now; }
+        private void LaserInkCanvas_StrokeCollected(object sender, InkCanvasStrokeCollectedEventArgs e) { _laserStrokes.Add(new LaserStrokeData(e.Stroke)); }
 
-        // ARCHITECT FIX: Hardware Input Polling applied to perfectly pause fading!
         private void LaserTimer_Tick(object sender, EventArgs e)
         {
             if (Mouse.LeftButton == MouseButtonState.Pressed && LaserBtn.IsChecked == true)
@@ -914,7 +982,7 @@ namespace TeachingAnnotator
                         SaveCurrentPage();
                         PdfSharp.Pdf.PdfDocument wbDoc = new PdfSharp.Pdf.PdfDocument();
                         XColor bgColor = XColor.FromArgb(255, _customBgColor.R, _customBgColor.G, _customBgColor.B);
-                        XColor gridColor = _isDarkTheme ? XColor.FromArgb(255, 34, 34, 34) : XColor.FromArgb(255, 229, 231, 235);
+                        XColor gridColor = _isDarkTheme ? XColor.FromArgb(255, 42, 45, 53) : XColor.FromArgb(255, 209, 213, 219);
 
                         for (int i = 1; i <= _activeTab.TotalPages; i++)
                         {
@@ -922,10 +990,18 @@ namespace TeachingAnnotator
                             XGraphics gfx = XGraphics.FromPdfPage(wbPage);
                             gfx.DrawRectangle(new XSolidBrush(bgColor), 0, 0, wbPage.Width.Point, wbPage.Height.Point);
                             
-                            if (_showGrid) {
+                            if (_gridPattern == 1) {
                                 XPen gridPen = new XPen(gridColor, 1);
                                 for (double x = 0; x < wbPage.Width.Point; x += 40) gfx.DrawLine(gridPen, x, 0, x, wbPage.Height.Point);
                                 for (double y = 0; y < wbPage.Height.Point; y += 40) gfx.DrawLine(gridPen, 0, y, wbPage.Width.Point, y);
+                            } else if (_gridPattern == 2) {
+                                XSolidBrush dotBrush = new XSolidBrush(gridColor);
+                                for (double x = 20; x < wbPage.Width.Point; x += 40)
+                                    for (double y = 20; y < wbPage.Height.Point; y += 40)
+                                        gfx.DrawEllipse(dotBrush, x - 1.5, y - 1.5, 3, 3);
+                            } else if (_gridPattern == 3) {
+                                XPen gridPen = new XPen(gridColor, 1);
+                                for (double y = 40; y < wbPage.Height.Point; y += 40) gfx.DrawLine(gridPen, 0, y, wbPage.Width.Point, y);
                             }
 
                             if (exportAnnotations)
