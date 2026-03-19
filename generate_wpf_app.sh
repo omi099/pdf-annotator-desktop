@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping Anydraw V3 (Absolute Gold Master Edition)..."
+echo "🚀 Bootstrapping Anydraw V3 (100% Stable Gold Master)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -241,7 +241,7 @@ cat << 'EOF' > MainWindow.xaml
 
                 <Button x:Name="BgColorBtn" Style="{StaticResource TailwindButton}" Click="BgColorBtn_Click" ToolTip="Background Color">
                     <StackPanel Orientation="Horizontal">
-                        <Rectangle x:Name="ActiveBgIndicator" Width="16" Height="16" Fill="#282828" Stroke="{DynamicResource BorderToolbar}" StrokeThickness="1" RadiusX="2" RadiusY="2"/>
+                        <Rectangle x:Name="ActiveBgIndicator" Width="16" Height="16" Fill="#15171B" Stroke="{DynamicResource BorderToolbar}" StrokeThickness="1" RadiusX="2" RadiusY="2"/>
                         <TextBlock Text="▼" FontSize="9" Margin="4,0,0,0" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Button>
@@ -250,7 +250,7 @@ cat << 'EOF' > MainWindow.xaml
                         <Border.Effect><DropShadowEffect BlurRadius="10" Opacity="0.3" ShadowDepth="4"/></Border.Effect>
                         <StackPanel>
                             <TextBlock Text="Canvas Hex:" Foreground="{DynamicResource TextSecondary}" FontSize="11" Margin="0,0,0,4"/>
-                            <TextBox x:Name="BgHexInput" Text="#282828" Width="100" Background="{DynamicResource BgPrimary}" Foreground="{DynamicResource TextPrimary}" BorderBrush="{DynamicResource BorderToolbar}" Padding="4" Margin="0,0,0,8" TextChanged="BgHexInput_TextChanged"/>
+                            <TextBox x:Name="BgHexInput" Text="#15171B" Width="100" Background="{DynamicResource BgPrimary}" Foreground="{DynamicResource TextPrimary}" BorderBrush="{DynamicResource BorderToolbar}" Padding="4" Margin="0,0,0,8" TextChanged="BgHexInput_TextChanged"/>
                             <WrapPanel Width="120" x:Name="BgPaletteGrid"/>
                         </StackPanel>
                     </Border>
@@ -348,14 +348,18 @@ namespace TeachingAnnotator
 
         private bool _isDarkTheme = true;
         private bool _showGrid = true;
-        private Color _customBgColor = Color.FromRgb(40, 40, 40); // #282828 default dark mode canvas
+        private Color _customBgColor = Color.FromRgb(21, 23, 27); 
 
         private bool _isDraggingToolbar = false;
         private Point _toolbarDragStart;
+        
+        // ENTERPRISE FIX: Prevents WPF from firing UI events before layout completes!
+        private bool _appLoaded = false;
 
         public MainWindow()
         {
             InitializeComponent();
+            _appLoaded = true; // The App is now safely loaded!
             
             PdfItemsControl.ItemsSource = PdfPages;
             System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
@@ -425,13 +429,13 @@ namespace TeachingAnnotator
             }
         }
 
-        private bool _isEditingCoreColor = false;
         private void ColorBtn_Click(object sender, RoutedEventArgs e) { _isEditingCoreColor = false; PopupColorLabel.Text = "Color Hex:"; HexInput.Text = ((SolidColorBrush)ActiveColorIndicator.Fill).Color.ToString(); ColorPopup.IsOpen = true; }
         private void CoreColorBtn_Click(object sender, RoutedEventArgs e) { _isEditingCoreColor = true; PopupColorLabel.Text = "Core Hex:"; HexInput.Text = ((SolidColorBrush)ActiveCoreColorIndicator.Fill).Color.ToString(); ColorPopup.IsOpen = true; }
         private void BgColorBtn_Click(object sender, RoutedEventArgs e) => BgColorPopup.IsOpen = true;
 
         private void HexInput_TextChanged(object sender, TextChangedEventArgs e)
         {
+            if (!_appLoaded) return;
             try
             {
                 Color c = (Color)ColorConverter.ConvertFromString(HexInput.Text);
@@ -454,6 +458,7 @@ namespace TeachingAnnotator
 
         private void BgHexInput_TextChanged(object sender, TextChangedEventArgs e)
         {
+            if (!_appLoaded) return;
             try
             {
                 Color c = (Color)ColorConverter.ConvertFromString(BgHexInput.Text);
@@ -472,6 +477,7 @@ namespace TeachingAnnotator
 
         private void LaserDelayInput_TextChanged(object sender, TextChangedEventArgs e)
         {
+            if (!_appLoaded) return;
             if (double.TryParse(LaserDelayInput.Text, out double val))
             {
                 _laserFadeDelay = val;
@@ -481,7 +487,7 @@ namespace TeachingAnnotator
         private void Theme_Click(object? sender, RoutedEventArgs? e)
         {
             _isDarkTheme = !_isDarkTheme;
-            if (_isDarkTheme) { BgHexInput.Text = "#282828"; } else { BgHexInput.Text = "#FFFFFF"; }
+            if (_isDarkTheme) { BgHexInput.Text = "#15171B"; } else { BgHexInput.Text = "#FFFFFF"; }
             ApplyTheme();
             UpdateCustomCursorAppearance();
         }
@@ -697,7 +703,7 @@ namespace TeachingAnnotator
 
         private void Tool_Checked(object sender, RoutedEventArgs e)
         {
-            if (_isUpdatingUI || MainInkCanvas == null) return;
+            if (!_appLoaded || _isUpdatingUI || MainInkCanvas == null) return;
             SyncToolToUI();
         }
 
@@ -713,7 +719,7 @@ namespace TeachingAnnotator
 
         private void Size_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
-            if (_isUpdatingUI) return;
+            if (!_appLoaded || _isUpdatingUI) return;
             double s = SizeSlider.Value;
             if (PenBtn.IsChecked == true) _penSize = s;
             else if (HighlightBtn.IsChecked == true) _highlightSize = s;
@@ -721,12 +727,21 @@ namespace TeachingAnnotator
             ApplyPenAttributes();
         }
 
-        private void Pressure_Changed(object sender, RoutedEventArgs e) => ApplyPenAttributes();
-        private void EraserMode_Changed(object sender, RoutedEventArgs e) => ApplyPenAttributes();
+        private void Pressure_Changed(object sender, RoutedEventArgs e)
+        {
+            if (!_appLoaded) return;
+            ApplyPenAttributes();
+        }
+
+        private void EraserMode_Changed(object sender, RoutedEventArgs e)
+        {
+            if (!_appLoaded) return;
+            ApplyPenAttributes();
+        }
 
         private void ApplyPenAttributes()
         {
-            if (MainInkCanvas == null || LaserInkCanvas == null) return;
+            if (MainInkCanvas == null || LaserInkCanvas == null || ActiveColorIndicator == null || SizeSlider == null || LaserBtn == null || PenBtn == null || HighlightBtn == null || EraserBtn == null || SelectBtn == null || CustomDotCursor == null || CursorGlow == null) return;
 
             bool ignorePressure = PressureToggle.IsChecked == false;
             Color activeColor = ((SolidColorBrush)ActiveColorIndicator.Fill).Color;
@@ -779,8 +794,6 @@ namespace TeachingAnnotator
 
         private void UpdateCustomCursorAppearance()
         {
-            if (CustomDotCursor == null) return;
-
             if (SelectBtn.IsChecked == true) {
                 CustomDotCursor.Visibility = Visibility.Hidden;
                 return;
