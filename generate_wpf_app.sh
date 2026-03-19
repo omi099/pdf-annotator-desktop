@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping the Native WPF Annotator (Smooth Dissolve Laser Edition)..."
+echo "🚀 Bootstrapping the Native WPF Annotator (Native Selection & Dynamic Theme Edition)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -37,22 +37,23 @@ cat << 'EOF' > MainWindow.xaml
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Anydraw - Professional Whiteboard" 
         WindowState="Maximized" 
-        Background="#000000" WindowStartupLocation="CenterScreen"
+        WindowStartupLocation="CenterScreen"
         KeyDown="Window_KeyDown" FontFamily="Segoe UI, Helvetica, Arial, sans-serif">
 
     <Window.Resources>
-        <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#FFFF00"/>
-        <SolidColorBrush x:Key="{x:Static SystemColors.WindowFrameBrushKey}" Color="#FFFF00"/>
-        <SolidColorBrush x:Key="{x:Static SystemColors.ActiveBorderBrushKey}" Color="#FFFF00"/>
-
-        <SolidColorBrush x:Key="Slate300" Color="#CBD5E1"/>
-        <SolidColorBrush x:Key="Slate50" Color="#F8FAFC"/>
+        <SolidColorBrush x:Key="BgPrimary" Color="#000000"/>
+        <SolidColorBrush x:Key="BgToolbar" Color="#000000"/>
+        <SolidColorBrush x:Key="BorderToolbar" Color="#334155"/>
+        <SolidColorBrush x:Key="TextPrimary" Color="#F8FAFC"/>
+        <SolidColorBrush x:Key="TextSecondary" Color="#CBD5E1"/>
+        <SolidColorBrush x:Key="ButtonHoverBg" Color="#334155"/>
+        <SolidColorBrush x:Key="ButtonHoverText" Color="#F8FAFC"/>
         <SolidColorBrush x:Key="Sky400" Color="#38BDF8"/>
         <SolidColorBrush x:Key="Rose500" Color="#EF4444"/>
 
         <Style TargetType="RadioButton" x:Key="TailwindTool">
             <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="{StaticResource Slate300}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondary}"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Margin" Value="4,0"/>
             <Setter Property="Template">
@@ -63,12 +64,12 @@ cat << 'EOF' > MainWindow.xaml
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#334155"/>
-                                <Setter Property="Foreground" Value="{StaticResource Slate50}"/>
+                                <Setter TargetName="border" Property="Background" Value="{DynamicResource ButtonHoverBg}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource ButtonHoverText}"/>
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
                                 <Setter TargetName="border" Property="Background" Value="#1E3A8A"/> 
-                                <Setter Property="Foreground" Value="{StaticResource Sky400}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource Sky400}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -78,7 +79,7 @@ cat << 'EOF' > MainWindow.xaml
 
         <Style TargetType="Button" x:Key="TailwindButton">
             <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="{StaticResource Slate300}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondary}"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Padding" Value="10,6"/>
             <Setter Property="Margin" Value="2,0"/>
@@ -90,8 +91,8 @@ cat << 'EOF' > MainWindow.xaml
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#334155"/>
-                                <Setter Property="Foreground" Value="{StaticResource Slate50}"/>
+                                <Setter TargetName="border" Property="Background" Value="{DynamicResource ButtonHoverBg}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource ButtonHoverText}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -100,22 +101,16 @@ cat << 'EOF' > MainWindow.xaml
         </Style>
     </Window.Resources>
 
-    <Grid>
+    <Grid Background="{DynamicResource BgPrimary}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
         
-        <Border x:Name="MainToolbar" Grid.Row="0" Background="#000000" BorderBrush="#334155" BorderThickness="0,0,0,1" Padding="20,12" Panel.ZIndex="100">
+        <Border x:Name="MainToolbar" Grid.Row="0" Background="{DynamicResource BgToolbar}" BorderBrush="{DynamicResource BorderToolbar}" BorderThickness="0,0,0,1" Padding="20,12" Panel.ZIndex="100">
             <Border.Effect>
-                <DropShadowEffect Color="Black" BlurRadius="10" Opacity="0.3" ShadowDepth="2" Direction="270"/>
+                <DropShadowEffect Color="Black" BlurRadius="10" Opacity="0.15" ShadowDepth="2" Direction="270"/>
             </Border.Effect>
-            
-            <Border.Resources>
-                <SolidColorBrush x:Key="{x:Static SystemColors.WindowTextBrushKey}" Color="Black"/>
-                <SolidColorBrush x:Key="{x:Static SystemColors.ControlTextBrushKey}" Color="Black"/>
-                <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#0078D7"/>
-            </Border.Resources>
             
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -125,10 +120,10 @@ cat << 'EOF' > MainWindow.xaml
                 </Grid.ColumnDefinitions>
 
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Path Data="M12 2 L2 22 L6 22 L12 10 L18 22 L22 22 Z M7 16 L17 16 L17 18 L7 18 Z" Fill="{StaticResource Sky400}" Height="24" Stretch="Uniform" Margin="0,0,8,0"/>
-                    <TextBlock Text="Anydraw" FontSize="20" FontWeight="Bold" Foreground="{StaticResource Slate50}" VerticalAlignment="Center" Margin="0,0,24,0"/>
+                    <Path Data="M12 2 L2 22 L6 22 L12 10 L18 22 L22 22 Z M7 16 L17 16 L17 18 L7 18 Z" Fill="{DynamicResource Sky400}" Height="24" Stretch="Uniform" Margin="0,0,8,0"/>
+                    <TextBlock Text="Anydraw" FontSize="20" FontWeight="Bold" Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" Margin="0,0,24,0"/>
                     
-                    <Rectangle Width="1" Fill="#334155" Margin="0,4,12,4"/>
+                    <Rectangle Width="1" Fill="{DynamicResource BorderToolbar}" Margin="0,4,12,4"/>
 
                     <Button Style="{StaticResource TailwindButton}" Click="OpenPdf_Click" ToolTip="Open PDF">
                         <StackPanel Orientation="Horizontal">
@@ -161,7 +156,7 @@ cat << 'EOF' > MainWindow.xaml
                         <Path Data="M3,3 L9,3 L9,5 L5,5 L5,9 L3,9 L3,3 Z M15,3 L21,3 L21,9 L19,9 L19,5 L15,5 L15,3 Z M3,15 L5,15 L5,19 L9,19 L9,21 L3,21 L3,15 Z M15,21 L19,21 L19,17 L21,17 L21,21 L15,21 Z" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" Height="20" Stretch="Uniform"/>
                     </RadioButton>
 
-                    <Rectangle Width="1" Fill="#334155" Margin="12,4"/>
+                    <Rectangle Width="1" Fill="{DynamicResource BorderToolbar}" Margin="12,4"/>
 
                     <ComboBox x:Name="ColorPicker" SelectionChanged="Color_Changed" Width="80" Margin="0,0,10,0" SelectedIndex="0" VerticalAlignment="Center">
                         <ComboBoxItem Content="Red"/><ComboBoxItem Content="Blue"/><ComboBoxItem Content="Green"/>
@@ -172,33 +167,33 @@ cat << 'EOF' > MainWindow.xaml
                     <Slider x:Name="SizeSlider" Minimum="0.5" Maximum="50" Value="4" Width="80" VerticalAlignment="Center" Margin="0,0,5,0" ValueChanged="Size_Changed" IsMoveToPointEnabled="True"/>
                     
                     <TextBox x:Name="SizeInput" Text="{Binding Value, ElementName=SizeSlider, UpdateSourceTrigger=PropertyChanged, StringFormat=F1}" 
-                             Width="35" TextAlignment="Center" VerticalAlignment="Center" Margin="0,0,10,0" FontWeight="Bold" Background="Transparent" Foreground="{StaticResource Slate300}" BorderThickness="0"/>
+                             Width="35" TextAlignment="Center" VerticalAlignment="Center" Margin="0,0,10,0" FontWeight="Bold" Background="Transparent" Foreground="{DynamicResource TextPrimary}" BorderThickness="0"/>
 
-                    <CheckBox x:Name="PressureToggle" Content="Pressure" IsChecked="True" Foreground="{StaticResource Slate300}" VerticalAlignment="Center" Margin="0,0,10,0" Checked="Pressure_Changed" Unchecked="Pressure_Changed" FontWeight="SemiBold"/>
+                    <CheckBox x:Name="PressureToggle" Content="Pressure" IsChecked="True" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" Margin="0,0,10,0" Checked="Pressure_Changed" Unchecked="Pressure_Changed" FontWeight="SemiBold"/>
                 </StackPanel>
 
                 <StackPanel x:Name="PaginationPanel" Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
                     <Button Style="{StaticResource TailwindButton}" Click="PrevPage_Click" ToolTip="Previous Page" Content="&lt;"/>
-                    <TextBlock x:Name="PageCounterText" Text="1 / 1" Foreground="{StaticResource Sky400}" VerticalAlignment="Center" FontWeight="Bold" Margin="4,0" Width="40" TextAlignment="Center"/>
+                    <TextBlock x:Name="PageCounterText" Text="1 / 1" Foreground="{DynamicResource Sky400}" VerticalAlignment="Center" FontWeight="Bold" Margin="4,0" Width="40" TextAlignment="Center"/>
                     <Button Style="{StaticResource TailwindButton}" Click="NextPage_Click" ToolTip="Next Page" Content="&gt;"/>
                     
                     <Button Style="{StaticResource TailwindButton}" Click="DeletePage_Click" ToolTip="Delete Page" Margin="4,0,12,0">
-                        <Path Data="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" Fill="{StaticResource Rose500}" Height="16" Stretch="Uniform"/>
+                        <Path Data="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" Fill="{DynamicResource Rose500}" Height="16" Stretch="Uniform"/>
                     </Button>
 
-                    <Rectangle Width="1" Fill="#334155" Margin="0,4,12,4"/>
+                    <Rectangle Width="1" Fill="{DynamicResource BorderToolbar}" Margin="0,4,12,4"/>
                     
                     <Button Style="{StaticResource TailwindButton}" Click="Theme_Click" ToolTip="Toggle Dark/Light Mode">
                         <Path Data="M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 0 1-4.4 2.26 5.403 5.403 0 0 1-3.14-9.8c-.44-.06-.9-.1-1.36-.1z" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Height="16" Stretch="Uniform"/>
                     </Button>
                     <Button Style="{StaticResource TailwindButton}" Click="ClearInk_Click" ToolTip="Clear Whiteboard">
-                        <TextBlock Text="Clear" Foreground="{StaticResource Rose500}" FontWeight="SemiBold"/>
+                        <TextBlock Text="Clear" Foreground="{DynamicResource Rose500}" FontWeight="SemiBold"/>
                     </Button>
                 </StackPanel>
             </Grid>
         </Border>
 
-        <ScrollViewer Grid.Row="1" x:Name="MainScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" PanningMode="Both" PreviewMouseWheel="MainScroll_PreviewMouseWheel">
+        <ScrollViewer Grid.Row="1" x:Name="MainScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" PanningMode="Both" PreviewMouseWheel="MainScroll_PreviewMouseWheel" Background="Transparent">
             <Grid x:Name="Workspace" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="40">
                 <Grid.LayoutTransform>
                     <ScaleTransform x:Name="ZoomTransform" ScaleX="1" ScaleY="1"/>
@@ -232,19 +227,6 @@ cat << 'EOF' > MainWindow.xaml
                 </AdornerDecorator>
                 
                 <Canvas x:Name="CursorCanvas" IsHitTestVisible="False" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Panel.ZIndex="999">
-                    
-                    <Canvas x:Name="SelectionOverlay" IsHitTestVisible="False" Visibility="Hidden">
-                        <Rectangle x:Name="CustomSelectionRect" Stroke="#FFFF00" StrokeThickness="1.5" StrokeDashArray="4 4" Fill="Transparent" />
-                        <Rectangle x:Name="H_TL" Width="9" Height="9" Stroke="#FFFF00" StrokeThickness="1.5" Fill="#282828" />
-                        <Rectangle x:Name="H_TC" Width="9" Height="9" Stroke="#FFFF00" StrokeThickness="1.5" Fill="#282828" />
-                        <Rectangle x:Name="H_TR" Width="9" Height="9" Stroke="#FFFF00" StrokeThickness="1.5" Fill="#282828" />
-                        <Rectangle x:Name="H_ML" Width="9" Height="9" Stroke="#FFFF00" StrokeThickness="1.5" Fill="#282828" />
-                        <Rectangle x:Name="H_MR" Width="9" Height="9" Stroke="#FFFF00" StrokeThickness="1.5" Fill="#282828" />
-                        <Rectangle x:Name="H_BL" Width="9" Height="9" Stroke="#FFFF00" StrokeThickness="1.5" Fill="#282828" />
-                        <Rectangle x:Name="H_BC" Width="9" Height="9" Stroke="#FFFF00" StrokeThickness="1.5" Fill="#282828" />
-                        <Rectangle x:Name="H_BR" Width="9" Height="9" Stroke="#FFFF00" StrokeThickness="1.5" Fill="#282828" />
-                    </Canvas>
-
                     <Ellipse x:Name="CustomDotCursor" Visibility="Hidden" IsHitTestVisible="False">
                         <Ellipse.Effect>
                             <DropShadowEffect x:Name="CursorGlow" BlurRadius="4" ShadowDepth="1" Opacity="0.6" />
@@ -339,13 +321,6 @@ namespace TeachingAnnotator
             LaserInkCanvas.Width = 3840; LaserInkCanvas.Height = 2160;
             CursorCanvas.Width = 3840; CursorCanvas.Height = 2160;
 
-            MainInkCanvas.SelectionChanged += MainInkCanvas_SelectionChanged;
-            MainInkCanvas.SelectionMoving += MainInkCanvas_SelectionMoving;
-            MainInkCanvas.SelectionResizing += MainInkCanvas_SelectionResizing;
-            MainInkCanvas.SelectionMoved += MainInkCanvas_SelectionMoved;
-            MainInkCanvas.SelectionResized += MainInkCanvas_SelectionResized;
-            MainInkCanvas.LayoutUpdated += MainInkCanvas_LayoutUpdated;
-
             _laserTimer = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(33) };
             _laserTimer.Tick += LaserTimer_Tick;
             _laserTimer.Start();
@@ -353,78 +328,6 @@ namespace TeachingAnnotator
             SyncToolToUI();
             UpdatePageUI();
             ApplyTheme();
-        }
-
-        private void UpdateOverlay(Rect bounds)
-        {
-            if (bounds.IsEmpty || bounds.Width == 0 || bounds.Height == 0)
-            {
-                SelectionOverlay.Visibility = Visibility.Hidden;
-                return;
-            }
-
-            SelectionOverlay.Visibility = Visibility.Visible;
-
-            double pad = 2;
-            double left = bounds.Left - pad;
-            double top = bounds.Top - pad;
-            double width = bounds.Width + (pad * 2);
-            double height = bounds.Height + (pad * 2);
-
-            CustomSelectionRect.Width = width;
-            CustomSelectionRect.Height = height;
-            Canvas.SetLeft(CustomSelectionRect, left);
-            Canvas.SetTop(CustomSelectionRect, top);
-
-            double halfW = width / 2;
-            double halfH = height / 2;
-            double hw = 4.5; 
-
-            Canvas.SetLeft(H_TL, left - hw); Canvas.SetTop(H_TL, top - hw);
-            Canvas.SetLeft(H_TC, left + halfW - hw); Canvas.SetTop(H_TC, top - hw);
-            Canvas.SetLeft(H_TR, left + width - hw); Canvas.SetTop(H_TR, top - hw);
-            
-            Canvas.SetLeft(H_ML, left - hw); Canvas.SetTop(H_ML, top + halfH - hw);
-            Canvas.SetLeft(H_MR, left + width - hw); Canvas.SetTop(H_MR, top + halfH - hw);
-            
-            Canvas.SetLeft(H_BL, left - hw); Canvas.SetTop(H_BL, top + height - hw);
-            Canvas.SetLeft(H_BC, left + halfW - hw); Canvas.SetTop(H_BC, top + height - hw);
-            Canvas.SetLeft(H_BR, left + width - hw); Canvas.SetTop(H_BR, top + height - hw);
-        }
-
-        private void MainInkCanvas_SelectionChanged(object? sender, EventArgs e) => UpdateOverlay(MainInkCanvas.GetSelectionBounds());
-        private void MainInkCanvas_SelectionMoved(object? sender, EventArgs e) => UpdateOverlay(MainInkCanvas.GetSelectionBounds());
-        private void MainInkCanvas_SelectionResized(object? sender, EventArgs e) => UpdateOverlay(MainInkCanvas.GetSelectionBounds());
-        private void MainInkCanvas_SelectionMoving(object? sender, InkCanvasSelectionEditingEventArgs e) => UpdateOverlay(e.NewRectangle);
-        private void MainInkCanvas_SelectionResizing(object? sender, InkCanvasSelectionEditingEventArgs e) => UpdateOverlay(e.NewRectangle);
-
-        private void MainInkCanvas_LayoutUpdated(object? sender, EventArgs e)
-        {
-            if (MainInkCanvas.GetSelectedStrokes().Count > 0)
-            {
-                if (VisualTreeHelper.GetChildrenCount(MainInkCanvas) > 0)
-                {
-                    var innerCanvas = VisualTreeHelper.GetChild(MainInkCanvas, 0) as UIElement;
-                    if (innerCanvas != null)
-                    {
-                        var layer = System.Windows.Documents.AdornerLayer.GetAdornerLayer(innerCanvas);
-                        if (layer != null)
-                        {
-                            var adorners = layer.GetAdorners(innerCanvas);
-                            if (adorners != null)
-                            {
-                                foreach (var adorner in adorners)
-                                {
-                                    if (adorner.GetType().Name == "InkCanvasSelectionAdorner")
-                                    {
-                                        adorner.Opacity = 0.01;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
         }
 
         private void Theme_Click(object? sender, RoutedEventArgs? e)
@@ -438,25 +341,31 @@ namespace TeachingAnnotator
         {
             if (_isDarkTheme)
             {
-                // Pure Black Outer
-                MainToolbar.Background = new SolidColorBrush(Colors.Black);
-                MainScroll.Background = new SolidColorBrush(Colors.Black); 
-                
-                // Pure #282828 Inner Canvas
+                // Dynamic XAML Resources for Dark Mode
+                Resources["BgPrimary"] = new SolidColorBrush(Colors.Black);
+                Resources["BgToolbar"] = new SolidColorBrush(Colors.Black);
+                Resources["BorderToolbar"] = new SolidColorBrush(Color.FromRgb(51, 65, 85));
+                Resources["TextPrimary"] = new SolidColorBrush(Color.FromRgb(248, 250, 252)); // White
+                Resources["TextSecondary"] = new SolidColorBrush(Color.FromRgb(203, 213, 225)); // Light Gray
+                Resources["ButtonHoverBg"] = new SolidColorBrush(Color.FromRgb(51, 65, 85));
+                Resources["ButtonHoverText"] = new SolidColorBrush(Colors.White);
+
+                // Exactly #282828 for the grid background
                 if (string.IsNullOrEmpty(_currentPdfPath)) Workspace.Background = CreateGridBrush(Color.FromRgb(0x28, 0x28, 0x28), Color.FromRgb(0x38, 0x38, 0x38)); 
-                
-                H_TL.Fill = new SolidColorBrush(Color.FromRgb(0x28, 0x28, 0x28)); H_TC.Fill = H_TL.Fill; H_TR.Fill = H_TL.Fill; H_ML.Fill = H_TL.Fill; H_MR.Fill = H_TL.Fill; H_BL.Fill = H_TL.Fill; H_BC.Fill = H_TL.Fill; H_BR.Fill = H_TL.Fill;
             }
             else
             {
-                // Light Outer
-                MainToolbar.Background = new SolidColorBrush(Color.FromRgb(0xF3, 0xF4, 0xF6));
-                MainScroll.Background = new SolidColorBrush(Color.FromRgb(0xF3, 0xF4, 0xF6)); 
-                
-                // Pure White Inner Canvas
+                // Dynamic XAML Resources for Light Mode
+                Resources["BgPrimary"] = new SolidColorBrush(Color.FromRgb(243, 244, 246));
+                Resources["BgToolbar"] = new SolidColorBrush(Color.FromRgb(243, 244, 246));
+                Resources["BorderToolbar"] = new SolidColorBrush(Color.FromRgb(209, 213, 219));
+                Resources["TextPrimary"] = new SolidColorBrush(Colors.Black); // Black Text
+                Resources["TextSecondary"] = new SolidColorBrush(Color.FromRgb(55, 65, 81)); // Dark Gray
+                Resources["ButtonHoverBg"] = new SolidColorBrush(Color.FromRgb(229, 231, 235));
+                Resources["ButtonHoverText"] = new SolidColorBrush(Colors.Black);
+
+                // Pure White for the grid background
                 if (string.IsNullOrEmpty(_currentPdfPath)) Workspace.Background = CreateGridBrush(Colors.White, Color.FromRgb(0xE5, 0xE7, 0xEB)); 
-                
-                H_TL.Fill = new SolidColorBrush(Colors.White); H_TC.Fill = H_TL.Fill; H_TR.Fill = H_TL.Fill; H_ML.Fill = H_TL.Fill; H_MR.Fill = H_TL.Fill; H_BL.Fill = H_TL.Fill; H_BC.Fill = H_TL.Fill; H_BR.Fill = H_TL.Fill;
             }
         }
 
@@ -560,7 +469,6 @@ namespace TeachingAnnotator
                 _redoStack.Push(MainInkCanvas.Strokes.Clone());
                 MainInkCanvas.Strokes = _undoStack.Pop();
                 _isUpdatingUI = false;
-                UpdateOverlay(MainInkCanvas.GetSelectionBounds());
             }
         }
 
@@ -572,7 +480,6 @@ namespace TeachingAnnotator
                 _undoStack.Push(MainInkCanvas.Strokes.Clone());
                 MainInkCanvas.Strokes = _redoStack.Pop();
                 _isUpdatingUI = false;
-                UpdateOverlay(MainInkCanvas.GetSelectionBounds());
             }
         }
 
@@ -612,7 +519,6 @@ namespace TeachingAnnotator
                 {
                     SaveUndoState();
                     MainInkCanvas.Strokes.Remove(selectedStrokes);
-                    UpdateOverlay(Rect.Empty);
                     return;
                 }
             }
@@ -780,7 +686,7 @@ namespace TeachingAnnotator
             if (LaserBtn.IsChecked == true) 
             {
                 CustomDotCursor.Fill = new SolidColorBrush(c);
-                CustomDotCursor.StrokeThickness = 0;
+                CustomDotCursor.StrokeThickness = 0; // ZERO OUTLINE
 
                 CursorGlow.Color = c; 
                 CursorGlow.Opacity = 0.65; 
@@ -811,6 +717,7 @@ namespace TeachingAnnotator
 
         private void MainInkCanvas_MouseMove(object sender, MouseEventArgs e)
         {
+            // THE TRIGGER: Updates the global activity timer anytime you move the laser
             if (LaserBtn.IsChecked == true && e.LeftButton == MouseButtonState.Pressed)
             {
                 _lastLaserActivityTime = DateTime.Now;
@@ -833,19 +740,21 @@ namespace TeachingAnnotator
             _lastLaserActivityTime = DateTime.Now; 
         }
 
-        // --- HYPER ACCURATE FADE-ONLY LASER DISSOLVE ---
+        // --- GLOBAL 1.7s FADE LOGIC ---
         private void LaserTimer_Tick(object? sender, EventArgs e)
         {
             if (_laserStrokes.Count == 0) return;
+
+            // Check if you have stopped writing for exactly 1.7 seconds
+            bool isInactive = (DateTime.Now - _lastLaserActivityTime).TotalSeconds > 1.7;
 
             for (int i = _laserStrokes.Count - 1; i >= 0; i--)
             {
                 var ls = _laserStrokes[i];
                 
-                // Wait 2.0 seconds before fading
-                if ((DateTime.Now - ls.CreatedAt).TotalSeconds > 2.0)
+                if (isInactive)
                 {
-                    ls.Life -= 15; // Smooth opacity dissolve (no tail shrinking)
+                    ls.Life -= 15; // Smooth opacity dissolve
 
                     if (ls.Life <= 0)
                     {
@@ -856,9 +765,19 @@ namespace TeachingAnnotator
                     }
                     else
                     {
-                        // Apply accurate dissolve to the entire line simultaneously
+                        // Apply accurate dissolve to the line
                         var c = ls.Stroke.DrawingAttributes.Color;
                         ls.Stroke.DrawingAttributes.Color = Color.FromArgb((byte)Math.Max(0, ls.Life), c.R, c.G, c.B);
+                    }
+                }
+                else
+                {
+                    // If you start writing again, instantly restore everything to 100% opacity
+                    if (ls.Life < 255)
+                    {
+                        ls.Life = 255;
+                        var c = ls.Stroke.DrawingAttributes.Color;
+                        ls.Stroke.DrawingAttributes.Color = Color.FromArgb(255, c.R, c.G, c.B);
                     }
                 }
             }
@@ -875,7 +794,6 @@ namespace TeachingAnnotator
                 LaserInkCanvas.Strokes.Clear();
                 _undoStack.Clear();
                 _redoStack.Clear();
-                UpdateOverlay(Rect.Empty);
 
                 try 
                 {
@@ -1077,7 +995,6 @@ namespace TeachingAnnotator
             SaveUndoState();
             MainInkCanvas.Strokes.Clear();
             LaserInkCanvas.Strokes.Clear();
-            UpdateOverlay(Rect.Empty);
         }
 
         private void PerformZoomIn() { _zoom += 0.25; ZoomTransform.ScaleX = _zoom; ZoomTransform.ScaleY = _zoom; }
