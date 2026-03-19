@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping Anydraw V3 (Floating Toolbar & Ultimate Precision Edition)..."
+echo "🚀 Bootstrapping Anydraw V3 (Zero-Error Floating Toolbar & Dynamic Logo)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -30,7 +30,7 @@ cat << 'EOF' > TeachingAnnotator.csproj
 </Project>
 EOF
 
-# 4. Overwrite MainWindow.xaml
+# 4. Overwrite MainWindow.xaml (FIXED: PressureToggle restored)
 cat << 'EOF' > MainWindow.xaml
 <Window x:Class="TeachingAnnotator.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -137,7 +137,6 @@ cat << 'EOF' > MainWindow.xaml
                 </AdornerDecorator>
                 
                 <Canvas x:Name="CursorCanvas" IsHitTestVisible="False" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Panel.ZIndex="999">
-                    
                     <Canvas x:Name="SelectionOverlay" IsHitTestVisible="False" Visibility="Hidden">
                         <Rectangle x:Name="CustomSelectionRect" Stroke="#FFFF00" StrokeThickness="1.5" StrokeDashArray="4 4" Fill="Transparent" />
                         <Rectangle x:Name="H_TL" Width="9" Height="9" Stroke="#FFFF00" StrokeThickness="1.5" Fill="#282828" />
@@ -244,6 +243,8 @@ cat << 'EOF' > MainWindow.xaml
                 <Slider x:Name="SizeSlider" Minimum="0.5" Maximum="50" Value="4" Width="60" VerticalAlignment="Center" Margin="5,0" ValueChanged="Size_Changed" IsMoveToPointEnabled="True"/>
                 <TextBox x:Name="SizeInput" Text="{Binding Value, ElementName=SizeSlider, UpdateSourceTrigger=PropertyChanged, StringFormat=F1}" Width="28" TextAlignment="Center" VerticalAlignment="Center" Margin="0,0,8,0" FontWeight="Bold" Background="Transparent" Foreground="{DynamicResource TextPrimary}" BorderThickness="0"/>
 
+                <CheckBox x:Name="PressureToggle" Content="Pressure" IsChecked="True" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" Margin="0,0,10,0" Checked="Pressure_Changed" Unchecked="Pressure_Changed" FontWeight="SemiBold" ToolTip="Enable Pen Pressure Sensitivity"/>
+
                 <CheckBox x:Name="StrokeEraserToggle" Content="Stroke Erase" IsChecked="True" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" Margin="0,0,10,0" Checked="EraserMode_Changed" Unchecked="EraserMode_Changed" FontWeight="SemiBold" ToolTip="Uncheck to erase exact pixels instead of whole strokes."/>
 
                 <Rectangle Width="1" Fill="{DynamicResource BorderToolbar}" Margin="5,4"/>
@@ -286,13 +287,14 @@ cat << 'EOF' > MainWindow.xaml
 </Window>
 EOF
 
-# 5. Overwrite MainWindow.xaml.cs 
+# 5. Overwrite MainWindow.xaml.cs (FIXED: Null warnings and Dynamic Logo generation)
 cat << 'EOF' > MainWindow.xaml.cs
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -356,15 +358,16 @@ namespace TeachingAnnotator
 
         private bool _isDarkTheme = true;
         private bool _showGrid = true;
-        private Color _customBgColor = Color.FromRgb(21, 23, 27); // Professional #15171B
+        private Color _customBgColor = Color.FromRgb(21, 23, 27); 
 
-        // Dragging Logic
         private bool _isDraggingToolbar = false;
         private Point _toolbarDragStart;
 
         public MainWindow()
         {
             InitializeComponent();
+            SetAppIcon(); // Dynamically generates the Anydraw Taskbar Logo!
+            
             PdfItemsControl.ItemsSource = PdfPages;
             System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
 
@@ -393,7 +396,31 @@ namespace TeachingAnnotator
             ApplyTheme();
         }
 
-        // --- TOOLBAR DRAGGING LOGIC ---
+        // --- DYNAMIC TASKBAR LOGO GENERATOR ---
+        private void SetAppIcon()
+        {
+            int size = 256;
+            RenderTargetBitmap rtb = new RenderTargetBitmap(size, size, 96, 96, PixelFormats.Pbgra32);
+            DrawingVisual dv = new DrawingVisual();
+            using (DrawingContext dc = dv.RenderOpen())
+            {
+                // Dark slate background with rounded edges
+                dc.DrawRoundedRectangle(new SolidColorBrush(Color.FromRgb(15, 23, 42)), null, new Rect(0, 0, size, size), 48, 48);
+                // The Anydraw Vector Logo
+                var pathGeometry = Geometry.Parse("M12 2 L2 22 L6 22 L12 10 L18 22 L22 22 Z M7 16 L17 16 L17 18 L7 18 Z");
+                
+                TransformGroup group = new TransformGroup();
+                group.Children.Add(new ScaleTransform(8, 8)); // Scale up vector
+                group.Children.Add(new TranslateTransform(32, 32)); // Center it
+                pathGeometry.Transform = group;
+                
+                // Draw in Sky Blue (#38BDF8)
+                dc.DrawGeometry(new SolidColorBrush(Color.FromRgb(56, 189, 248)), null, pathGeometry);
+            }
+            rtb.Render(dv);
+            this.Icon = BitmapFrame.Create(rtb);
+        }
+
         private void ToolbarDrag_MouseDown(object sender, MouseButtonEventArgs e)
         {
             _isDraggingToolbar = true;
@@ -422,7 +449,6 @@ namespace TeachingAnnotator
             ((UIElement)sender).ReleaseMouseCapture();
         }
 
-        // --- GHOST OVERLAY (FOR YELLOW RESIZE HANDLES, NATIVE LASSO INTACT) ---
         private void UpdateOverlay(Rect bounds)
         {
             if (bounds.IsEmpty || bounds.Width == 0 || bounds.Height == 0)
@@ -495,7 +521,6 @@ namespace TeachingAnnotator
             }
         }
 
-        // --- PALETTES ---
         private void BuildPaletteGrid()
         {
             string[] toolHexes = { "#EF4444", "#3B82F6", "#22C55E", "#EAB308", "#A855F7", "#F97316", "#EC4899", "#14B8A6", "#FFFFFF", "#000000" };
@@ -568,7 +593,8 @@ namespace TeachingAnnotator
             }
         }
 
-        private void Theme_Click(object sender, RoutedEventArgs e)
+        // PERFECTED FOR CS8625: object? sender, RoutedEventArgs? e
+        private void Theme_Click(object? sender, RoutedEventArgs? e)
         {
             _isDarkTheme = !_isDarkTheme;
             if (_isDarkTheme) { BgHexInput.Text = "#15171B"; } else { BgHexInput.Text = "#FFFFFF"; }
@@ -581,8 +607,8 @@ namespace TeachingAnnotator
             if (_isDarkTheme)
             {
                 Resources["BgPrimary"] = new SolidColorBrush(Colors.Black); 
-                Resources["BgToolbar"] = new SolidColorBrush(Color.FromRgb(21, 23, 27)); // #15171B UI
-                Resources["BorderToolbar"] = new SolidColorBrush(Color.FromRgb(42, 45, 53)); // #2A2D35
+                Resources["BgToolbar"] = new SolidColorBrush(Color.FromRgb(21, 23, 27)); 
+                Resources["BorderToolbar"] = new SolidColorBrush(Color.FromRgb(42, 45, 53)); 
                 Resources["TextPrimary"] = new SolidColorBrush(Color.FromRgb(248, 250, 252));
                 Resources["TextSecondary"] = new SolidColorBrush(Color.FromRgb(161, 161, 170));
                 Resources["ButtonHoverBg"] = new SolidColorBrush(Color.FromRgb(37, 40, 45));
@@ -601,7 +627,6 @@ namespace TeachingAnnotator
 
             if (string.IsNullOrEmpty(_currentPdfPath))
             {
-                // Subtle professional grid lines
                 Color lineColor = _isDarkTheme ? Color.FromRgb(34, 34, 34) : Color.FromRgb(229, 231, 235);
                 Workspace.Background = CreateGridBrush(_customBgColor, lineColor);
             }
@@ -848,12 +873,10 @@ namespace TeachingAnnotator
                 else if (HighlightBtn.IsChecked == true)
                 {
                     MainInkCanvas.EditingMode = InkCanvasEditingMode.Ink;
-                    // ROUNDED HIGHLIGHTER
                     MainInkCanvas.DefaultDrawingAttributes = new DrawingAttributes { Color = Color.FromArgb(120, activeColor.R, activeColor.G, activeColor.B), Width = activeSize * 4, Height = activeSize * 4, StylusTip = StylusTip.Ellipse, IsHighlighter = true, IgnorePressure = true };
                 }
                 else if (EraserBtn.IsChecked == true)
                 {
-                    // DYNAMIC ERASER TOGGLE (Stroke vs Normal Point)
                     if (StrokeEraserToggle.IsChecked == true)
                     {
                         MainInkCanvas.EditingMode = InkCanvasEditingMode.EraseByStroke;
@@ -1035,6 +1058,7 @@ namespace TeachingAnnotator
                     }
 
                     Workspace.Background = new SolidColorBrush(Colors.Transparent);
+                    PaginationPanel.Visibility = Visibility.Collapsed;
                     
                     Workspace.Width = maxWidth; Workspace.Height = currentY;
                     MainInkCanvas.Width = maxWidth; MainInkCanvas.Height = currentY;
