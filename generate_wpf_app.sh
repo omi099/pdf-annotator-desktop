@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping Anydraw V5 (Multi-Grid, Kiosk Mode & Pointer Edition)..."
+echo "🚀 Bootstrapping Anydraw V5 (Perfect Laser Physics & Gold Master Edition)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -178,12 +178,13 @@ cat << 'EOF' > MainWindow.xaml
                     <Grid x:Name="CanvasContainer" HorizontalAlignment="Left" VerticalAlignment="Top">
                         <InkCanvas x:Name="MainInkCanvas" Background="Transparent" UseCustomCursor="True" Cursor="Arrow" Focusable="True"
                                    PreviewMouseLeftButtonDown="MainInkCanvas_PreviewMouseLeftButtonDown"
-                                   MouseMove="MainInkCanvas_MouseMove" MouseLeave="MainInkCanvas_MouseLeave" MouseEnter="MainInkCanvas_MouseEnter">
+                                   MouseMove="MainInkCanvas_MouseMove" MouseLeave="MainInkCanvas_MouseLeave" MouseEnter="MainInkCanvas_MouseEnter"
+                                   PreviewMouseDown="LaserActivity_MouseDown" PreviewStylusDown="LaserActivity_StylusDown" PreviewStylusMove="LaserActivity_StylusMove">
                         </InkCanvas>
                         
                         <InkCanvas x:Name="LaserInkCanvas" Background="Transparent" UseCustomCursor="True" Cursor="Arrow" Focusable="False" IsHitTestVisible="False"
                                    MouseMove="MainInkCanvas_MouseMove" MouseLeave="MainInkCanvas_MouseLeave" MouseEnter="MainInkCanvas_MouseEnter"
-                                   StrokeCollected="LaserInkCanvas_StrokeCollected">
+                                   PreviewMouseDown="LaserActivity_MouseDown" PreviewStylusDown="LaserActivity_StylusDown" PreviewStylusMove="LaserActivity_StylusMove">
                         </InkCanvas>
                     </Grid>
                 </AdornerDecorator>
@@ -409,7 +410,7 @@ namespace TeachingAnnotator
         public double LaserFadeDelay { get; set; } = 1.7;
         public double LaserGlow { get; set; } = 15.0;
         public bool IsDarkTheme { get; set; } = true;
-        public int GridPattern { get; set; } = 1; // 0=None, 1=Square, 2=Dots, 3=Lines
+        public int GridPattern { get; set; } = 1; 
         public string CustomBgColor { get; set; } = "#15171B";
         public bool PressureEnabled { get; set; } = true;
         public bool StrokeEraserEnabled { get; set; } = true;
@@ -424,7 +425,7 @@ namespace TeachingAnnotator
         private bool _isUpdatingUI = false;
         private bool _appLoaded = false;
         private bool _isEditingCoreColor = false;
-        private int _fullScreenLevel = 1; // 0=Normal, 1=Maximized, 2=Kiosk
+        private int _fullScreenLevel = 1; 
 
         private double _penSize;
         private Color _penColor;
@@ -435,7 +436,7 @@ namespace TeachingAnnotator
         private Color _laserCoreColor;
         private double _laserFadeDelay;
         private bool _isDarkTheme;
-        private int _gridPattern;
+        private int _gridPattern = 1;
         private Color _customBgColor;
 
         private List<LaserStrokeData> _laserStrokes = new List<LaserStrokeData>();
@@ -467,6 +468,9 @@ namespace TeachingAnnotator
             LaserInkCanvas.Width = 3840; LaserInkCanvas.Height = 2160;
             CursorCanvas.Width = 3840; CursorCanvas.Height = 2160;
 
+            // THE FIX: Use StrokesChanged instead of StrokeCollected to catch tiny dots!
+            LaserInkCanvas.Strokes.StrokesChanged += LaserInkCanvas_StrokesChanged;
+
             _laserTimer = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(33) };
             _laserTimer.Tick += LaserTimer_Tick;
             _laserTimer.Start();
@@ -479,6 +483,11 @@ namespace TeachingAnnotator
             UpdatePageUI();
             ApplyTheme();
         }
+
+        // --- HARDWARE POLLING TRIGGERS FOR LASER INACTIVITY ---
+        private void LaserActivity_MouseDown(object sender, MouseButtonEventArgs e) { if (LaserBtn.IsChecked == true) _lastLaserActivityTime = DateTime.Now; }
+        private void LaserActivity_StylusDown(object sender, StylusDownEventArgs e) { if (LaserBtn.IsChecked == true) _lastLaserActivityTime = DateTime.Now; }
+        private void LaserActivity_StylusMove(object sender, StylusEventArgs e) { if (LaserBtn.IsChecked == true && !e.InAir) _lastLaserActivityTime = DateTime.Now; }
 
         private void LoadState()
         {
@@ -699,7 +708,7 @@ namespace TeachingAnnotator
         
         private void GridToggle_Click(object sender, RoutedEventArgs e) 
         { 
-            _gridPattern = (_gridPattern + 1) % 4; // 0=None, 1=Square, 2=Dots, 3=Lines
+            _gridPattern = (_gridPattern + 1) % 4; 
             ApplyTheme(); 
         }
 
@@ -745,32 +754,44 @@ namespace TeachingAnnotator
 
         private DrawingBrush CreateGridBrush(Color bgColor, Color lineColor)
         {
-            DrawingBrush brush = new DrawingBrush { TileMode = TileMode.Tile, Viewport = new Rect(0, 0, 40, 40), ViewportUnits = BrushMappingMode.Absolute };
-            GeometryDrawing bgDrawing = new GeometryDrawing { Brush = new SolidColorBrush(bgColor), Geometry = new RectangleGeometry(new Rect(0, 0, 40, 40)) };
-            DrawingGroup mainGroup = new DrawingGroup(); mainGroup.Children.Add(bgDrawing);
+            DrawingGroup mainGroup = new DrawingGroup();
+            mainGroup.Children.Add(new GeometryDrawing { Brush = new SolidColorBrush(bgColor), Geometry = new RectangleGeometry(new Rect(0, 0, 100, 100)) });
 
-            if (_gridPattern == 1) // Squares
+            if (_gridPattern == 1) // Major/Minor Engineering Square Grid
             {
-                GeometryDrawing lineDrawing = new GeometryDrawing { Pen = new Pen(new SolidColorBrush(lineColor), 1) };
-                GeometryGroup group = new GeometryGroup();
-                group.Children.Add(new LineGeometry(new Point(0, 0), new Point(0, 40)));
-                group.Children.Add(new LineGeometry(new Point(0, 0), new Point(40, 0)));
-                lineDrawing.Geometry = group; mainGroup.Children.Add(lineDrawing);
+                Color minorColor = Color.FromArgb(100, lineColor.R, lineColor.G, lineColor.B);
+                Pen minorPen = new Pen(new SolidColorBrush(minorColor), 0.5);
+                Pen majorPen = new Pen(new SolidColorBrush(lineColor), 1.5);
+
+                GeometryGroup minorGroup = new GeometryGroup();
+                for (int i = 20; i < 100; i += 20)
+                {
+                    minorGroup.Children.Add(new LineGeometry(new Point(i, 0), new Point(i, 100)));
+                    minorGroup.Children.Add(new LineGeometry(new Point(0, i), new Point(100, i)));
+                }
+                mainGroup.Children.Add(new GeometryDrawing { Pen = minorPen, Geometry = minorGroup });
+
+                GeometryGroup majorGroup = new GeometryGroup();
+                majorGroup.Children.Add(new LineGeometry(new Point(0, 0), new Point(0, 100)));
+                majorGroup.Children.Add(new LineGeometry(new Point(0, 0), new Point(100, 0)));
+                mainGroup.Children.Add(new GeometryDrawing { Pen = majorPen, Geometry = majorGroup });
+
+                return new DrawingBrush { TileMode = TileMode.Tile, Viewport = new Rect(0, 0, 100, 100), ViewportUnits = BrushMappingMode.Absolute, Drawing = mainGroup };
             }
-            else if (_gridPattern == 2) // Dots
+            else if (_gridPattern == 2) // Dots Grid
             {
-                GeometryDrawing dotDrawing = new GeometryDrawing { Brush = new SolidColorBrush(lineColor), Geometry = new EllipseGeometry(new Point(20, 20), 1.5, 1.5) };
-                mainGroup.Children.Add(dotDrawing);
+                mainGroup.Children.Add(new GeometryDrawing { Brush = new SolidColorBrush(lineColor), Geometry = new EllipseGeometry(new Point(20, 20), 1.5, 1.5) });
+                return new DrawingBrush { TileMode = TileMode.Tile, Viewport = new Rect(0, 0, 40, 40), ViewportUnits = BrushMappingMode.Absolute, Drawing = mainGroup };
             }
-            else if (_gridPattern == 3) // Lines
+            else if (_gridPattern == 3) // Ruled Lines
             {
-                GeometryDrawing lineDrawing = new GeometryDrawing { Pen = new Pen(new SolidColorBrush(lineColor), 1) };
-                GeometryGroup group = new GeometryGroup();
-                group.Children.Add(new LineGeometry(new Point(0, 40), new Point(40, 40)));
-                lineDrawing.Geometry = group; mainGroup.Children.Add(lineDrawing);
+                GeometryGroup ruledGroup = new GeometryGroup();
+                ruledGroup.Children.Add(new LineGeometry(new Point(0, 40), new Point(40, 40)));
+                mainGroup.Children.Add(new GeometryDrawing { Pen = new Pen(new SolidColorBrush(lineColor), 1.0), Geometry = ruledGroup });
+                return new DrawingBrush { TileMode = TileMode.Tile, Viewport = new Rect(0, 0, 40, 40), ViewportUnits = BrushMappingMode.Absolute, Drawing = mainGroup };
             }
             
-            brush.Drawing = mainGroup; return brush;
+            return new DrawingBrush { TileMode = TileMode.Tile, Viewport = new Rect(0, 0, 100, 100), ViewportUnits = BrushMappingMode.Absolute, Drawing = mainGroup };
         }
 
         private void UpdatePageUI() { if (_activeTab == null) return; PageCounterText.Text = $"{_activeTab.CurrentPage}/{_activeTab.TotalPages}"; PaginationPanel.Visibility = string.IsNullOrEmpty(_activeTab.PdfFilePath) ? Visibility.Visible : Visibility.Collapsed; }
@@ -891,11 +912,27 @@ namespace TeachingAnnotator
         private void MainInkCanvas_MouseLeave(object sender, MouseEventArgs e) => CustomDotCursor.Visibility = Visibility.Hidden;
         private void MainInkCanvas_MouseEnter(object sender, MouseEventArgs e) { if (SelectBtn.IsChecked != true && PointerBtn.IsChecked != true) CustomDotCursor.Visibility = Visibility.Visible; }
 
-        private void LaserInkCanvas_StrokeCollected(object sender, InkCanvasStrokeCollectedEventArgs e) { _laserStrokes.Add(new LaserStrokeData(e.Stroke)); }
+        // --- HARDWARE STROKE COLLECTION (Fixes "short lines" dot bug) ---
+        private void LaserInkCanvas_StrokesChanged(object sender, StrokeCollectionChangedEventArgs e)
+        {
+            if (_isUpdatingUI) return;
+            if (e.Added.Count > 0)
+            {
+                foreach (var stroke in e.Added)
+                {
+                    if (!_laserStrokes.Any(ls => ls.Stroke == stroke))
+                    {
+                        _laserStrokes.Add(new LaserStrokeData(stroke));
+                    }
+                }
+                _lastLaserActivityTime = DateTime.Now;
+            }
+        }
 
+        // POLLING LOOP FOR EXACT FADE BEHAVIOR
         private void LaserTimer_Tick(object sender, EventArgs e)
         {
-            if (Mouse.LeftButton == MouseButtonState.Pressed && LaserBtn.IsChecked == true)
+            if (LaserBtn.IsChecked == true && Mouse.LeftButton == MouseButtonState.Pressed)
             {
                 _lastLaserActivityTime = DateTime.Now;
             }
@@ -983,6 +1020,7 @@ namespace TeachingAnnotator
                         PdfSharp.Pdf.PdfDocument wbDoc = new PdfSharp.Pdf.PdfDocument();
                         XColor bgColor = XColor.FromArgb(255, _customBgColor.R, _customBgColor.G, _customBgColor.B);
                         XColor gridColor = _isDarkTheme ? XColor.FromArgb(255, 42, 45, 53) : XColor.FromArgb(255, 209, 213, 219);
+                        XColor minorGridColor = XColor.FromArgb(100, gridColor.R, gridColor.G, gridColor.B);
 
                         for (int i = 1; i <= _activeTab.TotalPages; i++)
                         {
@@ -991,16 +1029,14 @@ namespace TeachingAnnotator
                             gfx.DrawRectangle(new XSolidBrush(bgColor), 0, 0, wbPage.Width.Point, wbPage.Height.Point);
                             
                             if (_gridPattern == 1) {
-                                XPen gridPen = new XPen(gridColor, 1);
-                                for (double x = 0; x < wbPage.Width.Point; x += 40) gfx.DrawLine(gridPen, x, 0, x, wbPage.Height.Point);
-                                for (double y = 0; y < wbPage.Height.Point; y += 40) gfx.DrawLine(gridPen, 0, y, wbPage.Width.Point, y);
+                                XPen minorPen = new XPen(minorGridColor, 0.5); XPen majorPen = new XPen(gridColor, 1.5);
+                                for (double x = 0; x < wbPage.Width.Point; x += 20) { XPen p = (x % 100 == 0) ? majorPen : minorPen; gfx.DrawLine(p, x, 0, x, wbPage.Height.Point); }
+                                for (double y = 0; y < wbPage.Height.Point; y += 20) { XPen p = (y % 100 == 0) ? majorPen : minorPen; gfx.DrawLine(p, 0, y, wbPage.Width.Point, y); }
                             } else if (_gridPattern == 2) {
                                 XSolidBrush dotBrush = new XSolidBrush(gridColor);
-                                for (double x = 20; x < wbPage.Width.Point; x += 40)
-                                    for (double y = 20; y < wbPage.Height.Point; y += 40)
-                                        gfx.DrawEllipse(dotBrush, x - 1.5, y - 1.5, 3, 3);
+                                for (double x = 20; x < wbPage.Width.Point; x += 40) for (double y = 20; y < wbPage.Height.Point; y += 40) gfx.DrawEllipse(dotBrush, x - 1.5, y - 1.5, 3, 3);
                             } else if (_gridPattern == 3) {
-                                XPen gridPen = new XPen(gridColor, 1);
+                                XPen gridPen = new XPen(gridColor, 1.0);
                                 for (double y = 40; y < wbPage.Height.Point; y += 40) gfx.DrawLine(gridPen, 0, y, wbPage.Width.Point, y);
                             }
 
@@ -1073,7 +1109,8 @@ namespace TeachingAnnotator
                                             XGraphicsPath path = new XGraphicsPath(); XPoint[] xPoints = new XPoint[points.Count];
                                             for (int j = 0; j < points.Count; j++) { xPoints[j] = new XPoint(points[j].X * scaleX, (points[j].Y - uiPage.StartY) * scaleY); }
                                             path.AddLines(xPoints);
-                                            XPen pathPen = new XPen(color, baseThickness) { LineCap = stroke.DrawingAttributes.IsHighlighter ? XLineCap.Square : XLineCap.Round, LineJoin = XLineJoin.Round };
+                                            XLineCap cap = stroke.DrawingAttributes.IsHighlighter ? XLineCap.Square : XLineCap.Round;
+                                            XPen pathPen = new XPen(color, baseThickness) { LineCap = cap, LineJoin = XLineJoin.Round };
                                             gfx.DrawPath(pathPen, path);
                                         }
                                         else
