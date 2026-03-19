@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping Anydraw V7.1 (Zero-Error Architecture Complete Edition)..."
+echo "🚀 Bootstrapping Anydraw V7.2 (True Zero Top-Left Anchor Edition)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -156,7 +156,7 @@ cat << 'EOF' > MainWindow.xaml
         </Border>
 
         <ScrollViewer Grid.Row="1" x:Name="MainScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" PanningMode="Both" PreviewMouseWheel="MainScroll_PreviewMouseWheel" ScrollChanged="MainScroll_ScrollChanged" Background="Transparent" Panel.ZIndex="10">
-            <Grid x:Name="Workspace" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="40">
+            <Grid x:Name="Workspace" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="40">
                 <Grid.LayoutTransform>
                     <ScaleTransform x:Name="ZoomTransform" ScaleX="1" ScaleY="1"/>
                 </Grid.LayoutTransform>
@@ -164,7 +164,7 @@ cat << 'EOF' > MainWindow.xaml
                 <ItemsControl x:Name="PdfItemsControl">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Border Background="White" Margin="0,0,0,25" CornerRadius="4" HorizontalAlignment="Center">
+                            <Border Background="White" Margin="0,0,0,25" CornerRadius="4" HorizontalAlignment="Left">
                                 <Border.Effect>
                                     <DropShadowEffect Color="Black" BlurRadius="15" Opacity="0.5" Direction="270" ShadowDepth="5"/>
                                 </Border.Effect>
@@ -239,7 +239,7 @@ cat << 'EOF' > MainWindow.xaml
                 <Button Style="{StaticResource TailwindButton}" Click="OpenPdf_Click" ToolTip="Upload PDF to Current Tab">
                     <Path Data="M 14 2 L 6 2 C 4.9 2 4 2.9 4 4 L 4 20 C 4 21.1 4.9 22 6 22 L 18 22 C 19.1 22 20 21.1 20 20 L 20 8 L 14 2 Z M 13 9 L 13 3.5 L 18.5 9 L 13 9 Z" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Height="18" Stretch="Uniform"/>
                 </Button>
-                <Button Style="{StaticResource TailwindButton}" Click="ExportAnnotated_Click" ToolTip="Export PDF">
+                <Button Style="{StaticResource TailwindButton}" Click="ExportAnnotated_Click" ToolTip="Export Document">
                     <Path Data="M 12 16 L 12 3 M 8 7 L 12 3 L 16 7 M 4 16 L 4 20 C 4 21.1 4.9 22 6 22 L 18 22 C 19.1 22 20 21.1 20 20 L 20 16" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Height="18" Stretch="Uniform"/>
                 </Button>
 
@@ -372,7 +372,6 @@ using PdfSharp.Drawing;
 
 namespace TeachingAnnotator
 {
-    // CORE MEMORY MODELS
     public class PdfPageModel
     {
         public BitmapImage ImageSource { get; set; }
@@ -468,6 +467,11 @@ namespace TeachingAnnotator
 
             MainInkCanvas.Cursor = Cursors.Arrow;
             LaserInkCanvas.Cursor = Cursors.Arrow;
+
+            Workspace.Width = 10000; Workspace.Height = 10000;
+            MainInkCanvas.Width = 10000; MainInkCanvas.Height = 10000;
+            LaserInkCanvas.Width = 10000; LaserInkCanvas.Height = 10000;
+            CursorCanvas.Width = 10000; CursorCanvas.Height = 10000;
 
             LaserInkCanvas.Strokes.StrokesChanged += LaserInkCanvas_StrokesChanged;
 
@@ -662,8 +666,9 @@ namespace TeachingAnnotator
                 MainInkCanvas.Width = 10000; MainInkCanvas.Height = 10000;
                 LaserInkCanvas.Width = 10000; LaserInkCanvas.Height = 10000;
                 
+                // ARCHITECT FIX: True Zero (0,0) Top-Left Anchoring for A4 Canvas
                 A4GuideContainer.Visibility = Visibility.Visible;
-                A4GuideContainer.Margin = new Thickness((Workspace.Width - 1123) / 2.0, (Workspace.Height - 794) / 2.0, 0, 0);
+                A4GuideContainer.Margin = new Thickness(0, 0, 0, 0);
             }
 
             MainInkCanvas.Strokes = _activeTab.StrokesPerPage.ContainsKey(_activeTab.CurrentPage) ? _activeTab.StrokesPerPage[_activeTab.CurrentPage].Clone() : new StrokeCollection();
@@ -672,9 +677,10 @@ namespace TeachingAnnotator
             
             if (string.IsNullOrEmpty(_activeTab.PdfFilePath))
             {
+                // ARCHITECT FIX: Viewport spawns precisely at Top-Left (0,0)
                 Workspace.UpdateLayout();
-                MainScroll.ScrollToHorizontalOffset((Workspace.Width / 2.0) - (SystemParameters.PrimaryScreenWidth / 2.0));
-                MainScroll.ScrollToVerticalOffset((Workspace.Height / 2.0) - (SystemParameters.PrimaryScreenHeight / 2.0));
+                MainScroll.ScrollToHorizontalOffset(0);
+                MainScroll.ScrollToVerticalOffset(0);
             }
         }
 
@@ -1097,8 +1103,10 @@ namespace TeachingAnnotator
                             
                             double actualW = 1123; 
                             double actualH = 794;  
-                            double originX = A4GuideContainer.Margin.Left;
-                            double originY = A4GuideContainer.Margin.Top;
+                            
+                            // ARCHITECT FIX: Top-Left (0,0) Export Origin Anchor
+                            double originX = 0; 
+                            double originY = 0; 
                             
                             Rect inkBounds = Rect.Empty;
                             foreach (Stroke s in pageStrokes) { inkBounds.Union(s.GetBounds()); }
