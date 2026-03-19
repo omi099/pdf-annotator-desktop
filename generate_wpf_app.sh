@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping Anydraw V11 (Independent Tab Sandboxing & Gold Master)..."
+echo "🚀 Bootstrapping Anydraw V12 (Unlocked PDF Margins & Gold Master Edition)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -296,7 +296,10 @@ cat << 'EOF' > MainWindow.xaml
                 <TextBox x:Name="SizeInput" Text="{Binding Value, ElementName=SizeSlider, UpdateSourceTrigger=PropertyChanged, StringFormat=F1}" Width="28" TextAlignment="Center" VerticalAlignment="Center" Margin="0,0,8,0" FontWeight="Bold" Background="Transparent" Foreground="{DynamicResource TextPrimary}" BorderThickness="0"/>
 
                 <CheckBox x:Name="PressureToggle" Content="Pressure" IsChecked="True" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" Margin="0,0,10,0" Checked="Pressure_Changed" Unchecked="Pressure_Changed" FontWeight="SemiBold" ToolTip="Enable Pen Pressure Sensitivity"/>
-                <CheckBox x:Name="StrokeEraserToggle" Content="Stroke Erase" IsChecked="True" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" Margin="0,0,10,0" Checked="EraserMode_Changed" Unchecked="EraserMode_Changed" FontWeight="SemiBold" ToolTip="Uncheck to erase exact pixels instead of whole strokes."/>
+                
+                <Rectangle Width="1" Fill="{DynamicResource BorderToolbar}" Margin="5,4"/>
+
+                <CheckBox x:Name="PdfCanvasToggle" Content="Unlock PDF Margins" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" Margin="0,0,10,0" Checked="PdfCanvas_Changed" Unchecked="PdfCanvas_Changed" FontWeight="SemiBold" ToolTip="Expand canvas to the right and bottom for margin notes."/>
 
                 <Rectangle Width="1" Fill="{DynamicResource BorderToolbar}" Margin="5,4"/>
 
@@ -419,7 +422,6 @@ namespace TeachingAnnotator
         public LaserStrokeData(System.Windows.Ink.Stroke s) { Stroke = s; }
     }
 
-    // ARCHITECT FIX: Fully Encapsulated Independent Tab Vault
     public class WorkspaceTab
     {
         public string Id { get; set; } = Guid.NewGuid().ToString();
@@ -442,6 +444,8 @@ namespace TeachingAnnotator
         public string LaserColor { get; set; } = "#EF4444";
         public int GridPattern { get; set; } = 1;
         public string CustomBgColor { get; set; } = "#15171B";
+        
+        public bool UnlockPdfCanvas { get; set; } = false; // ARCHITECT FIX: Tab memory for Unlocked PDF margins
 
         [JsonIgnore]
         public Dictionary<int, StrokeCollection> StrokesPerPage { get; set; } = new Dictionary<int, StrokeCollection>();
@@ -457,7 +461,7 @@ namespace TeachingAnnotator
         public double LaserGlow { get; set; } = 15.0;
         public bool IsDarkTheme { get; set; } = true;
         public bool PressureEnabled { get; set; } = true;
-        public bool StrokeEraserEnabled { get; set; } = true;
+        public bool UnlockPdfCanvas { get; set; } = false; // Global setting memory
     }
 
     public partial class MainWindow : Window
@@ -650,7 +654,7 @@ namespace TeachingAnnotator
             LaserDelayInput.Text = _laserFadeDelay.ToString("F1");
             LaserGlowSlider.Value = settings.LaserGlow;
             PressureToggle.IsChecked = settings.PressureEnabled;
-            StrokeEraserToggle.IsChecked = settings.StrokeEraserEnabled;
+            PdfCanvasToggle.IsChecked = settings.UnlockPdfCanvas;
             _isUpdatingUI = false;
 
             string tabsFile = System.IO.Path.Combine(_appDataFolder, "tabs.json");
@@ -683,7 +687,6 @@ namespace TeachingAnnotator
             RenderTabsUI();
         }
 
-        // ARCHITECT FIX: Save exactly the isolated state of the tab we are currently leaving
         private void SaveTabState()
         {
             if (_activeTab == null) return;
@@ -700,6 +703,7 @@ namespace TeachingAnnotator
             _activeTab.LaserColor = _laserColor.ToString();
             _activeTab.GridPattern = _gridPattern;
             _activeTab.CustomBgColor = _customBgColor.ToString();
+            _activeTab.UnlockPdfCanvas = PdfCanvasToggle.IsChecked == true;
             
             if (PointerBtn.IsChecked == true) _activeTab.ActiveTool = "Pointer";
             else if (SelectBtn.IsChecked == true) _activeTab.ActiveTool = "Select";
@@ -720,7 +724,8 @@ namespace TeachingAnnotator
                 LaserCoreColor = _laserCoreColor.ToString(),
                 LaserFadeDelay = _laserFadeDelay, LaserGlow = LaserGlowSlider.Value,
                 IsDarkTheme = _isDarkTheme,
-                PressureEnabled = PressureToggle.IsChecked == true, StrokeEraserEnabled = StrokeEraserToggle.IsChecked == true
+                PressureEnabled = PressureToggle.IsChecked == true,
+                UnlockPdfCanvas = PdfCanvasToggle.IsChecked == true
             };
             File.WriteAllText(System.IO.Path.Combine(_appDataFolder, "settings.json"), JsonSerializer.Serialize(settings));
 
@@ -773,12 +778,20 @@ namespace TeachingAnnotator
             {
                 int idx = int.Parse(((Button)sender).Tag.ToString());
                 _activeTab.CanvasSizeIndex = idx;
-                ApplyCanvasSize();
+                RefreshWorkspaceBounds();
             }
             PageSizePopup.IsOpen = false;
         }
 
-        private void ApplyCanvasSize()
+        private void PdfCanvas_Changed(object sender, RoutedEventArgs e)
+        {
+            if (!_appLoaded || _activeTab == null) return;
+            _activeTab.UnlockPdfCanvas = PdfCanvasToggle.IsChecked == true;
+            RefreshWorkspaceBounds();
+        }
+
+        // ARCHITECT FIX: Unlocked PDF Margins Engine
+        private void RefreshWorkspaceBounds()
         {
             if (_activeTab == null) return;
 
@@ -786,34 +799,50 @@ namespace TeachingAnnotator
             {
                 PageSizeIndicator.Text = "PDF";
                 A4GuideContainer.Visibility = Visibility.Hidden;
-                return;
+                
+                if (_activeTab.PdfRenderedPages.Count > 0)
+                {
+                    double pdfW = _activeTab.PdfRenderedPages.Max(p => p.Width);
+                    double pdfH = _activeTab.PdfRenderedPages.Sum(p => p.Height) + (_activeTab.PdfRenderedPages.Count * 25);
+                    
+                    if (_activeTab.UnlockPdfCanvas) {
+                        Workspace.Width = Math.Max(10000, pdfW + 5000);
+                        Workspace.Height = Math.Max(10000, pdfH + 5000);
+                    } else {
+                        Workspace.Width = pdfW;
+                        Workspace.Height = pdfH;
+                    }
+                }
             }
-
-            double w = 10000; double h = 10000; string ind = "INF";
-            switch (_activeTab.CanvasSizeIndex)
+            else
             {
-                case 1: w = 1123; h = 794; ind = "A4"; break;
-                case 2: w = 1587; h = 1123; ind = "A3"; break;
-                case 3: w = 1056; h = 816; ind = "LTR"; break;
-                case 4: w = 1920; h = 1080; ind = "FHD"; break;
-                default: w = 10000; h = 10000; ind = "INF"; break;
+                double w = 10000; double h = 10000; string ind = "INF";
+                switch (_activeTab.CanvasSizeIndex)
+                {
+                    case 1: w = 1123; h = 794; ind = "A4"; break;
+                    case 2: w = 1587; h = 1123; ind = "A3"; break;
+                    case 3: w = 1056; h = 816; ind = "LTR"; break;
+                    case 4: w = 1920; h = 1080; ind = "FHD"; break;
+                    default: w = 10000; h = 10000; ind = "INF"; break;
+                }
+
+                PageSizeIndicator.Text = ind;
+                Workspace.Width = w; Workspace.Height = h;
+
+                if (_activeTab.CanvasSizeIndex == 0) {
+                    A4GuideContainer.Visibility = Visibility.Visible;
+                    A4GuideContainer.Width = 1123; A4GuideContainer.Height = 794;
+                    A4GuideText.Text = "A4 Reference"; A4GuideRect.StrokeDashArray = new DoubleCollection { 6, 6 };
+                } else {
+                    A4GuideContainer.Visibility = Visibility.Visible;
+                    A4GuideContainer.Width = w; A4GuideContainer.Height = h;
+                    A4GuideText.Text = ind + " Boundary"; A4GuideRect.StrokeDashArray = new DoubleCollection { 0 };
+                }
             }
 
-            PageSizeIndicator.Text = ind;
-            Workspace.Width = w; Workspace.Height = h;
-            MainInkCanvas.Width = w; MainInkCanvas.Height = h;
-            LaserInkCanvas.Width = w; LaserInkCanvas.Height = h;
-            CursorCanvas.Width = w; CursorCanvas.Height = h;
-
-            if (_activeTab.CanvasSizeIndex == 0) {
-                A4GuideContainer.Visibility = Visibility.Visible;
-                A4GuideContainer.Width = 1123; A4GuideContainer.Height = 794;
-                A4GuideText.Text = "A4 Reference"; A4GuideRect.StrokeDashArray = new DoubleCollection { 6, 6 };
-            } else {
-                A4GuideContainer.Visibility = Visibility.Visible;
-                A4GuideContainer.Width = w; A4GuideContainer.Height = h;
-                A4GuideText.Text = ind + " Boundary"; A4GuideRect.StrokeDashArray = new DoubleCollection { 0 };
-            }
+            MainInkCanvas.Width = Workspace.Width; MainInkCanvas.Height = Workspace.Height;
+            LaserInkCanvas.Width = Workspace.Width; LaserInkCanvas.Height = Workspace.Height;
+            CursorCanvas.Width = Workspace.Width; CursorCanvas.Height = Workspace.Height;
 
             Workspace.UpdateLayout();
             ApplyTheme(); 
@@ -826,7 +855,6 @@ namespace TeachingAnnotator
             _activeTab = targetTab;
             _undoStack.Clear(); _redoStack.Clear(); LaserInkCanvas.Strokes.Clear(); _laserStrokes.Clear();
 
-            // ARCHITECT FIX: Unpack isolated state for the incoming tab
             _zoom = _activeTab.Zoom;
             ZoomTransform.ScaleX = _zoom; ZoomTransform.ScaleY = _zoom;
 
@@ -841,6 +869,7 @@ namespace TeachingAnnotator
 
             _isUpdatingUI = true;
             BgHexInput.Text = _activeTab.CustomBgColor;
+            PdfCanvasToggle.IsChecked = _activeTab.UnlockPdfCanvas;
             
             switch (_activeTab.ActiveTool) {
                 case "Pointer": PointerBtn.IsChecked = true; break;
@@ -859,19 +888,7 @@ namespace TeachingAnnotator
             }
             PdfItemsControl.ItemsSource = _activeTab.PdfRenderedPages;
             
-            if (_activeTab.PdfRenderedPages.Count > 0)
-            {
-                Workspace.Width = _activeTab.PdfRenderedPages.Max(p => p.Width);
-                Workspace.Height = _activeTab.PdfRenderedPages.Sum(p => p.Height) + (_activeTab.PdfRenderedPages.Count * 25);
-                MainInkCanvas.Width = Workspace.Width; MainInkCanvas.Height = Workspace.Height;
-                LaserInkCanvas.Width = Workspace.Width; LaserInkCanvas.Height = Workspace.Height;
-                A4GuideContainer.Visibility = Visibility.Hidden;
-                PageSizeIndicator.Text = "PDF";
-            }
-            else
-            {
-                ApplyCanvasSize(); 
-            }
+            RefreshWorkspaceBounds();
 
             MainInkCanvas.Strokes = _activeTab.StrokesPerPage.ContainsKey(_activeTab.CurrentPage) ? _activeTab.StrokesPerPage[_activeTab.CurrentPage].Clone() : new StrokeCollection();
             
@@ -879,7 +896,6 @@ namespace TeachingAnnotator
             
             Workspace.UpdateLayout();
 
-            // ARCHITECT FIX: Restores the exact scroll position you left it at!
             if (string.IsNullOrEmpty(_activeTab.PdfFilePath))
             {
                 MainScroll.ScrollToHorizontalOffset(_activeTab.ScrollX);
@@ -891,7 +907,9 @@ namespace TeachingAnnotator
                 double targetY = _activeTab.ScrollY > 0 ? _activeTab.ScrollY : (_activeTab.PdfRenderedPages.Count > 0 ? _activeTab.PdfRenderedPages[_activeTab.CurrentPage - 1].StartY * _zoom : 0);
                 MainScroll.ScrollToVerticalOffset(targetY);
                 
-                _ = ManagePdfMemory();
+                _isRenderingMemory = true;
+                await ManagePdfMemory(MainScroll.VerticalOffset / _zoom, MainScroll.ViewportHeight > 0 ? MainScroll.ViewportHeight / _zoom : 1080);
+                _isRenderingMemory = false;
             }
         }
 
@@ -1042,7 +1060,7 @@ namespace TeachingAnnotator
                 if (A4GuideContainer != null && A4GuideContainer.Children.Count > 0) ((Rectangle)A4GuideContainer.Children[0]).Stroke = new SolidColorBrush(Color.FromArgb(80, 0, 0, 0));
             }
 
-            if (_activeTab != null && string.IsNullOrEmpty(_activeTab.PdfFilePath))
+            if (_activeTab != null && (string.IsNullOrEmpty(_activeTab.PdfFilePath) || _activeTab.UnlockPdfCanvas))
             {
                 Color lineColor = _isDarkTheme ? Color.FromRgb(42, 45, 53) : Color.FromRgb(209, 213, 219);
                 Workspace.Background = CreateGridBrush(_customBgColor, lineColor);
@@ -1093,11 +1111,7 @@ namespace TeachingAnnotator
         }
 
         private void UpdatePageUI() { if (_activeTab == null) return; PageCounterText.Text = $"{_activeTab.CurrentPage}/{_activeTab.TotalPages}"; PaginationPanel.Visibility = string.IsNullOrEmpty(_activeTab.PdfFilePath) ? Visibility.Visible : Visibility.Collapsed; }
-        
-        private void SaveCurrentPage() { 
-            if (_activeTab == null || !string.IsNullOrEmpty(_activeTab.PdfFilePath)) return; 
-            _activeTab.StrokesPerPage[_activeTab.CurrentPage] = MainInkCanvas.Strokes.Clone(); 
-        }
+        private void SaveCurrentPage() { if (_activeTab == null || !string.IsNullOrEmpty(_activeTab.PdfFilePath)) return; _activeTab.StrokesPerPage[_activeTab.CurrentPage] = MainInkCanvas.Strokes.Clone(); }
         
         private void LoadPage(int page)
         {
@@ -1320,6 +1334,17 @@ namespace TeachingAnnotator
                             
                             double actualW = Workspace.Width; 
                             double actualH = Workspace.Height;  
+                            
+                            // EXPORTER FIX: Ensure infinite canvas falls back to drawn ink size
+                            if (actualW >= 10000) {
+                                actualW = 1123; actualH = 794; 
+                                Rect inkBounds = Rect.Empty;
+                                foreach (Stroke s in pageStrokes) { inkBounds.Union(s.GetBounds()); }
+                                if (inkBounds != Rect.Empty) {
+                                    if (inkBounds.Right > actualW) actualW = inkBounds.Right + 50;
+                                    if (inkBounds.Bottom > actualH) actualH = inkBounds.Bottom + 50;
+                                }
+                            }
 
                             PdfSharp.Pdf.PdfPage wbPage = wbDoc.AddPage(); 
                             wbPage.Width = XUnit.FromPresentation(actualW); 
