@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping Anydraw V4 (Zero-Error Multi-Threaded Edition)..."
+echo "🚀 Bootstrapping Anydraw V4.1 (Stateful Persistence & Laser Polling Edition)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -292,7 +292,7 @@ cat << 'EOF' > MainWindow.xaml
 
                 <Button x:Name="BgColorBtn" Style="{StaticResource TailwindButton}" Click="BgColorBtn_Click" ToolTip="Background Color">
                     <StackPanel Orientation="Horizontal">
-                        <Rectangle x:Name="ActiveBgIndicator" Width="16" Height="16" Fill="#151515" Stroke="{DynamicResource BorderToolbar}" StrokeThickness="1" RadiusX="2" RadiusY="2"/>
+                        <Rectangle x:Name="ActiveBgIndicator" Width="16" Height="16" Fill="#15171B" Stroke="{DynamicResource BorderToolbar}" StrokeThickness="1" RadiusX="2" RadiusY="2"/>
                         <TextBlock Text="▼" FontSize="9" Margin="4,0,0,0" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Button>
@@ -301,7 +301,7 @@ cat << 'EOF' > MainWindow.xaml
                         <Border.Effect><DropShadowEffect BlurRadius="10" Opacity="0.3" ShadowDepth="4"/></Border.Effect>
                         <StackPanel>
                             <TextBlock Text="Canvas Hex:" Foreground="{DynamicResource TextSecondary}" FontSize="11" Margin="0,0,0,4"/>
-                            <TextBox x:Name="BgHexInput" Text="#151515" Width="100" Background="{DynamicResource BgPrimary}" Foreground="{DynamicResource TextPrimary}" BorderBrush="{DynamicResource BorderToolbar}" Padding="4" Margin="0,0,0,8" TextChanged="BgHexInput_TextChanged"/>
+                            <TextBox x:Name="BgHexInput" Text="#15171B" Width="100" Background="{DynamicResource BgPrimary}" Foreground="{DynamicResource TextPrimary}" BorderBrush="{DynamicResource BorderToolbar}" Padding="4" Margin="0,0,0,8" TextChanged="BgHexInput_TextChanged"/>
                             <WrapPanel Width="120" x:Name="BgPaletteGrid"/>
                         </StackPanel>
                     </Border>
@@ -319,7 +319,6 @@ cat << 'EOF' > MainWindow.xaml
                 <Button Style="{StaticResource TailwindButton}" Click="FullScreen_Click" ToolTip="Full Screen (F)">
                     <Path Data="M 3 3 L 9 3 L 9 5 L 5 5 L 5 9 L 3 9 Z M 21 3 L 15 3 L 15 5 L 19 5 L 19 9 L 21 9 Z M 3 21 L 9 21 L 9 19 L 5 19 L 5 15 L 3 15 Z M 21 21 L 15 21 L 15 19 L 19 19 L 19 15 L 21 15 Z" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Height="16" Stretch="Uniform"/>
                 </Button>
-
                 <Button Style="{StaticResource TailwindButton}" Click="Theme_Click" ToolTip="Toggle Dark/Light Mode">
                     <Path Data="M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 0 1-4.4 2.26 5.403 5.403 0 0 1-3.14-9.8c-.44-.06-.9-.1-1.36-.1z" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Height="16" Stretch="Uniform"/>
                 </Button>
@@ -340,6 +339,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -383,7 +383,10 @@ namespace TeachingAnnotator
         public int CurrentPage { get; set; } = 1;
         public int TotalPages { get; set; } = 1;
         
+        [JsonIgnore] // ARCHITECT FIX: Prevents JSON serializer from crashing on pure memory objects
         public Dictionary<int, StrokeCollection> StrokesPerPage { get; set; } = new Dictionary<int, StrokeCollection>();
+        
+        [JsonIgnore] // ARCHITECT FIX: Prevents JSON serializer from crashing on BitmapImages
         public ObservableCollection<PdfPageModel> PdfRenderedPages { get; set; } = new ObservableCollection<PdfPageModel>();
     }
 
@@ -574,7 +577,6 @@ namespace TeachingAnnotator
                 closeBtn.Click += (s, e) => { e.Handled = true; CloseTab(tab); };
 
                 sp.Children.Add(tb); sp.Children.Add(closeBtn); btn.Content = sp;
-                
                 if (tab == _activeTab) { btn.Background = (Brush)FindResource("ButtonHoverBg"); btn.BorderBrush = (Brush)FindResource("BorderToolbar"); }
 
                 btn.Click += (s, e) => SwitchToTab(tab);
@@ -595,7 +597,6 @@ namespace TeachingAnnotator
             PdfItemsControl.ItemsSource = null;
             if (!string.IsNullOrEmpty(_activeTab.PdfFilePath) && _activeTab.PdfRenderedPages.Count == 0)
             {
-                // THE ARCHITECT FIX: 'await' properly handles Tasks, resolving CS4008.
                 await LoadPdfIntoTab(_activeTab.PdfFilePath, _activeTab);
             }
             PdfItemsControl.ItemsSource = _activeTab.PdfRenderedPages;
@@ -814,7 +815,6 @@ namespace TeachingAnnotator
 
         private void MainInkCanvas_MouseMove(object sender, MouseEventArgs e)
         {
-            if (LaserBtn.IsChecked == true && e.LeftButton == MouseButtonState.Pressed) _lastLaserActivityTime = DateTime.Now;
             if (SelectBtn.IsChecked == true) return;
             CustomDotCursor.Visibility = Visibility.Visible; Point p = e.GetPosition(CursorCanvas); Canvas.SetLeft(CustomDotCursor, p.X - (CustomDotCursor.Width / 2)); Canvas.SetTop(CustomDotCursor, p.Y - (CustomDotCursor.Height / 2));
         }
@@ -824,8 +824,14 @@ namespace TeachingAnnotator
 
         private void LaserInkCanvas_StrokeCollected(object sender, InkCanvasStrokeCollectedEventArgs e) { _laserStrokes.Add(new LaserStrokeData(e.Stroke)); _lastLaserActivityTime = DateTime.Now; }
 
+        // ARCHITECT FIX: Hardware Input Polling applied to perfectly pause fading!
         private void LaserTimer_Tick(object sender, EventArgs e)
         {
+            if (Mouse.LeftButton == MouseButtonState.Pressed && LaserBtn.IsChecked == true)
+            {
+                _lastLaserActivityTime = DateTime.Now;
+            }
+
             if (_laserStrokes.Count == 0) return;
             bool isInactive = (DateTime.Now - _lastLaserActivityTime).TotalSeconds > _laserFadeDelay;
 
@@ -842,7 +848,6 @@ namespace TeachingAnnotator
             }
         }
 
-        // THE ARCHITECT FIX: 'await' properly handles Tasks to resolve CS4008.
         private async Task LoadPdfIntoTab(string filePath, WorkspaceTab targetTab)
         {
             try 
