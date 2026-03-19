@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping Anydraw V5 (Perfect Laser Physics & Gold Master Edition)..."
+echo "🚀 Bootstrapping Anydraw V5.1 (True Kiosk Full Screen Fix)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -178,13 +178,12 @@ cat << 'EOF' > MainWindow.xaml
                     <Grid x:Name="CanvasContainer" HorizontalAlignment="Left" VerticalAlignment="Top">
                         <InkCanvas x:Name="MainInkCanvas" Background="Transparent" UseCustomCursor="True" Cursor="Arrow" Focusable="True"
                                    PreviewMouseLeftButtonDown="MainInkCanvas_PreviewMouseLeftButtonDown"
-                                   MouseMove="MainInkCanvas_MouseMove" MouseLeave="MainInkCanvas_MouseLeave" MouseEnter="MainInkCanvas_MouseEnter"
-                                   PreviewMouseDown="LaserActivity_MouseDown" PreviewStylusDown="LaserActivity_StylusDown" PreviewStylusMove="LaserActivity_StylusMove">
+                                   MouseMove="MainInkCanvas_MouseMove" MouseLeave="MainInkCanvas_MouseLeave" MouseEnter="MainInkCanvas_MouseEnter">
                         </InkCanvas>
                         
                         <InkCanvas x:Name="LaserInkCanvas" Background="Transparent" UseCustomCursor="True" Cursor="Arrow" Focusable="False" IsHitTestVisible="False"
                                    MouseMove="MainInkCanvas_MouseMove" MouseLeave="MainInkCanvas_MouseLeave" MouseEnter="MainInkCanvas_MouseEnter"
-                                   PreviewMouseDown="LaserActivity_MouseDown" PreviewStylusDown="LaserActivity_StylusDown" PreviewStylusMove="LaserActivity_StylusMove">
+                                   StrokeCollected="LaserInkCanvas_StrokeCollected">
                         </InkCanvas>
                     </Grid>
                 </AdornerDecorator>
@@ -425,7 +424,7 @@ namespace TeachingAnnotator
         private bool _isUpdatingUI = false;
         private bool _appLoaded = false;
         private bool _isEditingCoreColor = false;
-        private int _fullScreenLevel = 1; 
+        private int _fullScreenLevel = 1; // 0=Normal, 1=Maximized, 2=Kiosk
 
         private double _penSize;
         private Color _penColor;
@@ -468,7 +467,6 @@ namespace TeachingAnnotator
             LaserInkCanvas.Width = 3840; LaserInkCanvas.Height = 2160;
             CursorCanvas.Width = 3840; CursorCanvas.Height = 2160;
 
-            // THE FIX: Use StrokesChanged instead of StrokeCollected to catch tiny dots!
             LaserInkCanvas.Strokes.StrokesChanged += LaserInkCanvas_StrokesChanged;
 
             _laserTimer = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(33) };
@@ -484,7 +482,6 @@ namespace TeachingAnnotator
             ApplyTheme();
         }
 
-        // --- HARDWARE POLLING TRIGGERS FOR LASER INACTIVITY ---
         private void LaserActivity_MouseDown(object sender, MouseButtonEventArgs e) { if (LaserBtn.IsChecked == true) _lastLaserActivityTime = DateTime.Now; }
         private void LaserActivity_StylusDown(object sender, StylusDownEventArgs e) { if (LaserBtn.IsChecked == true) _lastLaserActivityTime = DateTime.Now; }
         private void LaserActivity_StylusMove(object sender, StylusEventArgs e) { if (LaserBtn.IsChecked == true && !e.InAir) _lastLaserActivityTime = DateTime.Now; }
@@ -653,26 +650,31 @@ namespace TeachingAnnotator
 
         private void FullScreen_Click(object sender, RoutedEventArgs e) => ToggleFullScreen();
 
+        // ARCHITECT FIX: 3-Level Kiosk Engine (Fixes Taskbar collision)
         private void ToggleFullScreen()
         {
             _fullScreenLevel = (_fullScreenLevel + 1) % 3;
             if (_fullScreenLevel == 0)
             {
-                this.WindowStyle = WindowStyle.SingleBorderWindow;
                 this.WindowState = WindowState.Normal;
+                this.WindowStyle = WindowStyle.SingleBorderWindow;
+                this.ResizeMode = ResizeMode.CanResize;
                 this.Topmost = false;
             }
             else if (_fullScreenLevel == 1)
             {
                 this.WindowStyle = WindowStyle.SingleBorderWindow;
+                this.ResizeMode = ResizeMode.CanResize;
                 this.WindowState = WindowState.Maximized;
                 this.Topmost = false;
             }
             else
             {
+                this.WindowState = WindowState.Normal; 
                 this.WindowStyle = WindowStyle.None;
-                this.WindowState = WindowState.Maximized;
+                this.ResizeMode = ResizeMode.NoResize; // Destroys Taskbar bounding box
                 this.Topmost = true;
+                this.WindowState = WindowState.Maximized;
             }
         }
 
@@ -708,7 +710,7 @@ namespace TeachingAnnotator
         
         private void GridToggle_Click(object sender, RoutedEventArgs e) 
         { 
-            _gridPattern = (_gridPattern + 1) % 4; 
+            _gridPattern = (_gridPattern + 1) % 4; // Cycle 0=None, 1=Major/Minor Square, 2=Dots, 3=Ruled
             ApplyTheme(); 
         }
 
@@ -752,6 +754,7 @@ namespace TeachingAnnotator
             else Workspace.Background = new SolidColorBrush(Colors.Transparent);
         }
 
+        // ARCHITECT FIX: Highly accurate Alpha-AA Engineering Grids (No lagging blur fx needed)
         private DrawingBrush CreateGridBrush(Color bgColor, Color lineColor)
         {
             DrawingGroup mainGroup = new DrawingGroup();
@@ -912,27 +915,11 @@ namespace TeachingAnnotator
         private void MainInkCanvas_MouseLeave(object sender, MouseEventArgs e) => CustomDotCursor.Visibility = Visibility.Hidden;
         private void MainInkCanvas_MouseEnter(object sender, MouseEventArgs e) { if (SelectBtn.IsChecked != true && PointerBtn.IsChecked != true) CustomDotCursor.Visibility = Visibility.Visible; }
 
-        // --- HARDWARE STROKE COLLECTION (Fixes "short lines" dot bug) ---
-        private void LaserInkCanvas_StrokesChanged(object sender, StrokeCollectionChangedEventArgs e)
-        {
-            if (_isUpdatingUI) return;
-            if (e.Added.Count > 0)
-            {
-                foreach (var stroke in e.Added)
-                {
-                    if (!_laserStrokes.Any(ls => ls.Stroke == stroke))
-                    {
-                        _laserStrokes.Add(new LaserStrokeData(stroke));
-                    }
-                }
-                _lastLaserActivityTime = DateTime.Now;
-            }
-        }
+        private void LaserInkCanvas_StrokeCollected(object sender, InkCanvasStrokeCollectedEventArgs e) { _laserStrokes.Add(new LaserStrokeData(e.Stroke)); }
 
-        // POLLING LOOP FOR EXACT FADE BEHAVIOR
         private void LaserTimer_Tick(object sender, EventArgs e)
         {
-            if (LaserBtn.IsChecked == true && Mouse.LeftButton == MouseButtonState.Pressed)
+            if (Mouse.LeftButton == MouseButtonState.Pressed && LaserBtn.IsChecked == true)
             {
                 _lastLaserActivityTime = DateTime.Now;
             }
@@ -1056,7 +1043,8 @@ namespace TeachingAnnotator
                                             XGraphicsPath path = new XGraphicsPath(); XPoint[] xPoints = new XPoint[points.Count];
                                             for (int j = 0; j < points.Count; j++) { xPoints[j] = new XPoint(points[j].X * (wbPage.Width.Point / Workspace.Width), points[j].Y * (wbPage.Height.Point / Workspace.Height)); }
                                             path.AddLines(xPoints);
-                                            XPen pathPen = new XPen(color, baseThickness) { LineCap = stroke.DrawingAttributes.IsHighlighter ? XLineCap.Square : XLineCap.Round, LineJoin = XLineJoin.Round };
+                                            XLineCap cap = stroke.DrawingAttributes.IsHighlighter ? XLineCap.Square : XLineCap.Round;
+                                            XPen pathPen = new XPen(color, baseThickness) { LineCap = cap, LineJoin = XLineJoin.Round };
                                             gfx.DrawPath(pathPen, path);
                                         }
                                         else
