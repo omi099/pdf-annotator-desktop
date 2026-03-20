@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping Anydraw V15 (Ultimate Unified Engine & Flawless Compiler Edition)..."
+echo "🚀 Bootstrapping Anydraw V16 (Enterprise Navigation & Pan Engine Edition)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -155,7 +155,10 @@ cat << 'EOF' > MainWindow.xaml
             </Grid>
         </Border>
 
-        <ScrollViewer Grid.Row="1" x:Name="MainScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" PanningMode="Both" PreviewMouseWheel="MainScroll_PreviewMouseWheel" ScrollChanged="MainScroll_ScrollChanged" Background="Transparent" Panel.ZIndex="10">
+        <ScrollViewer Grid.Row="1" x:Name="MainScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" PanningMode="Both" 
+                      PreviewMouseWheel="MainScroll_PreviewMouseWheel" ScrollChanged="MainScroll_ScrollChanged" 
+                      PreviewMouseDown="MainScroll_PreviewMouseDown" PreviewMouseMove="MainScroll_PreviewMouseMove" PreviewMouseUp="MainScroll_PreviewMouseUp"
+                      Background="Transparent" Panel.ZIndex="10">
             
             <Grid x:Name="Workspace" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="0">
                 <Grid.LayoutTransform>
@@ -496,6 +499,12 @@ namespace TeachingAnnotator
         private bool _isRenderingMemory = false;
         private int _fullScreenLevel = 1; 
 
+        // ARCHITECT FIX: Panning state variables
+        private bool _isPanningCanvas = false;
+        private Point _panMouseStart;
+        private double _panScrollStartX;
+        private double _panScrollStartY;
+
         private double _penSize;
         private Color _penColor;
         private double _highlightSize;
@@ -583,17 +592,18 @@ namespace TeachingAnnotator
             {
                 _activeTab.CurrentPage = detectedPage;
                 UpdatePageUI();
-            }
 
-            if (!_isRenderingMemory)
-            {
-                _ = ManagePdfMemory();
+                if (!_isRenderingMemory)
+                {
+                    _ = ManagePdfMemory();
+                }
             }
         }
 
         private async Task ManagePdfMemory()
         {
             if (_activeTab == null || _activeTab.Document == null) return;
+            if (_isRenderingMemory) return;
 
             _isRenderingMemory = true;
             bool changed = false;
@@ -622,8 +632,8 @@ namespace TeachingAnnotator
                         using (var stream = new InMemoryRandomAccessStream())
                         {
                             var options = new Windows.Data.Pdf.PdfPageRenderOptions { 
-                                DestinationWidth = (uint)(page.Size.Width * 3.0), 
-                                DestinationHeight = (uint)(page.Size.Height * 3.0) 
+                                DestinationWidth = (uint)pageModel.Width, 
+                                DestinationHeight = (uint)pageModel.Height 
                             };
                             await page.RenderToStreamAsync(stream, options);
 
@@ -1222,6 +1232,46 @@ namespace TeachingAnnotator
         private void ZoomIn_Click(object sender, RoutedEventArgs e) => PerformZoom(0.25);
         private void ZoomReset_Click(object sender, MouseButtonEventArgs e) => PerformZoom(1.0 - _zoom);
 
+        // ARCHITECT FIX: Middle Mouse Pan Implementation
+        private void MainScroll_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+        {
+            if (e.MiddleButton == MouseButtonState.Pressed)
+            {
+                _isPanningCanvas = true;
+                _panMouseStart = e.GetPosition(this);
+                _panScrollStartX = MainScroll.HorizontalOffset;
+                _panScrollStartY = MainScroll.VerticalOffset;
+                MainScroll.CaptureMouse();
+                MainScroll.Cursor = Cursors.ScrollAll;
+                e.Handled = true;
+            }
+        }
+
+        private void MainScroll_PreviewMouseMove(object sender, MouseEventArgs e)
+        {
+            if (_isPanningCanvas)
+            {
+                Point current = e.GetPosition(this);
+                double deltaX = current.X - _panMouseStart.X;
+                double deltaY = current.Y - _panMouseStart.Y;
+                
+                MainScroll.ScrollToHorizontalOffset(_panScrollStartX - deltaX);
+                MainScroll.ScrollToVerticalOffset(_panScrollStartY - deltaY);
+                e.Handled = true;
+            }
+        }
+
+        private void MainScroll_PreviewMouseUp(object sender, MouseButtonEventArgs e)
+        {
+            if (e.MiddleButton == MouseButtonState.Released && _isPanningCanvas)
+            {
+                _isPanningCanvas = false;
+                MainScroll.ReleaseMouseCapture();
+                MainScroll.Cursor = Cursors.Arrow;
+                e.Handled = true;
+            }
+        }
+
         private void MainScroll_PreviewMouseWheel(object sender, MouseWheelEventArgs e) 
         { 
             e.Handled = true; 
@@ -1233,6 +1283,7 @@ namespace TeachingAnnotator
             else 
             { 
                 double sf = 0.5; 
+                // Shift + Scroll for pure hardware Horizontal scrolling
                 if (Keyboard.Modifiers == ModifierKeys.Shift) MainScroll.ScrollToHorizontalOffset(MainScroll.HorizontalOffset - (e.Delta * sf)); 
                 else MainScroll.ScrollToVerticalOffset(MainScroll.VerticalOffset - (e.Delta * sf)); 
             } 
@@ -1257,6 +1308,12 @@ namespace TeachingAnnotator
             if (e.Key == Key.Delete) { var s = MainInkCanvas.GetSelectedStrokes(); if (s.Count > 0) { SaveUndoState(); MainInkCanvas.Strokes.Remove(s); return; } }
             if (SizeInput.IsFocused || HexInput.IsFocused || BgHexInput.IsFocused || LaserDelayInput.IsFocused || LaserGlowInput.IsFocused) return;
             
+            // ARCHITECT FIX: Keyboard Arrow Keys mapped to physical Canvas Panning
+            if (e.Key == Key.Up) { MainScroll.ScrollToVerticalOffset(MainScroll.VerticalOffset - 50); e.Handled = true; return; }
+            if (e.Key == Key.Down) { MainScroll.ScrollToVerticalOffset(MainScroll.VerticalOffset + 50); e.Handled = true; return; }
+            if (e.Key == Key.Left) { MainScroll.ScrollToHorizontalOffset(MainScroll.HorizontalOffset - 50); e.Handled = true; return; }
+            if (e.Key == Key.Right) { MainScroll.ScrollToHorizontalOffset(MainScroll.HorizontalOffset + 50); e.Handled = true; return; }
+
             if (e.Key == Key.Escape) { PointerBtn.IsChecked = true; return; }
             if (e.Key == Key.H) MainToolbar.Visibility = MainToolbar.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
             if (e.Key == Key.F) { ToggleFullScreen(); return; }
