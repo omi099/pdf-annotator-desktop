@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping Anydraw V17 (Kinetic Debounce & Ultimate Zero-Lag Edition)..."
+echo "🚀 Bootstrapping Anydraw V18 (Optimal Spatial Buffer Memory Matrix)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -504,7 +504,6 @@ namespace TeachingAnnotator
         private double _panScrollStartX;
         private double _panScrollStartY;
 
-        // ARCHITECT FIX: Hardware Kinetic Debounce Timer
         private DispatcherTimer _scrollDebounceTimer;
 
         private double _penSize;
@@ -549,7 +548,7 @@ namespace TeachingAnnotator
             _laserTimer.Tick += LaserTimer_Tick;
             _laserTimer.Start();
 
-            // ARCHITECT FIX: Zero-Lag Debouncer Setup (Waits 150ms after scroll to render)
+            // ARCHITECT FIX: 200% Spatial Buffer Debouncer
             _scrollDebounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
             _scrollDebounceTimer.Tick += (s, e) =>
             {
@@ -607,11 +606,11 @@ namespace TeachingAnnotator
                 UpdatePageUI();
             }
 
-            // ARCHITECT FIX: Restarts the countdown. Engine only fires when scrolling stops!
             _scrollDebounceTimer.Stop();
             _scrollDebounceTimer.Start();
         }
 
+        // ARCHITECT FIX: Math.Abs(i+1 - centerPage) <= 2 keeps 5 active pages!
         private async Task ManagePdfMemory()
         {
             if (_activeTab == null || _activeTab.Document == null) return;
@@ -622,20 +621,11 @@ namespace TeachingAnnotator
             try
             {
                 int centerPage = _activeTab.CurrentPage;
-                double unscaledOffset = MainScroll.VerticalOffset / _zoom;
-                double viewportHeight = (MainScroll.ViewportHeight > 0 ? MainScroll.ViewportHeight : 1080) / _zoom;
-                
-                double buffer = viewportHeight * 1.5; 
-                double topBound = unscaledOffset - buffer;
-                double bottomBound = unscaledOffset + viewportHeight + buffer;
 
                 for (int i = 0; i < _activeTab.PdfRenderedPages.Count; i++)
                 {
                     var pageModel = _activeTab.PdfRenderedPages[i];
-                    double pageTop = pageModel.StartY;
-                    double pageBottom = pageModel.StartY + pageModel.Height;
-
-                    bool isVisible = (pageBottom >= topBound && pageTop <= bottomBound);
+                    bool isVisible = Math.Abs((i + 1) - centerPage) <= 2; // 5-Page Enterprise Buffer (N-2 to N+2)
 
                     if (isVisible && pageModel.ImageSource == null)
                     {
@@ -953,7 +943,6 @@ namespace TeachingAnnotator
                 double targetY = _activeTab.ScrollY > 0 ? _activeTab.ScrollY : (_activeTab.PdfRenderedPages.Count > 0 ? _activeTab.PdfRenderedPages[_activeTab.CurrentPage - 1].StartY * _zoom : 0);
                 MainScroll.ScrollToVerticalOffset(targetY);
                 
-                // ARCHITECT FIX: Use Debouncer to load Memory initially without locking UI thread
                 _scrollDebounceTimer.Stop();
                 _scrollDebounceTimer.Start();
             }
