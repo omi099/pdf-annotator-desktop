@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping Anydraw V13 (Deadlock Annihilator & PDF Caching Edition)..."
+echo "🚀 Bootstrapping Anydraw V14 (Flawless Pointer Zoom & HUD Edition)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -363,6 +363,22 @@ cat << 'EOF' > MainWindow.xaml
                 </Button>
             </WrapPanel>
         </Border>
+
+        <Border Grid.Row="1" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,30,30" Background="{DynamicResource BgToolbar}" BorderBrush="{DynamicResource BorderToolbar}" BorderThickness="1" CornerRadius="8" Padding="4" Panel.ZIndex="100">
+            <Border.Effect>
+                <DropShadowEffect Color="Black" BlurRadius="15" Opacity="0.3" ShadowDepth="4" Direction="270"/>
+            </Border.Effect>
+            <StackPanel Orientation="Horizontal">
+                <Button Style="{StaticResource TailwindButton}" Click="ZoomOut_Click" ToolTip="Zoom Out (-)">
+                    <TextBlock Text="−" FontWeight="Bold" FontSize="16" Margin="4,0" VerticalAlignment="Center"/>
+                </Button>
+                <TextBlock x:Name="ZoomPercentText" Text="100%" Foreground="{DynamicResource Sky400}" VerticalAlignment="Center" FontWeight="Bold" Margin="8,0" Width="45" TextAlignment="Center" Cursor="Hand" MouseLeftButtonDown="ZoomReset_Click" ToolTip="Click to Reset Zoom to 100%"/>
+                <Button Style="{StaticResource TailwindButton}" Click="ZoomIn_Click" ToolTip="Zoom In (+)">
+                    <TextBlock Text="+" FontWeight="Bold" FontSize="16" Margin="4,0" VerticalAlignment="Center"/>
+                </Button>
+            </StackPanel>
+        </Border>
+
     </Grid>
 </Window>
 EOF
@@ -529,6 +545,7 @@ namespace TeachingAnnotator
             SyncToolToUI();
             UpdatePageUI();
             ApplyTheme();
+            UpdateZoomUI();
         }
 
         private void LaserActivity_MouseDown(object sender, MouseButtonEventArgs e) { if (LaserBtn.IsChecked == true) _lastLaserActivityTime = DateTime.Now; }
@@ -566,12 +583,14 @@ namespace TeachingAnnotator
             {
                 _activeTab.CurrentPage = detectedPage;
                 UpdatePageUI();
-            }
 
-            _ = ManagePdfMemory();
+                if (!_isRenderingMemory)
+                {
+                    _ = ManagePdfMemory();
+                }
+            }
         }
 
-        // ARCHITECT FIX: Deadlock strictly removed, caching implemented!
         private async Task ManagePdfMemory()
         {
             if (_activeTab == null || _activeTab.Document == null) return;
@@ -621,7 +640,7 @@ namespace TeachingAnnotator
                                 bitmap.CacheOption = BitmapCacheOption.OnLoad; 
                                 bitmap.StreamSource = ms; 
                                 bitmap.EndInit();
-                                bitmap.Freeze(); // Absolute strict thread safety
+                                bitmap.Freeze(); 
                                 pageModel.ImageSource = bitmap;
                             }
                         }
@@ -863,6 +882,7 @@ namespace TeachingAnnotator
 
             _zoom = _activeTab.Zoom;
             ZoomTransform.ScaleX = _zoom; ZoomTransform.ScaleY = _zoom;
+            UpdateZoomUI();
 
             _penSize = _activeTab.PenSize;
             _penColor = (Color)ColorConverter.ConvertFromString(_activeTab.PenColor);
@@ -1164,25 +1184,44 @@ namespace TeachingAnnotator
 
         private void MainInkCanvas_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e) { if (MainInkCanvas.EditingMode != InkCanvasEditingMode.None && MainInkCanvas.EditingMode != InkCanvasEditingMode.Select) SaveUndoState(); }
 
+        // ARCHITECT FIX: HUD Updating Method
+        private void UpdateZoomUI()
+        {
+            if (ZoomPercentText != null)
+                ZoomPercentText.Text = $"{Math.Round(_zoom * 100)}%";
+        }
+
+        // ARCHITECT FIX: Flawless Absolute Origin Math for Zooming to Pointer
         private void PerformZoom(double zoomDelta, Point? mousePos = null)
         {
+            double oldZoom = _zoom;
             double newZoom = Math.Max(0.25, Math.Min(_zoom + zoomDelta, 10.0));
-            if (newZoom == _zoom) return;
+            if (newZoom == oldZoom) return;
 
             _isZooming = true; 
 
-            Point targetPos = mousePos.HasValue ? mousePos.Value : new Point(MainScroll.ViewportWidth / 2, MainScroll.ViewportHeight / 2);
-            Point pointInCanvas = MainScroll.TranslatePoint(targetPos, Workspace);
+            Point targetPos = mousePos ?? new Point(MainScroll.ViewportWidth / 2.0, MainScroll.ViewportHeight / 2.0);
+            
+            double unscaledX = (MainScroll.HorizontalOffset + targetPos.X) / oldZoom;
+            double unscaledY = (MainScroll.VerticalOffset + targetPos.Y) / oldZoom;
 
             _zoom = newZoom;
-            ZoomTransform.ScaleX = _zoom; ZoomTransform.ScaleY = _zoom;
+            ZoomTransform.ScaleX = _zoom;
+            ZoomTransform.ScaleY = _zoom;
+            UpdateZoomUI();
 
             Workspace.UpdateLayout();
-            MainScroll.ScrollToHorizontalOffset(pointInCanvas.X * _zoom - targetPos.X);
-            MainScroll.ScrollToVerticalOffset(pointInCanvas.Y * _zoom - targetPos.Y);
+            
+            MainScroll.ScrollToHorizontalOffset((unscaledX * newZoom) - targetPos.X);
+            MainScroll.ScrollToVerticalOffset((unscaledY * newZoom) - targetPos.Y);
 
             Dispatcher.BeginInvoke(new Action(() => { _isZooming = false; }), DispatcherPriority.Render);
         }
+
+        // ARCHITECT FIX: Zoom HUD Event Handlers
+        private void ZoomOut_Click(object sender, RoutedEventArgs e) => PerformZoom(-0.25);
+        private void ZoomIn_Click(object sender, RoutedEventArgs e) => PerformZoom(0.25);
+        private void ZoomReset_Click(object sender, MouseButtonEventArgs e) => PerformZoom(1.0 - _zoom);
 
         private void MainScroll_PreviewMouseWheel(object sender, MouseWheelEventArgs e) 
         { 
@@ -1194,7 +1233,7 @@ namespace TeachingAnnotator
             } 
             else 
             { 
-                double sf = 0.3; 
+                double sf = 0.5; 
                 if (Keyboard.Modifiers == ModifierKeys.Shift) MainScroll.ScrollToHorizontalOffset(MainScroll.HorizontalOffset - (e.Delta * sf)); 
                 else MainScroll.ScrollToVerticalOffset(MainScroll.VerticalOffset - (e.Delta * sf)); 
             } 
@@ -1208,7 +1247,13 @@ namespace TeachingAnnotator
                 if (e.SystemKey == Key.X) { int idx = (_tabs.IndexOf(_activeTab) + 1) % _tabs.Count; SwitchToTab(_tabs[idx]); e.Handled = true; return; }
             }
 
-            if (Keyboard.Modifiers == ModifierKeys.Control) { if (e.Key == Key.Z) { PerformUndo(); return; } if (e.Key == Key.Y) { PerformRedo(); return; } }
+            if (Keyboard.Modifiers == ModifierKeys.Control) { 
+                if (e.Key == Key.Z) { PerformUndo(); return; } 
+                if (e.Key == Key.Y) { PerformRedo(); return; } 
+                if (e.Key == Key.OemPlus || e.Key == Key.Add) { PerformZoom(0.25); return; }
+                if (e.Key == Key.OemMinus || e.Key == Key.Subtract) { PerformZoom(-0.25); return; }
+                if (e.Key == Key.D0 || e.Key == Key.NumPad0) { PerformZoom(1.0 - _zoom); return; }
+            }
             if (e.Key == Key.Delete) { var s = MainInkCanvas.GetSelectedStrokes(); if (s.Count > 0) { SaveUndoState(); MainInkCanvas.Strokes.Remove(s); return; } }
             if (SizeInput.IsFocused || HexInput.IsFocused || BgHexInput.IsFocused || LaserDelayInput.IsFocused || LaserGlowInput.IsFocused) return;
             
@@ -1466,8 +1511,6 @@ namespace TeachingAnnotator
                 catch (Exception ex) { MessageBox.Show("Export failed: " + ex.Message); }
             }
         }
-
-        private void ClearInk_Click(object sender, RoutedEventArgs e) { SaveUndoState(); MainInkCanvas.Strokes.Clear(); LaserInkCanvas.Strokes.Clear(); }
     }
 }
 EOF
