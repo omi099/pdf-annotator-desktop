@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping Anydraw V19 (True Multi-Core Thread Offloading Edition)..."
+echo "🚀 Bootstrapping Anydraw V20 (Bulletproof Data Vault & Enterprise Memory Edition)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -609,7 +609,6 @@ namespace TeachingAnnotator
             _scrollDebounceTimer.Start();
         }
 
-        // ARCHITECT FIX: True Background Task Offloading. Zero UI Thread Freezing.
         private async Task ManagePdfMemory()
         {
             if (_activeTab == null || _activeTab.Document == null) return;
@@ -621,7 +620,6 @@ namespace TeachingAnnotator
             {
                 int centerPage = _activeTab.CurrentPage;
                 
-                // Get offset details safely on UI thread before diving into background
                 double unscaledOffset = MainScroll.VerticalOffset / _zoom;
                 double viewportHeight = (MainScroll.ViewportHeight > 0 ? MainScroll.ViewportHeight : 1080) / _zoom;
                 double buffer = viewportHeight * 1.5; 
@@ -635,7 +633,6 @@ namespace TeachingAnnotator
 
                     if (isVisible && pageModel.ImageSource == null)
                     {
-                        // Architect Fix: Shift entire PDF decoding math to secondary CPU cores
                         var finalImage = await Task.Run(async () =>
                         {
                             using (var page = _activeTab.Document.GetPage((uint)i))
@@ -656,7 +653,6 @@ namespace TeachingAnnotator
                             }
                         });
 
-                        // Reinject to UI thread flawlessly
                         using (var ms = new MemoryStream(finalImage))
                         {
                             var bitmap = new BitmapImage();
@@ -716,13 +712,21 @@ namespace TeachingAnnotator
                     {
                         foreach(var t in savedTabs)
                         {
+                            // ARCHITECT FIX: Safely parse the exact filename, bypassing any folder underscores
                             foreach(var file in Directory.GetFiles(_appDataFolder, $"ink_{t.Id}_*.isf"))
                             {
-                                int pageNum = int.Parse(file.Split('_').Last().Replace(".isf", ""));
-                                using (FileStream fs = new FileStream(file, FileMode.Open, FileAccess.Read))
+                                try
                                 {
-                                    t.StrokesPerPage[pageNum] = new StrokeCollection(fs);
+                                    string safeFileName = System.IO.Path.GetFileNameWithoutExtension(file);
+                                    int pageNum = int.Parse(safeFileName.Split('_').Last());
+                                    
+                                    // FileShare.Read prevents crashes if antivirus is scanning the file
+                                    using (FileStream fs = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read))
+                                    {
+                                        t.StrokesPerPage[pageNum] = new StrokeCollection(fs);
+                                    }
                                 }
+                                catch { }
                             }
                             _tabs.Add(t);
                         }
@@ -776,21 +780,30 @@ namespace TeachingAnnotator
                 PressureEnabled = PressureToggle.IsChecked == true, StrokeEraserEnabled = StrokeEraserToggle.IsChecked == true,
                 UnlockPdfCanvas = PdfCanvasToggle.IsChecked == true
             };
-            File.WriteAllText(System.IO.Path.Combine(_appDataFolder, "settings.json"), JsonSerializer.Serialize(settings));
+            
+            try { File.WriteAllText(System.IO.Path.Combine(_appDataFolder, "settings.json"), JsonSerializer.Serialize(settings)); } catch { }
 
-            foreach(var file in Directory.GetFiles(_appDataFolder, "*.isf")) File.Delete(file);
+            // ARCHITECT FIX: Defensive Deletion ensures locked files don't crash the save loop
+            foreach(var file in Directory.GetFiles(_appDataFolder, "*.isf")) {
+                try { File.Delete(file); } catch { }
+            }
 
-            File.WriteAllText(System.IO.Path.Combine(_appDataFolder, "tabs.json"), JsonSerializer.Serialize(_tabs));
+            try { File.WriteAllText(System.IO.Path.Combine(_appDataFolder, "tabs.json"), JsonSerializer.Serialize(_tabs)); } catch { }
+
             foreach(var tab in _tabs)
             {
                 foreach(var kvp in tab.StrokesPerPage)
                 {
                     if (kvp.Value.Count > 0)
                     {
-                        using (FileStream fs = new FileStream(System.IO.Path.Combine(_appDataFolder, $"ink_{tab.Id}_{kvp.Key}.isf"), FileMode.Create))
+                        try 
                         {
-                            kvp.Value.Save(fs);
-                        }
+                            using (FileStream fs = new FileStream(System.IO.Path.Combine(_appDataFolder, $"ink_{tab.Id}_{kvp.Key}.isf"), FileMode.Create, FileAccess.Write, FileShare.None))
+                            {
+                                kvp.Value.Save(fs);
+                            }
+                        } 
+                        catch { }
                     }
                 }
             }
