@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping Anydraw V14 (Flawless Pointer Zoom & HUD Edition)..."
+echo "🚀 Bootstrapping Anydraw V15 (Ultimate Unified Engine & Flawless Compiler Edition)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -378,7 +378,7 @@ cat << 'EOF' > MainWindow.xaml
                 </Button>
             </StackPanel>
         </Border>
-
+        
     </Grid>
 </Window>
 EOF
@@ -583,18 +583,17 @@ namespace TeachingAnnotator
             {
                 _activeTab.CurrentPage = detectedPage;
                 UpdatePageUI();
+            }
 
-                if (!_isRenderingMemory)
-                {
-                    _ = ManagePdfMemory();
-                }
+            if (!_isRenderingMemory)
+            {
+                _ = ManagePdfMemory();
             }
         }
 
         private async Task ManagePdfMemory()
         {
             if (_activeTab == null || _activeTab.Document == null) return;
-            if (_isRenderingMemory) return;
 
             _isRenderingMemory = true;
             bool changed = false;
@@ -623,8 +622,8 @@ namespace TeachingAnnotator
                         using (var stream = new InMemoryRandomAccessStream())
                         {
                             var options = new Windows.Data.Pdf.PdfPageRenderOptions { 
-                                DestinationWidth = (uint)pageModel.Width, 
-                                DestinationHeight = (uint)pageModel.Height 
+                                DestinationWidth = (uint)(page.Size.Width * 3.0), 
+                                DestinationHeight = (uint)(page.Size.Height * 3.0) 
                             };
                             await page.RenderToStreamAsync(stream, options);
 
@@ -750,7 +749,8 @@ namespace TeachingAnnotator
                 LaserCoreColor = _laserCoreColor.ToString(),
                 LaserFadeDelay = _laserFadeDelay, LaserGlow = LaserGlowSlider.Value,
                 IsDarkTheme = _isDarkTheme,
-                PressureEnabled = PressureToggle.IsChecked == true, StrokeEraserEnabled = StrokeEraserToggle.IsChecked == true,
+                PressureEnabled = PressureToggle.IsChecked == true, 
+                StrokeEraserEnabled = StrokeEraserToggle.IsChecked == true,
                 UnlockPdfCanvas = PdfCanvasToggle.IsChecked == true
             };
             File.WriteAllText(System.IO.Path.Combine(_appDataFolder, "settings.json"), JsonSerializer.Serialize(settings));
@@ -933,7 +933,10 @@ namespace TeachingAnnotator
                 double targetY = _activeTab.ScrollY > 0 ? _activeTab.ScrollY : (_activeTab.PdfRenderedPages.Count > 0 ? _activeTab.PdfRenderedPages[_activeTab.CurrentPage - 1].StartY * _zoom : 0);
                 MainScroll.ScrollToVerticalOffset(targetY);
                 
-                _ = ManagePdfMemory();
+                if (!_isRenderingMemory)
+                {
+                    _ = ManagePdfMemory();
+                }
             }
         }
 
@@ -1184,14 +1187,12 @@ namespace TeachingAnnotator
 
         private void MainInkCanvas_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e) { if (MainInkCanvas.EditingMode != InkCanvasEditingMode.None && MainInkCanvas.EditingMode != InkCanvasEditingMode.Select) SaveUndoState(); }
 
-        // ARCHITECT FIX: HUD Updating Method
         private void UpdateZoomUI()
         {
             if (ZoomPercentText != null)
                 ZoomPercentText.Text = $"{Math.Round(_zoom * 100)}%";
         }
 
-        // ARCHITECT FIX: Flawless Absolute Origin Math for Zooming to Pointer
         private void PerformZoom(double zoomDelta, Point? mousePos = null)
         {
             double oldZoom = _zoom;
@@ -1201,7 +1202,6 @@ namespace TeachingAnnotator
             _isZooming = true; 
 
             Point targetPos = mousePos ?? new Point(MainScroll.ViewportWidth / 2.0, MainScroll.ViewportHeight / 2.0);
-            
             double unscaledX = (MainScroll.HorizontalOffset + targetPos.X) / oldZoom;
             double unscaledY = (MainScroll.VerticalOffset + targetPos.Y) / oldZoom;
 
@@ -1218,7 +1218,6 @@ namespace TeachingAnnotator
             Dispatcher.BeginInvoke(new Action(() => { _isZooming = false; }), DispatcherPriority.Render);
         }
 
-        // ARCHITECT FIX: Zoom HUD Event Handlers
         private void ZoomOut_Click(object sender, RoutedEventArgs e) => PerformZoom(-0.25);
         private void ZoomIn_Click(object sender, RoutedEventArgs e) => PerformZoom(0.25);
         private void ZoomReset_Click(object sender, MouseButtonEventArgs e) => PerformZoom(1.0 - _zoom);
@@ -1254,6 +1253,7 @@ namespace TeachingAnnotator
                 if (e.Key == Key.OemMinus || e.Key == Key.Subtract) { PerformZoom(-0.25); return; }
                 if (e.Key == Key.D0 || e.Key == Key.NumPad0) { PerformZoom(1.0 - _zoom); return; }
             }
+            
             if (e.Key == Key.Delete) { var s = MainInkCanvas.GetSelectedStrokes(); if (s.Count > 0) { SaveUndoState(); MainInkCanvas.Strokes.Remove(s); return; } }
             if (SizeInput.IsFocused || HexInput.IsFocused || BgHexInput.IsFocused || LaserDelayInput.IsFocused || LaserGlowInput.IsFocused) return;
             
@@ -1511,6 +1511,8 @@ namespace TeachingAnnotator
                 catch (Exception ex) { MessageBox.Show("Export failed: " + ex.Message); }
             }
         }
+
+        private void ClearInk_Click(object sender, RoutedEventArgs e) { SaveUndoState(); MainInkCanvas.Strokes.Clear(); LaserInkCanvas.Strokes.Clear(); }
     }
 }
 EOF
