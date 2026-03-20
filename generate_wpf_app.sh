@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping Anydraw V24 (Ultra-Optimized Multi-Core Engine)..."
+echo "🚀 Bootstrapping Anydraw V25 (Deadlock-Free Synchronous Exit Edition)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -559,7 +559,6 @@ namespace TeachingAnnotator
                 }
             };
             
-            // ARCHITECT FIX: Async Background Auto-Saver (Zero Freeze)
             _autoSaveTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(60) };
             _autoSaveTimer.Tick += async (s, e) => { await ExecuteAutoSaveAsync(); };
             _autoSaveTimer.Start();
@@ -624,7 +623,6 @@ namespace TeachingAnnotator
             try
             {
                 int centerPage = _activeTab.CurrentPage;
-                
                 double unscaledOffset = MainScroll.VerticalOffset / _zoom;
                 double viewportHeight = (MainScroll.ViewportHeight > 0 ? MainScroll.ViewportHeight : 1080) / _zoom;
                 double buffer = viewportHeight * 1.5; 
@@ -638,7 +636,6 @@ namespace TeachingAnnotator
 
                     if (isVisible && pageModel.ImageSource == null)
                     {
-                        // ARCHITECT FIX: Thread-Offloading Bitmap Instantiation
                         var finalImage = await Task.Run(async () =>
                         {
                             using (var page = _activeTab.Document.GetPage((uint)i))
@@ -662,7 +659,7 @@ namespace TeachingAnnotator
                                     bmp.CacheOption = BitmapCacheOption.OnLoad; 
                                     bmp.StreamSource = ms; 
                                     bmp.EndInit();
-                                    bmp.Freeze(); // Freezing is required for passing to UI thread
+                                    bmp.Freeze(); 
                                     return bmp;
                                 }
                             }
@@ -772,10 +769,9 @@ namespace TeachingAnnotator
             }
         }
 
-        // ARCHITECT FIX: Fully Async Non-Blocking Auto-Saver
         private async Task ExecuteAutoSaveAsync()
         {
-            SaveTabState(); // Freeze a memory snapshot of UI Thread state
+            SaveTabState(); 
             
             AppSettings settings = new AppSettings
             {
@@ -799,60 +795,92 @@ namespace TeachingAnnotator
             var tabsJson = JsonSerializer.Serialize(tabsClone);
             var folder = _appDataFolder;
 
-            // Execute actual SSD I/O on a background thread so UI never freezes
-            await Task.Run(() => 
+            await Task.Run(() => PerformDiskSave(settingsJson, tabsJson, folder, tabsClone, strokeVault));
+        }
+
+        // ARCHITECT FIX: Deadlock-Free Exit Save Matrix
+        private void SaveStateSync()
+        {
+            SaveTabState();
+            
+            AppSettings settings = new AppSettings
             {
-                try { File.WriteAllText(System.IO.Path.Combine(folder, "settings.json"), settingsJson); } catch { }
+                LaserCoreColor = _laserCoreColor.ToString(),
+                LaserFadeDelay = _laserFadeDelay, LaserGlow = LaserGlowSlider.Value,
+                IsDarkTheme = _isDarkTheme,
+                PressureEnabled = PressureToggle.IsChecked == true, StrokeEraserEnabled = StrokeEraserToggle.IsChecked == true,
+                UnlockPdfCanvas = PdfCanvasToggle.IsChecked == true
+            };
+            
+            var tabsClone = _tabs.ToList();
+            var strokeVault = new Dictionary<string, Dictionary<int, StrokeCollection>>();
+            foreach (var t in tabsClone)
+            {
+                var dict = new Dictionary<int, StrokeCollection>();
+                foreach (var kvp in t.StrokesPerPage) dict[kvp.Key] = kvp.Value.Clone();
+                strokeVault[t.Id] = dict;
+            }
 
-                HashSet<string> validFiles = new HashSet<string>();
+            var settingsJson = JsonSerializer.Serialize(settings);
+            var tabsJson = JsonSerializer.Serialize(tabsClone);
+            var folder = _appDataFolder;
 
-                foreach(var tab in tabsClone)
+            // Direct execution on UI thread for instant closing without deadlock
+            PerformDiskSave(settingsJson, tabsJson, folder, tabsClone, strokeVault);
+        }
+
+        private void PerformDiskSave(string settingsJson, string tabsJson, string folder, List<WorkspaceTab> tabsClone, Dictionary<string, Dictionary<int, StrokeCollection>> strokeVault)
+        {
+            try { File.WriteAllText(System.IO.Path.Combine(folder, "settings.json"), settingsJson); } catch { }
+
+            HashSet<string> validFiles = new HashSet<string>();
+
+            foreach(var tab in tabsClone)
+            {
+                if (strokeVault.ContainsKey(tab.Id))
                 {
-                    if (strokeVault.ContainsKey(tab.Id))
+                    foreach(var kvp in strokeVault[tab.Id])
                     {
-                        foreach(var kvp in strokeVault[tab.Id])
+                        if (kvp.Value.Count > 0)
                         {
-                            if (kvp.Value.Count > 0)
-                            {
-                                string finalFile = System.IO.Path.Combine(folder, $"ink_{tab.Id}_{kvp.Key}.isf");
-                                string tempFile = finalFile + ".tmp";
-                                validFiles.Add(finalFile);
+                            string finalFile = System.IO.Path.Combine(folder, $"ink_{tab.Id}_{kvp.Key}.isf");
+                            string tempFile = finalFile + ".tmp";
+                            validFiles.Add(finalFile);
 
-                                try 
+                            try 
+                            {
+                                using (FileStream fs = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None))
                                 {
-                                    using (FileStream fs = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None))
-                                    {
-                                        kvp.Value.Save(fs);
-                                        fs.Flush(true); // Burn to platter
-                                    }
-                                    if (File.Exists(finalFile)) File.Delete(finalFile);
-                                    File.Move(tempFile, finalFile);
-                                } 
-                                catch { }
-                            }
+                                    kvp.Value.Save(fs);
+                                    fs.Flush(true); 
+                                }
+                                if (File.Exists(finalFile)) File.Delete(finalFile);
+                                File.Move(tempFile, finalFile);
+                            } 
+                            catch { }
                         }
                     }
                 }
+            }
 
-                try 
-                {
-                    foreach(var file in Directory.GetFiles(folder, "*.isf")) {
-                        if (!validFiles.Contains(file)) { try { File.Delete(file); } catch { } }
-                    }
-                    foreach(var file in Directory.GetFiles(folder, "*.tmp")) {
-                        try { File.Delete(file); } catch { }
-                    }
-                } 
-                catch { }
+            try 
+            {
+                foreach(var file in Directory.GetFiles(folder, "*.isf")) {
+                    if (!validFiles.Contains(file)) { try { File.Delete(file); } catch { } }
+                }
+                foreach(var file in Directory.GetFiles(folder, "*.tmp")) {
+                    try { File.Delete(file); } catch { }
+                }
+            } 
+            catch { }
 
-                try { File.WriteAllText(System.IO.Path.Combine(folder, "tabs.json"), tabsJson); } catch { }
-            });
+            try { File.WriteAllText(System.IO.Path.Combine(folder, "tabs.json"), tabsJson); } catch { }
         }
 
         private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e) 
         {
             _autoSaveTimer.Stop();
-            ExecuteAutoSaveAsync().Wait(); // Block specifically just for exit to ensure final data is kept
+            SaveStateSync(); 
         }
 
         private void RenderTabsUI()
