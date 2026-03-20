@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping Anydraw V16 (Enterprise Navigation & Pan Engine Edition)..."
+echo "🚀 Bootstrapping Anydraw V17 (Kinetic Debounce & Ultimate Zero-Lag Edition)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -499,11 +499,13 @@ namespace TeachingAnnotator
         private bool _isRenderingMemory = false;
         private int _fullScreenLevel = 1; 
 
-        // ARCHITECT FIX: Panning state variables
         private bool _isPanningCanvas = false;
         private Point _panMouseStart;
         private double _panScrollStartX;
         private double _panScrollStartY;
+
+        // ARCHITECT FIX: Hardware Kinetic Debounce Timer
+        private DispatcherTimer _scrollDebounceTimer;
 
         private double _penSize;
         private Color _penColor;
@@ -546,6 +548,17 @@ namespace TeachingAnnotator
             _laserTimer = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(33) };
             _laserTimer.Tick += LaserTimer_Tick;
             _laserTimer.Start();
+
+            // ARCHITECT FIX: Zero-Lag Debouncer Setup (Waits 150ms after scroll to render)
+            _scrollDebounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
+            _scrollDebounceTimer.Tick += (s, e) =>
+            {
+                _scrollDebounceTimer.Stop();
+                if (!_isRenderingMemory)
+                {
+                    _ = ManagePdfMemory();
+                }
+            };
 
             BuildPaletteGrid();
             LoadState(); 
@@ -592,19 +605,17 @@ namespace TeachingAnnotator
             {
                 _activeTab.CurrentPage = detectedPage;
                 UpdatePageUI();
-
-                if (!_isRenderingMemory)
-                {
-                    _ = ManagePdfMemory();
-                }
             }
+
+            // ARCHITECT FIX: Restarts the countdown. Engine only fires when scrolling stops!
+            _scrollDebounceTimer.Stop();
+            _scrollDebounceTimer.Start();
         }
 
         private async Task ManagePdfMemory()
         {
             if (_activeTab == null || _activeTab.Document == null) return;
-            if (_isRenderingMemory) return;
-
+            
             _isRenderingMemory = true;
             bool changed = false;
 
@@ -614,7 +625,7 @@ namespace TeachingAnnotator
                 double unscaledOffset = MainScroll.VerticalOffset / _zoom;
                 double viewportHeight = (MainScroll.ViewportHeight > 0 ? MainScroll.ViewportHeight : 1080) / _zoom;
                 
-                double buffer = viewportHeight * 1.0; 
+                double buffer = viewportHeight * 1.5; 
                 double topBound = unscaledOffset - buffer;
                 double bottomBound = unscaledOffset + viewportHeight + buffer;
 
@@ -632,8 +643,8 @@ namespace TeachingAnnotator
                         using (var stream = new InMemoryRandomAccessStream())
                         {
                             var options = new Windows.Data.Pdf.PdfPageRenderOptions { 
-                                DestinationWidth = (uint)pageModel.Width, 
-                                DestinationHeight = (uint)pageModel.Height 
+                                DestinationWidth = (uint)(page.Size.Width * 3.0), 
+                                DestinationHeight = (uint)(page.Size.Height * 3.0) 
                             };
                             await page.RenderToStreamAsync(stream, options);
 
@@ -759,8 +770,7 @@ namespace TeachingAnnotator
                 LaserCoreColor = _laserCoreColor.ToString(),
                 LaserFadeDelay = _laserFadeDelay, LaserGlow = LaserGlowSlider.Value,
                 IsDarkTheme = _isDarkTheme,
-                PressureEnabled = PressureToggle.IsChecked == true, 
-                StrokeEraserEnabled = StrokeEraserToggle.IsChecked == true,
+                PressureEnabled = PressureToggle.IsChecked == true, StrokeEraserEnabled = StrokeEraserToggle.IsChecked == true,
                 UnlockPdfCanvas = PdfCanvasToggle.IsChecked == true
             };
             File.WriteAllText(System.IO.Path.Combine(_appDataFolder, "settings.json"), JsonSerializer.Serialize(settings));
@@ -943,10 +953,9 @@ namespace TeachingAnnotator
                 double targetY = _activeTab.ScrollY > 0 ? _activeTab.ScrollY : (_activeTab.PdfRenderedPages.Count > 0 ? _activeTab.PdfRenderedPages[_activeTab.CurrentPage - 1].StartY * _zoom : 0);
                 MainScroll.ScrollToVerticalOffset(targetY);
                 
-                if (!_isRenderingMemory)
-                {
-                    _ = ManagePdfMemory();
-                }
+                // ARCHITECT FIX: Use Debouncer to load Memory initially without locking UI thread
+                _scrollDebounceTimer.Stop();
+                _scrollDebounceTimer.Start();
             }
         }
 
@@ -1232,7 +1241,6 @@ namespace TeachingAnnotator
         private void ZoomIn_Click(object sender, RoutedEventArgs e) => PerformZoom(0.25);
         private void ZoomReset_Click(object sender, MouseButtonEventArgs e) => PerformZoom(1.0 - _zoom);
 
-        // ARCHITECT FIX: Middle Mouse Pan Implementation
         private void MainScroll_PreviewMouseDown(object sender, MouseButtonEventArgs e)
         {
             if (e.MiddleButton == MouseButtonState.Pressed)
@@ -1283,7 +1291,6 @@ namespace TeachingAnnotator
             else 
             { 
                 double sf = 0.5; 
-                // Shift + Scroll for pure hardware Horizontal scrolling
                 if (Keyboard.Modifiers == ModifierKeys.Shift) MainScroll.ScrollToHorizontalOffset(MainScroll.HorizontalOffset - (e.Delta * sf)); 
                 else MainScroll.ScrollToVerticalOffset(MainScroll.VerticalOffset - (e.Delta * sf)); 
             } 
@@ -1308,7 +1315,6 @@ namespace TeachingAnnotator
             if (e.Key == Key.Delete) { var s = MainInkCanvas.GetSelectedStrokes(); if (s.Count > 0) { SaveUndoState(); MainInkCanvas.Strokes.Remove(s); return; } }
             if (SizeInput.IsFocused || HexInput.IsFocused || BgHexInput.IsFocused || LaserDelayInput.IsFocused || LaserGlowInput.IsFocused) return;
             
-            // ARCHITECT FIX: Keyboard Arrow Keys mapped to physical Canvas Panning
             if (e.Key == Key.Up) { MainScroll.ScrollToVerticalOffset(MainScroll.VerticalOffset - 50); e.Handled = true; return; }
             if (e.Key == Key.Down) { MainScroll.ScrollToVerticalOffset(MainScroll.VerticalOffset + 50); e.Handled = true; return; }
             if (e.Key == Key.Left) { MainScroll.ScrollToHorizontalOffset(MainScroll.HorizontalOffset - 50); e.Handled = true; return; }
