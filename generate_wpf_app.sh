@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping Anydraw V23 (Hardware Auto-Save & Power-Proof Edition)..."
+echo "🚀 Bootstrapping Anydraw V24 (Ultra-Optimized Multi-Core Engine)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -168,11 +168,11 @@ cat << 'EOF' > MainWindow.xaml
                 <ItemsControl x:Name="PdfItemsControl">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Border Background="White" Margin="0,0,0,25" CornerRadius="0" HorizontalAlignment="Left">
+                            <Border Background="White" Margin="0,0,0,25" CornerRadius="0" HorizontalAlignment="Left" Width="{Binding Width}" Height="{Binding Height}">
                                 <Border.Effect>
                                     <DropShadowEffect Color="Black" BlurRadius="15" Opacity="0.5" Direction="270" ShadowDepth="5"/>
                                 </Border.Effect>
-                                <Image Source="{Binding ImageSource}" Width="{Binding Width}" Height="{Binding Height}" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality"/>
+                                <Image Source="{Binding ImageSource}" Stretch="Fill" RenderOptions.BitmapScalingMode="HighQuality"/>
                             </Border>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
@@ -505,8 +505,6 @@ namespace TeachingAnnotator
         private double _panScrollStartY;
 
         private DispatcherTimer _scrollDebounceTimer;
-        
-        // ARCHITECT FIX: Hardware Auto-Save Loop
         private DispatcherTimer _autoSaveTimer;
 
         private double _penSize;
@@ -561,9 +559,9 @@ namespace TeachingAnnotator
                 }
             };
             
-            // ARCHITECT FIX: Start the 60-Second Auto-Save Background Worker
+            // ARCHITECT FIX: Async Background Auto-Saver (Zero Freeze)
             _autoSaveTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(60) };
-            _autoSaveTimer.Tick += (s, e) => { SaveState(); };
+            _autoSaveTimer.Tick += async (s, e) => { await ExecuteAutoSaveAsync(); };
             _autoSaveTimer.Start();
 
             BuildPaletteGrid();
@@ -622,7 +620,6 @@ namespace TeachingAnnotator
             if (_activeTab == null || _activeTab.Document == null) return;
             
             _isRenderingMemory = true;
-            bool changed = false;
 
             try
             {
@@ -641,6 +638,7 @@ namespace TeachingAnnotator
 
                     if (isVisible && pageModel.ImageSource == null)
                     {
+                        // ARCHITECT FIX: Thread-Offloading Bitmap Instantiation
                         var finalImage = await Task.Run(async () =>
                         {
                             using (var page = _activeTab.Document.GetPage((uint)i))
@@ -656,27 +654,25 @@ namespace TeachingAnnotator
                                 await reader.LoadAsync((uint)stream.Size);
                                 byte[] bufferBytes = new byte[stream.Size];
                                 reader.ReadBytes(bufferBytes);
-
-                                return bufferBytes;
+                                
+                                using (var ms = new MemoryStream(bufferBytes))
+                                {
+                                    var bmp = new BitmapImage();
+                                    bmp.BeginInit(); 
+                                    bmp.CacheOption = BitmapCacheOption.OnLoad; 
+                                    bmp.StreamSource = ms; 
+                                    bmp.EndInit();
+                                    bmp.Freeze(); // Freezing is required for passing to UI thread
+                                    return bmp;
+                                }
                             }
                         });
 
-                        using (var ms = new MemoryStream(finalImage))
-                        {
-                            var bitmap = new BitmapImage();
-                            bitmap.BeginInit(); 
-                            bitmap.CacheOption = BitmapCacheOption.OnLoad; 
-                            bitmap.StreamSource = ms; 
-                            bitmap.EndInit();
-                            bitmap.Freeze(); 
-                            pageModel.ImageSource = bitmap;
-                        }
-                        changed = true;
+                        pageModel.ImageSource = finalImage;
                     }
                     else if (!isVisible && pageModel.ImageSource != null)
                     {
                         pageModel.ImageSource = null; 
-                        changed = true;
                     }
                 }
             }
@@ -685,8 +681,6 @@ namespace TeachingAnnotator
             {
                 _isRenderingMemory = false;
             }
-
-            if (changed) GC.Collect(0, GCCollectionMode.Optimized);
         }
 
         private void LoadState()
@@ -778,10 +772,11 @@ namespace TeachingAnnotator
             }
         }
 
-        private void SaveState()
+        // ARCHITECT FIX: Fully Async Non-Blocking Auto-Saver
+        private async Task ExecuteAutoSaveAsync()
         {
-            SaveTabState();
-
+            SaveTabState(); // Freeze a memory snapshot of UI Thread state
+            
             AppSettings settings = new AppSettings
             {
                 LaserCoreColor = _laserCoreColor.ToString(),
@@ -791,51 +786,74 @@ namespace TeachingAnnotator
                 UnlockPdfCanvas = PdfCanvasToggle.IsChecked == true
             };
             
-            try { File.WriteAllText(System.IO.Path.Combine(_appDataFolder, "settings.json"), JsonSerializer.Serialize(settings)); } catch { }
-
-            HashSet<string> validFiles = new HashSet<string>();
-
-            foreach(var tab in _tabs)
+            var tabsClone = _tabs.ToList();
+            var strokeVault = new Dictionary<string, Dictionary<int, StrokeCollection>>();
+            foreach (var t in tabsClone)
             {
-                foreach(var kvp in tab.StrokesPerPage)
-                {
-                    if (kvp.Value.Count > 0)
-                    {
-                        string finalFile = System.IO.Path.Combine(_appDataFolder, $"ink_{tab.Id}_{kvp.Key}.isf");
-                        string tempFile = finalFile + ".tmp";
-                        validFiles.Add(finalFile);
-
-                        try 
-                        {
-                            using (FileStream fs = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None))
-                            {
-                                kvp.Value.Save(fs);
-                                fs.Flush(true); // ARCHITECT FIX: Hardware-level Flush to physical disk platters
-                            }
-                            
-                            if (File.Exists(finalFile)) File.Delete(finalFile);
-                            File.Move(tempFile, finalFile);
-                        } 
-                        catch { }
-                    }
-                }
+                var dict = new Dictionary<int, StrokeCollection>();
+                foreach (var kvp in t.StrokesPerPage) dict[kvp.Key] = kvp.Value.Clone();
+                strokeVault[t.Id] = dict;
             }
 
-            try 
-            {
-                foreach(var file in Directory.GetFiles(_appDataFolder, "*.isf")) {
-                    if (!validFiles.Contains(file)) { try { File.Delete(file); } catch { } }
-                }
-                foreach(var file in Directory.GetFiles(_appDataFolder, "*.tmp")) {
-                    try { File.Delete(file); } catch { }
-                }
-            } 
-            catch { }
+            var settingsJson = JsonSerializer.Serialize(settings);
+            var tabsJson = JsonSerializer.Serialize(tabsClone);
+            var folder = _appDataFolder;
 
-            try { File.WriteAllText(System.IO.Path.Combine(_appDataFolder, "tabs.json"), JsonSerializer.Serialize(_tabs)); } catch { }
+            // Execute actual SSD I/O on a background thread so UI never freezes
+            await Task.Run(() => 
+            {
+                try { File.WriteAllText(System.IO.Path.Combine(folder, "settings.json"), settingsJson); } catch { }
+
+                HashSet<string> validFiles = new HashSet<string>();
+
+                foreach(var tab in tabsClone)
+                {
+                    if (strokeVault.ContainsKey(tab.Id))
+                    {
+                        foreach(var kvp in strokeVault[tab.Id])
+                        {
+                            if (kvp.Value.Count > 0)
+                            {
+                                string finalFile = System.IO.Path.Combine(folder, $"ink_{tab.Id}_{kvp.Key}.isf");
+                                string tempFile = finalFile + ".tmp";
+                                validFiles.Add(finalFile);
+
+                                try 
+                                {
+                                    using (FileStream fs = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None))
+                                    {
+                                        kvp.Value.Save(fs);
+                                        fs.Flush(true); // Burn to platter
+                                    }
+                                    if (File.Exists(finalFile)) File.Delete(finalFile);
+                                    File.Move(tempFile, finalFile);
+                                } 
+                                catch { }
+                            }
+                        }
+                    }
+                }
+
+                try 
+                {
+                    foreach(var file in Directory.GetFiles(folder, "*.isf")) {
+                        if (!validFiles.Contains(file)) { try { File.Delete(file); } catch { } }
+                    }
+                    foreach(var file in Directory.GetFiles(folder, "*.tmp")) {
+                        try { File.Delete(file); } catch { }
+                    }
+                } 
+                catch { }
+
+                try { File.WriteAllText(System.IO.Path.Combine(folder, "tabs.json"), tabsJson); } catch { }
+            });
         }
 
-        private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e) => SaveState();
+        private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e) 
+        {
+            _autoSaveTimer.Stop();
+            ExecuteAutoSaveAsync().Wait(); // Block specifically just for exit to ensure final data is kept
+        }
 
         private void RenderTabsUI()
         {
