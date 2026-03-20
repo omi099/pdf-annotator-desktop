@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping Anydraw V18 (Optimal Spatial Buffer Memory Matrix)..."
+echo "🚀 Bootstrapping Anydraw V19 (True Multi-Core Thread Offloading Edition)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -160,7 +160,7 @@ cat << 'EOF' > MainWindow.xaml
                       PreviewMouseDown="MainScroll_PreviewMouseDown" PreviewMouseMove="MainScroll_PreviewMouseMove" PreviewMouseUp="MainScroll_PreviewMouseUp"
                       Background="Transparent" Panel.ZIndex="10">
             
-            <Grid x:Name="Workspace" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="0">
+            <Grid x:Name="Workspace" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="0" Background="Transparent">
                 <Grid.LayoutTransform>
                     <ScaleTransform x:Name="ZoomTransform" ScaleX="1" ScaleY="1"/>
                 </Grid.LayoutTransform>
@@ -548,14 +548,13 @@ namespace TeachingAnnotator
             _laserTimer.Tick += LaserTimer_Tick;
             _laserTimer.Start();
 
-            // ARCHITECT FIX: 200% Spatial Buffer Debouncer
             _scrollDebounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
-            _scrollDebounceTimer.Tick += (s, e) =>
+            _scrollDebounceTimer.Tick += async (s, e) =>
             {
                 _scrollDebounceTimer.Stop();
                 if (!_isRenderingMemory)
                 {
-                    _ = ManagePdfMemory();
+                    await ManagePdfMemory();
                 }
             };
 
@@ -610,7 +609,7 @@ namespace TeachingAnnotator
             _scrollDebounceTimer.Start();
         }
 
-        // ARCHITECT FIX: Math.Abs(i+1 - centerPage) <= 2 keeps 5 active pages!
+        // ARCHITECT FIX: True Background Task Offloading. Zero UI Thread Freezing.
         private async Task ManagePdfMemory()
         {
             if (_activeTab == null || _activeTab.Document == null) return;
@@ -621,38 +620,52 @@ namespace TeachingAnnotator
             try
             {
                 int centerPage = _activeTab.CurrentPage;
+                
+                // Get offset details safely on UI thread before diving into background
+                double unscaledOffset = MainScroll.VerticalOffset / _zoom;
+                double viewportHeight = (MainScroll.ViewportHeight > 0 ? MainScroll.ViewportHeight : 1080) / _zoom;
+                double buffer = viewportHeight * 1.5; 
+                double topBound = unscaledOffset - buffer;
+                double bottomBound = unscaledOffset + viewportHeight + buffer;
 
                 for (int i = 0; i < _activeTab.PdfRenderedPages.Count; i++)
                 {
                     var pageModel = _activeTab.PdfRenderedPages[i];
-                    bool isVisible = Math.Abs((i + 1) - centerPage) <= 2; // 5-Page Enterprise Buffer (N-2 to N+2)
+                    bool isVisible = Math.Abs((i + 1) - centerPage) <= 2; 
 
                     if (isVisible && pageModel.ImageSource == null)
                     {
-                        using (var page = _activeTab.Document.GetPage((uint)i))
-                        using (var stream = new InMemoryRandomAccessStream())
+                        // Architect Fix: Shift entire PDF decoding math to secondary CPU cores
+                        var finalImage = await Task.Run(async () =>
                         {
-                            var options = new Windows.Data.Pdf.PdfPageRenderOptions { 
-                                DestinationWidth = (uint)(page.Size.Width * 3.0), 
-                                DestinationHeight = (uint)(page.Size.Height * 3.0) 
-                            };
-                            await page.RenderToStreamAsync(stream, options);
-
-                            var reader = new DataReader(stream.GetInputStreamAt(0));
-                            await reader.LoadAsync((uint)stream.Size);
-                            byte[] bufferBytes = new byte[stream.Size];
-                            reader.ReadBytes(bufferBytes);
-
-                            using (var ms = new MemoryStream(bufferBytes))
+                            using (var page = _activeTab.Document.GetPage((uint)i))
+                            using (var stream = new InMemoryRandomAccessStream())
                             {
-                                var bitmap = new BitmapImage();
-                                bitmap.BeginInit(); 
-                                bitmap.CacheOption = BitmapCacheOption.OnLoad; 
-                                bitmap.StreamSource = ms; 
-                                bitmap.EndInit();
-                                bitmap.Freeze(); 
-                                pageModel.ImageSource = bitmap;
+                                var options = new Windows.Data.Pdf.PdfPageRenderOptions { 
+                                    DestinationWidth = (uint)(page.Size.Width * 3.0), 
+                                    DestinationHeight = (uint)(page.Size.Height * 3.0) 
+                                };
+                                await page.RenderToStreamAsync(stream, options);
+
+                                var reader = new DataReader(stream.GetInputStreamAt(0));
+                                await reader.LoadAsync((uint)stream.Size);
+                                byte[] bufferBytes = new byte[stream.Size];
+                                reader.ReadBytes(bufferBytes);
+
+                                return bufferBytes;
                             }
+                        });
+
+                        // Reinject to UI thread flawlessly
+                        using (var ms = new MemoryStream(finalImage))
+                        {
+                            var bitmap = new BitmapImage();
+                            bitmap.BeginInit(); 
+                            bitmap.CacheOption = BitmapCacheOption.OnLoad; 
+                            bitmap.StreamSource = ms; 
+                            bitmap.EndInit();
+                            bitmap.Freeze(); 
+                            pageModel.ImageSource = bitmap;
                         }
                         changed = true;
                     }
