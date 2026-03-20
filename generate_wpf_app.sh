@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping Anydraw V20 (Bulletproof Data Vault & Enterprise Memory Edition)..."
+echo "🚀 Bootstrapping Anydraw V23 (Hardware Auto-Save & Power-Proof Edition)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -505,6 +505,9 @@ namespace TeachingAnnotator
         private double _panScrollStartY;
 
         private DispatcherTimer _scrollDebounceTimer;
+        
+        // ARCHITECT FIX: Hardware Auto-Save Loop
+        private DispatcherTimer _autoSaveTimer;
 
         private double _penSize;
         private Color _penColor;
@@ -557,6 +560,11 @@ namespace TeachingAnnotator
                     await ManagePdfMemory();
                 }
             };
+            
+            // ARCHITECT FIX: Start the 60-Second Auto-Save Background Worker
+            _autoSaveTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(60) };
+            _autoSaveTimer.Tick += (s, e) => { SaveState(); };
+            _autoSaveTimer.Start();
 
             BuildPaletteGrid();
             LoadState(); 
@@ -712,7 +720,6 @@ namespace TeachingAnnotator
                     {
                         foreach(var t in savedTabs)
                         {
-                            // ARCHITECT FIX: Safely parse the exact filename, bypassing any folder underscores
                             foreach(var file in Directory.GetFiles(_appDataFolder, $"ink_{t.Id}_*.isf"))
                             {
                                 try
@@ -720,7 +727,6 @@ namespace TeachingAnnotator
                                     string safeFileName = System.IO.Path.GetFileNameWithoutExtension(file);
                                     int pageNum = int.Parse(safeFileName.Split('_').Last());
                                     
-                                    // FileShare.Read prevents crashes if antivirus is scanning the file
                                     using (FileStream fs = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read))
                                     {
                                         t.StrokesPerPage[pageNum] = new StrokeCollection(fs);
@@ -742,7 +748,7 @@ namespace TeachingAnnotator
 
         private void SaveTabState()
         {
-            if (_activeTab == null) return;
+            if (_activeTab == null || MainInkCanvas == null) return;
             
             _activeTab.Zoom = _zoom;
             _activeTab.ScrollX = MainScroll.HorizontalOffset;
@@ -765,7 +771,11 @@ namespace TeachingAnnotator
             else if (EraserBtn.IsChecked == true) _activeTab.ActiveTool = "Eraser";
             else _activeTab.ActiveTool = "Pen";
             
-            _activeTab.StrokesPerPage[_activeTab.CurrentPage] = MainInkCanvas.Strokes.Clone();
+            if (!string.IsNullOrEmpty(_activeTab.PdfFilePath)) {
+                _activeTab.StrokesPerPage[1] = MainInkCanvas.Strokes.Clone();
+            } else {
+                _activeTab.StrokesPerPage[_activeTab.CurrentPage] = MainInkCanvas.Strokes.Clone();
+            }
         }
 
         private void SaveState()
@@ -783,12 +793,7 @@ namespace TeachingAnnotator
             
             try { File.WriteAllText(System.IO.Path.Combine(_appDataFolder, "settings.json"), JsonSerializer.Serialize(settings)); } catch { }
 
-            // ARCHITECT FIX: Defensive Deletion ensures locked files don't crash the save loop
-            foreach(var file in Directory.GetFiles(_appDataFolder, "*.isf")) {
-                try { File.Delete(file); } catch { }
-            }
-
-            try { File.WriteAllText(System.IO.Path.Combine(_appDataFolder, "tabs.json"), JsonSerializer.Serialize(_tabs)); } catch { }
+            HashSet<string> validFiles = new HashSet<string>();
 
             foreach(var tab in _tabs)
             {
@@ -796,17 +801,38 @@ namespace TeachingAnnotator
                 {
                     if (kvp.Value.Count > 0)
                     {
+                        string finalFile = System.IO.Path.Combine(_appDataFolder, $"ink_{tab.Id}_{kvp.Key}.isf");
+                        string tempFile = finalFile + ".tmp";
+                        validFiles.Add(finalFile);
+
                         try 
                         {
-                            using (FileStream fs = new FileStream(System.IO.Path.Combine(_appDataFolder, $"ink_{tab.Id}_{kvp.Key}.isf"), FileMode.Create, FileAccess.Write, FileShare.None))
+                            using (FileStream fs = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None))
                             {
                                 kvp.Value.Save(fs);
+                                fs.Flush(true); // ARCHITECT FIX: Hardware-level Flush to physical disk platters
                             }
+                            
+                            if (File.Exists(finalFile)) File.Delete(finalFile);
+                            File.Move(tempFile, finalFile);
                         } 
                         catch { }
                     }
                 }
             }
+
+            try 
+            {
+                foreach(var file in Directory.GetFiles(_appDataFolder, "*.isf")) {
+                    if (!validFiles.Contains(file)) { try { File.Delete(file); } catch { } }
+                }
+                foreach(var file in Directory.GetFiles(_appDataFolder, "*.tmp")) {
+                    try { File.Delete(file); } catch { }
+                }
+            } 
+            catch { }
+
+            try { File.WriteAllText(System.IO.Path.Combine(_appDataFolder, "tabs.json"), JsonSerializer.Serialize(_tabs)); } catch { }
         }
 
         private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e) => SaveState();
@@ -952,7 +978,11 @@ namespace TeachingAnnotator
             
             RefreshWorkspaceBounds();
 
-            MainInkCanvas.Strokes = _activeTab.StrokesPerPage.ContainsKey(_activeTab.CurrentPage) ? _activeTab.StrokesPerPage[_activeTab.CurrentPage].Clone() : new StrokeCollection();
+            if (!string.IsNullOrEmpty(_activeTab.PdfFilePath)) {
+                MainInkCanvas.Strokes = _activeTab.StrokesPerPage.ContainsKey(1) ? _activeTab.StrokesPerPage[1].Clone() : new StrokeCollection();
+            } else {
+                MainInkCanvas.Strokes = _activeTab.StrokesPerPage.ContainsKey(_activeTab.CurrentPage) ? _activeTab.StrokesPerPage[_activeTab.CurrentPage].Clone() : new StrokeCollection();
+            }
             
             RenderTabsUI(); UpdatePageUI(); SyncToolToUI(); ApplyTheme();
             
@@ -1540,6 +1570,9 @@ namespace TeachingAnnotator
                     if (exportAnnotations)
                     {
                         double workspaceWidth = Workspace.Width;
+                        
+                        StrokeCollection allPdfStrokes = MainInkCanvas.Strokes;
+
                         for (int i = 0; i < document.Pages.Count; i++)
                         {
                             if (i >= _activeTab.PdfRenderedPages.Count) break;
@@ -1548,9 +1581,7 @@ namespace TeachingAnnotator
                             double scaleX = pdfPage.Width.Point / uiPage.Width; 
                             double scaleY = pdfPage.Height.Point / uiPage.Height;
 
-                            StrokeCollection pageStrokes = (i + 1 == _activeTab.CurrentPage) ? MainInkCanvas.Strokes : (_activeTab.StrokesPerPage.ContainsKey(i + 1) ? _activeTab.StrokesPerPage[i + 1] : new StrokeCollection());
-
-                            foreach (Stroke stroke in pageStrokes)
+                            foreach (Stroke stroke in allPdfStrokes)
                             {
                                 Rect bounds = stroke.GetBounds();
                                 if (bounds.Bottom >= uiPage.StartY && bounds.Top <= (uiPage.StartY + uiPage.Height))
