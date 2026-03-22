@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping Anydraw V28 (Universal Vertical Pagination Edition)..."
+echo "🚀 Bootstrapping Anydraw V29 (Modular Docking & UI Matrix Edition)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -221,7 +221,7 @@ cat << 'EOF' > MainWindow.xaml
                 <DropShadowEffect Color="Black" BlurRadius="25" Opacity="0.4" ShadowDepth="8" Direction="270"/>
             </Border.Effect>
             
-            <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+            <WrapPanel x:Name="ToolbarWrapPanel" Orientation="Horizontal" VerticalAlignment="Center">
                 
                 <Border Background="Transparent" Cursor="SizeAll" MouseLeftButtonDown="ToolbarDrag_MouseDown" MouseMove="ToolbarDrag_MouseMove" MouseLeftButtonUp="ToolbarDrag_MouseUp" Padding="8,10" Margin="4,0,8,0" ToolTip="Drag Toolbar">
                     <Path Data="M 2 4 A 1.5 1.5 0 1 1 2 7 A 1.5 1.5 0 1 1 2 4 Z M 2 10 A 1.5 1.5 0 1 1 2 13 A 1.5 1.5 0 1 1 2 10 Z M 2 16 A 1.5 1.5 0 1 1 2 19 A 1.5 1.5 0 1 1 2 16 Z M 8 4 A 1.5 1.5 0 1 1 8 7 A 1.5 1.5 0 1 1 8 4 Z M 8 10 A 1.5 1.5 0 1 1 8 13 A 1.5 1.5 0 1 1 8 10 Z M 8 16 A 1.5 1.5 0 1 1 8 19 A 1.5 1.5 0 1 1 8 16 Z" Fill="{DynamicResource TextSecondary}" Stretch="Uniform" Width="8"/>
@@ -370,6 +370,10 @@ cat << 'EOF' > MainWindow.xaml
 
                 <Rectangle Width="1" Fill="{DynamicResource BorderToolbar}" Margin="0,4,12,4"/>
                 
+                <Button Style="{StaticResource TailwindButton}" Click="ToggleToolbar_Click" ToolTip="Dock Toolbar Bottom/Left (D)">
+                    <Path Data="M 3 3 L 9 3 L 9 21 L 3 21 Z M 11 3 L 21 3 L 21 9 L 11 9 Z M 11 11 L 21 11 L 21 21 L 11 21 Z" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Height="16" Stretch="Uniform"/>
+                </Button>
+                
                 <Button Style="{StaticResource TailwindButton}" Click="FullScreen_Click" ToolTip="Cycle Full Screen Modes (F)">
                     <Path Data="M 3 3 L 9 3 L 9 5 L 5 5 L 5 9 L 3 9 Z M 21 3 L 15 3 L 15 5 L 19 5 L 19 9 L 21 9 Z M 3 21 L 9 21 L 9 19 L 5 19 L 5 15 L 3 15 Z M 21 21 L 15 21 L 15 19 L 19 19 L 19 15 L 21 15 Z" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Height="16" Stretch="Uniform"/>
                 </Button>
@@ -500,6 +504,9 @@ namespace TeachingAnnotator
         public bool PressureEnabled { get; set; } = true;
         public bool StrokeEraserEnabled { get; set; } = true;
         public bool UnlockPdfCanvas { get; set; } = false;
+        
+        // ARCHITECT FIX: Added Global Setting for Toolbar Orientation
+        public bool IsToolbarVertical { get; set; } = false;
     }
 
     public partial class MainWindow : Window
@@ -514,6 +521,7 @@ namespace TeachingAnnotator
         private bool _isZooming = false;
         private bool _isRenderingMemory = false;
         private int _fullScreenLevel = 1; 
+        private bool _isToolbarVertical = false; 
 
         private bool _isPanningCanvas = false;
         private Point _panMouseStart;
@@ -709,6 +717,7 @@ namespace TeachingAnnotator
             _laserCoreColor = (Color)ColorConverter.ConvertFromString(settings.LaserCoreColor);
             _laserFadeDelay = settings.LaserFadeDelay;
             _isDarkTheme = settings.IsDarkTheme;
+            _isToolbarVertical = settings.IsToolbarVertical;
             
             _isUpdatingUI = true;
             LaserDelayInput.Text = _laserFadeDelay.ToString("F1");
@@ -717,6 +726,8 @@ namespace TeachingAnnotator
             StrokeEraserToggle.IsChecked = settings.StrokeEraserEnabled;
             PdfCanvasToggle.IsChecked = settings.UnlockPdfCanvas;
             _isUpdatingUI = false;
+
+            ApplyToolbarOrientation();
 
             string tabsFile = System.IO.Path.Combine(_appDataFolder, "tabs.json");
             if (File.Exists(tabsFile))
@@ -752,6 +763,63 @@ namespace TeachingAnnotator
             if (_tabs.Count == 0) _tabs.Add(new WorkspaceTab());
             SwitchToTab(_tabs[0]);
             RenderTabsUI();
+        }
+
+        // ARCHITECT FIX: Dynamic Matrix Switch for Toolbar Docking
+        private void ToggleToolbar_Click(object sender, RoutedEventArgs e)
+        {
+            _isToolbarVertical = !_isToolbarVertical;
+            ToolbarTransform.X = 0;
+            ToolbarTransform.Y = 0;
+            ApplyToolbarOrientation();
+        }
+
+        private void ApplyToolbarOrientation()
+        {
+            if (_isToolbarVertical)
+            {
+                MainToolbar.HorizontalAlignment = HorizontalAlignment.Left;
+                MainToolbar.VerticalAlignment = VerticalAlignment.Center;
+                MainToolbar.Margin = new Thickness(20, 0, 0, 0);
+                ToolbarWrapPanel.Orientation = Orientation.Vertical;
+                PaginationPanel.Orientation = Orientation.Vertical;
+                
+                ColorPopup.Placement = System.Windows.Controls.Primitives.PlacementMode.Right;
+                BgColorPopup.Placement = System.Windows.Controls.Primitives.PlacementMode.Right;
+                PageSizePopup.Placement = System.Windows.Controls.Primitives.PlacementMode.Right;
+
+                foreach (var child in ToolbarWrapPanel.Children)
+                {
+                    if (child is Rectangle rect) { 
+                        rect.Width = double.NaN; 
+                        rect.Height = 1; 
+                        rect.Margin = new Thickness(4, 12, 4, 12); 
+                        rect.HorizontalAlignment = HorizontalAlignment.Stretch; 
+                    }
+                }
+            }
+            else
+            {
+                MainToolbar.HorizontalAlignment = HorizontalAlignment.Center;
+                MainToolbar.VerticalAlignment = VerticalAlignment.Bottom;
+                MainToolbar.Margin = new Thickness(0, 0, 0, 30);
+                ToolbarWrapPanel.Orientation = Orientation.Horizontal;
+                PaginationPanel.Orientation = Orientation.Horizontal;
+
+                ColorPopup.Placement = System.Windows.Controls.Primitives.PlacementMode.Top;
+                BgColorPopup.Placement = System.Windows.Controls.Primitives.PlacementMode.Top;
+                PageSizePopup.Placement = System.Windows.Controls.Primitives.PlacementMode.Top;
+
+                foreach (var child in ToolbarWrapPanel.Children)
+                {
+                    if (child is Rectangle rect) { 
+                        rect.Width = 1; 
+                        rect.Height = double.NaN; 
+                        rect.Margin = new Thickness(12, 4, 12, 4); 
+                        rect.VerticalAlignment = VerticalAlignment.Stretch; 
+                    }
+                }
+            }
         }
 
         private void SaveTabState()
@@ -796,7 +864,8 @@ namespace TeachingAnnotator
                 LaserFadeDelay = _laserFadeDelay, LaserGlow = LaserGlowSlider.Value,
                 IsDarkTheme = _isDarkTheme,
                 PressureEnabled = PressureToggle.IsChecked == true, StrokeEraserEnabled = StrokeEraserToggle.IsChecked == true,
-                UnlockPdfCanvas = PdfCanvasToggle.IsChecked == true
+                UnlockPdfCanvas = PdfCanvasToggle.IsChecked == true,
+                IsToolbarVertical = _isToolbarVertical
             };
             
             var tabsClone = _tabs.ToList();
@@ -825,7 +894,8 @@ namespace TeachingAnnotator
                 LaserFadeDelay = _laserFadeDelay, LaserGlow = LaserGlowSlider.Value,
                 IsDarkTheme = _isDarkTheme,
                 PressureEnabled = PressureToggle.IsChecked == true, StrokeEraserEnabled = StrokeEraserToggle.IsChecked == true,
-                UnlockPdfCanvas = PdfCanvasToggle.IsChecked == true
+                UnlockPdfCanvas = PdfCanvasToggle.IsChecked == true,
+                IsToolbarVertical = _isToolbarVertical
             };
             
             var tabsClone = _tabs.ToList();
@@ -1265,19 +1335,7 @@ namespace TeachingAnnotator
             return new DrawingBrush { TileMode = TileMode.Tile, Viewport = new Rect(0, 0, 100, 100), ViewportUnits = BrushMappingMode.Absolute, Drawing = mainGroup };
         }
 
-        // ARCHITECT FIX: Uncoupled Page Counter logic. Works universally for PDFs now.
-        private void UpdatePageUI() 
-        { 
-            if (_activeTab == null) return; 
-            CurrentPageText.Text = _activeTab.CurrentPage.ToString();
-            TotalPageText.Text = _activeTab.TotalPages.ToString();
-            
-            bool isPdf = !string.IsNullOrEmpty(_activeTab.PdfFilePath);
-            AddPageBtn.Visibility = isPdf ? Visibility.Collapsed : Visibility.Visible;
-            DeletePageBtn.Visibility = isPdf ? Visibility.Collapsed : Visibility.Visible;
-            PaginationPanel.Visibility = Visibility.Visible;
-        }
-
+        private void UpdatePageUI() { if (_activeTab == null) return; CurrentPageText.Text = _activeTab.CurrentPage.ToString(); TotalPageText.Text = _activeTab.TotalPages.ToString(); bool isPdf = !string.IsNullOrEmpty(_activeTab.PdfFilePath); AddPageBtn.Visibility = isPdf ? Visibility.Collapsed : Visibility.Visible; DeletePageBtn.Visibility = isPdf ? Visibility.Collapsed : Visibility.Visible; PaginationPanel.Visibility = Visibility.Visible; }
         private void SaveCurrentPage() { if (_activeTab == null || !string.IsNullOrEmpty(_activeTab.PdfFilePath)) return; _activeTab.StrokesPerPage[_activeTab.CurrentPage] = MainInkCanvas.Strokes.Clone(); }
         
         private void LoadPage(int page)
@@ -1451,6 +1509,7 @@ namespace TeachingAnnotator
             if (e.Key == Key.Right) { MainScroll.ScrollToHorizontalOffset(MainScroll.HorizontalOffset + 50); e.Handled = true; return; }
 
             if (e.Key == Key.V) { ToggleInkVisibility(); return; }
+            if (e.Key == Key.D) { ToggleToolbar_Click(null, null); return; }
             if (e.Key == Key.Escape) { PointerBtn.IsChecked = true; return; }
             if (e.Key == Key.H) MainToolbar.Visibility = MainToolbar.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
             if (e.Key == Key.F) { ToggleFullScreen(); return; }
