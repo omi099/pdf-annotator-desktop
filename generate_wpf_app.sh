@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping Anydraw V25 (Deadlock-Free Synchronous Exit Edition)..."
+echo "🚀 Bootstrapping Anydraw V26 (Enterprise PDF Pagination & Hardware Visibility Toggle)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -165,7 +165,12 @@ cat << 'EOF' > MainWindow.xaml
                     <ScaleTransform x:Name="ZoomTransform" ScaleX="1" ScaleY="1"/>
                 </Grid.LayoutTransform>
                 
-                <ItemsControl x:Name="PdfItemsControl">
+                <ItemsControl x:Name="PdfItemsControl" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" ScrollViewer.CanContentScroll="True">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <VirtualizingStackPanel Orientation="Vertical"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
                             <Border Background="White" Margin="0,0,0,25" CornerRadius="0" HorizontalAlignment="Left" Width="{Binding Width}" Height="{Binding Height}">
@@ -230,10 +235,10 @@ cat << 'EOF' > MainWindow.xaml
                     <Button Style="{StaticResource TailwindButton}" Click="NextPage_Click" ToolTip="Next Page" Padding="6,6">
                         <Path Data="M 9 4 L 17 12 L 9 20" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="2.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Height="14" Stretch="Uniform"/>
                     </Button>
-                    <Button Style="{StaticResource TailwindButton}" Click="AddPage_Click" ToolTip="Add Page to Current Document" Margin="0,0,8,0">
+                    <Button x:Name="AddPageBtn" Style="{StaticResource TailwindButton}" Click="AddPage_Click" ToolTip="Add Page to Current Document" Margin="0,0,8,0">
                         <Path Data="M 14 2 L 6 2 C 4.9 2 4 2.9 4 4 L 4 20 C 4 21.1 4.9 22 6 22 L 18 22 C 19.1 22 20 21.1 20 20 L 20 8 L 14 2 Z M 12 18 L 12 14 L 8 14 L 8 12 L 12 12 L 12 8 L 14 8 L 14 12 L 18 12 L 18 14 L 14 14 L 14 18 Z" Fill="{DynamicResource Sky400}" Height="18" Stretch="Uniform"/>
                     </Button>
-                    <Button Style="{StaticResource TailwindButton}" Click="DeletePage_Click" ToolTip="Delete Page" Margin="0,0,8,0">
+                    <Button x:Name="DeletePageBtn" Style="{StaticResource TailwindButton}" Click="DeletePage_Click" ToolTip="Delete Page" Margin="0,0,8,0">
                         <Path Data="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" Fill="{DynamicResource Rose500}" Height="16" Stretch="Uniform"/>
                     </Button>
                 </StackPanel>
@@ -302,6 +307,10 @@ cat << 'EOF' > MainWindow.xaml
                 <CheckBox x:Name="StrokeEraserToggle" Content="Stroke Erase" IsChecked="True" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" Margin="0,0,10,0" Checked="EraserMode_Changed" Unchecked="EraserMode_Changed" FontWeight="SemiBold" ToolTip="Uncheck to erase exact pixels instead of whole strokes."/>
 
                 <Rectangle Width="1" Fill="{DynamicResource BorderToolbar}" Margin="5,4"/>
+
+                <Button Style="{StaticResource TailwindButton}" Click="ToggleInk_Click" ToolTip="Hide/Show Ink Layers (V)">
+                    <Path Data="M 12 4.5 C 7 4.5 2.73 7.61 1 12 C 2.73 16.39 7 19.5 12 19.5 C 17 19.5 21.27 16.39 23 12 C 21.27 7.61 17 4.5 12 4.5 Z M 12 17 C 9.24 17 7 14.76 7 12 C 7 9.24 9.24 7 12 7 C 14.76 7 17 9.24 17 12 C 17 14.76 14.76 17 12 17 Z M 12 9 C 10.34 9 9 10.34 9 12 C 9 13.66 10.34 15 12 15 C 13.66 15 15 13.66 15 12 C 15 10.34 13.66 9 12 9 Z" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Height="16" Stretch="Uniform"/>
+                </Button>
 
                 <CheckBox x:Name="PdfCanvasToggle" Content="Unlock PDF" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" Margin="0,0,10,0" Checked="PdfCanvas_Changed" Unchecked="PdfCanvas_Changed" FontWeight="SemiBold" ToolTip="Expand canvas for margin notes"/>
 
@@ -464,6 +473,9 @@ namespace TeachingAnnotator
         public string CustomBgColor { get; set; } = "#15171B";
         
         public bool UnlockPdfCanvas { get; set; } = false;
+        
+        // ARCHITECT FIX: Memory State for Ink Visibility
+        public bool IsInkVisible { get; set; } = true; 
 
         [JsonIgnore]
         public Windows.Data.Pdf.PdfDocument Document { get; set; }
@@ -484,6 +496,7 @@ namespace TeachingAnnotator
         public bool PressureEnabled { get; set; } = true;
         public bool StrokeEraserEnabled { get; set; } = true;
         public bool UnlockPdfCanvas { get; set; } = false;
+        public bool IsInkVisible { get; set; } = true;
     }
 
     public partial class MainWindow : Window
@@ -591,6 +604,7 @@ namespace TeachingAnnotator
         {
             if (_activeTab == null || string.IsNullOrEmpty(_activeTab.PdfFilePath) || _activeTab.PdfRenderedPages.Count == 0 || _isZooming) return;
 
+            // ARCHITECT FIX: Dynamic Viewport Center Calculation for flawless PDF Page Tracking
             double unscaledOffset = MainScroll.VerticalOffset / _zoom;
             double viewportCenter = unscaledOffset + ((MainScroll.ViewportHeight > 0 ? MainScroll.ViewportHeight : 1080) / _zoom / 2.0);
 
@@ -607,7 +621,7 @@ namespace TeachingAnnotator
             if (_activeTab.CurrentPage != detectedPage)
             {
                 _activeTab.CurrentPage = detectedPage;
-                UpdatePageUI();
+                UpdatePageUI(); // Instantly updates PageCounterText without touching the Ink Array
             }
 
             _scrollDebounceTimer.Stop();
@@ -623,6 +637,7 @@ namespace TeachingAnnotator
             try
             {
                 int centerPage = _activeTab.CurrentPage;
+                
                 double unscaledOffset = MainScroll.VerticalOffset / _zoom;
                 double viewportHeight = (MainScroll.ViewportHeight > 0 ? MainScroll.ViewportHeight : 1080) / _zoom;
                 double buffer = viewportHeight * 1.5; 
@@ -798,7 +813,6 @@ namespace TeachingAnnotator
             await Task.Run(() => PerformDiskSave(settingsJson, tabsJson, folder, tabsClone, strokeVault));
         }
 
-        // ARCHITECT FIX: Deadlock-Free Exit Save Matrix
         private void SaveStateSync()
         {
             SaveTabState();
@@ -825,7 +839,6 @@ namespace TeachingAnnotator
             var tabsJson = JsonSerializer.Serialize(tabsClone);
             var folder = _appDataFolder;
 
-            // Direct execution on UI thread for instant closing without deadlock
             PerformDiskSave(settingsJson, tabsJson, folder, tabsClone, strokeVault);
         }
 
@@ -1032,6 +1045,10 @@ namespace TeachingAnnotator
             
             RenderTabsUI(); UpdatePageUI(); SyncToolToUI(); ApplyTheme();
             
+            // ARCHITECT FIX: Restore Ink Visibility State
+            MainInkCanvas.Visibility = _activeTab.IsInkVisible ? Visibility.Visible : Visibility.Hidden;
+            LaserInkCanvas.Visibility = _activeTab.IsInkVisible ? Visibility.Visible : Visibility.Hidden;
+
             Workspace.UpdateLayout();
 
             if (string.IsNullOrEmpty(_activeTab.PdfFilePath))
@@ -1247,7 +1264,18 @@ namespace TeachingAnnotator
             return new DrawingBrush { TileMode = TileMode.Tile, Viewport = new Rect(0, 0, 100, 100), ViewportUnits = BrushMappingMode.Absolute, Drawing = mainGroup };
         }
 
-        private void UpdatePageUI() { if (_activeTab == null) return; PageCounterText.Text = $"{_activeTab.CurrentPage}/{_activeTab.TotalPages}"; PaginationPanel.Visibility = string.IsNullOrEmpty(_activeTab.PdfFilePath) ? Visibility.Visible : Visibility.Collapsed; }
+        // ARCHITECT FIX: UpdatePageUI decoupled from button visibility
+        private void UpdatePageUI() 
+        { 
+            if (_activeTab == null) return; 
+            PageCounterText.Text = $"{_activeTab.CurrentPage}/{_activeTab.TotalPages}"; 
+            
+            bool isPdf = !string.IsNullOrEmpty(_activeTab.PdfFilePath);
+            AddPageBtn.Visibility = isPdf ? Visibility.Collapsed : Visibility.Visible;
+            DeletePageBtn.Visibility = isPdf ? Visibility.Collapsed : Visibility.Visible;
+            PaginationPanel.Visibility = Visibility.Visible;
+        }
+
         private void SaveCurrentPage() { if (_activeTab == null || !string.IsNullOrEmpty(_activeTab.PdfFilePath)) return; _activeTab.StrokesPerPage[_activeTab.CurrentPage] = MainInkCanvas.Strokes.Clone(); }
         
         private void LoadPage(int page)
@@ -1387,6 +1415,16 @@ namespace TeachingAnnotator
             } 
         }
 
+        // ARCHITECT FIX: Added toggle method for Ink Visibility logic
+        private void ToggleInk_Click(object sender, RoutedEventArgs e) => ToggleInkVisibility();
+        private void ToggleInkVisibility()
+        {
+            if (_activeTab == null) return;
+            _activeTab.IsInkVisible = !_activeTab.IsInkVisible;
+            MainInkCanvas.Visibility = _activeTab.IsInkVisible ? Visibility.Visible : Visibility.Hidden;
+            LaserInkCanvas.Visibility = _activeTab.IsInkVisible ? Visibility.Visible : Visibility.Hidden;
+        }
+
         private void Window_KeyDown(object sender, KeyEventArgs e)
         {
             if ((Keyboard.Modifiers & ModifierKeys.Alt) == ModifierKeys.Alt)
@@ -1410,6 +1448,9 @@ namespace TeachingAnnotator
             if (e.Key == Key.Down) { MainScroll.ScrollToVerticalOffset(MainScroll.VerticalOffset + 50); e.Handled = true; return; }
             if (e.Key == Key.Left) { MainScroll.ScrollToHorizontalOffset(MainScroll.HorizontalOffset - 50); e.Handled = true; return; }
             if (e.Key == Key.Right) { MainScroll.ScrollToHorizontalOffset(MainScroll.HorizontalOffset + 50); e.Handled = true; return; }
+
+            // ARCHITECT FIX: Key.V mapped to Hardware Visibility Toggle
+            if (e.Key == Key.V) { ToggleInkVisibility(); return; }
 
             if (e.Key == Key.Escape) { PointerBtn.IsChecked = true; return; }
             if (e.Key == Key.H) MainToolbar.Visibility = MainToolbar.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
@@ -1440,14 +1481,14 @@ namespace TeachingAnnotator
             else if (LaserBtn.IsChecked == true)
             {
                 MainInkCanvas.IsHitTestVisible = false; LaserInkCanvas.IsHitTestVisible = true; LaserInkCanvas.EditingMode = InkCanvasEditingMode.Ink;
-                LaserInkCanvas.DefaultDrawingAttributes = new DrawingAttributes { Color = _laserCoreColor, Width = activeSize, Height = activeSize, FitToCurve = true, IgnorePressure = true, StylusTip = StylusTip.Ellipse };
+                LaserInkCanvas.DefaultDrawingAttributes = new DrawingAttributes { Color = _laserCoreColor, Width = activeSize, Height = activeSize, FitToCurve = false, IgnorePressure = true, StylusTip = StylusTip.Ellipse };
                 LaserInkCanvas.Effect = new System.Windows.Media.Effects.DropShadowEffect { Color = activeColor, BlurRadius = LaserGlowSlider.Value, ShadowDepth = 0, Opacity = 1.0 };
             }
             else
             {
                 MainInkCanvas.IsHitTestVisible = true; LaserInkCanvas.IsHitTestVisible = false;
-                if (PenBtn.IsChecked == true) { MainInkCanvas.EditingMode = InkCanvasEditingMode.Ink; MainInkCanvas.DefaultDrawingAttributes = new DrawingAttributes { Color = activeColor, Width = activeSize, Height = activeSize, FitToCurve = true, IgnorePressure = ignorePressure, StylusTip = StylusTip.Ellipse }; }
-                else if (HighlightBtn.IsChecked == true) { MainInkCanvas.EditingMode = InkCanvasEditingMode.Ink; MainInkCanvas.DefaultDrawingAttributes = new DrawingAttributes { Color = Color.FromArgb(120, activeColor.R, activeColor.G, activeColor.B), Width = activeSize * 4, Height = activeSize * 4, StylusTip = StylusTip.Ellipse, IsHighlighter = true, IgnorePressure = true }; }
+                if (PenBtn.IsChecked == true) { MainInkCanvas.EditingMode = InkCanvasEditingMode.Ink; MainInkCanvas.DefaultDrawingAttributes = new DrawingAttributes { Color = activeColor, Width = activeSize, Height = activeSize, FitToCurve = false, IgnorePressure = ignorePressure, StylusTip = StylusTip.Ellipse }; }
+                else if (HighlightBtn.IsChecked == true) { MainInkCanvas.EditingMode = InkCanvasEditingMode.Ink; MainInkCanvas.DefaultDrawingAttributes = new DrawingAttributes { Color = Color.FromArgb(120, activeColor.R, activeColor.G, activeColor.B), Width = activeSize * 4, Height = activeSize * 4, StylusTip = StylusTip.Ellipse, IsHighlighter = true, IgnorePressure = true, FitToCurve = false }; }
                 else if (EraserBtn.IsChecked == true) { if (StrokeEraserToggle.IsChecked == true) MainInkCanvas.EditingMode = InkCanvasEditingMode.EraseByStroke; else { MainInkCanvas.EditingMode = InkCanvasEditingMode.EraseByPoint; MainInkCanvas.EraserShape = new EllipseStylusShape(activeSize * 4, activeSize * 4); } }
                 else if (SelectBtn.IsChecked == true) MainInkCanvas.EditingMode = InkCanvasEditingMode.Select; 
             }
