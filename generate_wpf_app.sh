@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping Anydraw V27 (Vertical Typographic Pagination Matrix)..."
+echo "🚀 Bootstrapping Anydraw V27 (Vertical Pagination Fraction UI Edition)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -232,10 +232,10 @@ cat << 'EOF' > MainWindow.xaml
                         <Path Data="M 15 4 L 7 12 L 15 20" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="2.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Height="14" Stretch="Uniform"/>
                     </Button>
                     
-                    <StackPanel Margin="4,0" VerticalAlignment="Center" MinWidth="24">
-                        <TextBlock x:Name="PageCurrentText" Text="1" Foreground="{DynamicResource Sky400}" FontSize="12" FontWeight="Bold" TextAlignment="Center"/>
-                        <Rectangle Height="1" Fill="{DynamicResource BorderToolbar}" Margin="0,2"/>
-                        <TextBlock x:Name="PageTotalText" Text="1" Foreground="{DynamicResource TextSecondary}" FontSize="10" FontWeight="SemiBold" TextAlignment="Center"/>
+                    <StackPanel Orientation="Vertical" VerticalAlignment="Center" Margin="4,0" MinWidth="32">
+                        <TextBlock x:Name="CurrentPageText" Text="1" Foreground="{DynamicResource Sky400}" VerticalAlignment="Center" FontWeight="Bold" TextAlignment="Center" FontSize="13"/>
+                        <Rectangle Height="2" Fill="{DynamicResource BorderToolbar}" Margin="2,2"/>
+                        <TextBlock x:Name="TotalPageText" Text="1" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" FontWeight="SemiBold" TextAlignment="Center" FontSize="11"/>
                     </StackPanel>
 
                     <Button Style="{StaticResource TailwindButton}" Click="NextPage_Click" ToolTip="Next Page" Padding="6,6">
@@ -1265,12 +1265,17 @@ namespace TeachingAnnotator
             return new DrawingBrush { TileMode = TileMode.Tile, Viewport = new Rect(0, 0, 100, 100), ViewportUnits = BrushMappingMode.Absolute, Drawing = mainGroup };
         }
 
-        // ARCHITECT FIX: Dynamic Stacked Fraction UI logic
-        private void UpdatePageUI() { 
+        // ARCHITECT FIX: Vertical Math Fraction Pagination UI Update
+        private void UpdatePageUI() 
+        { 
             if (_activeTab == null) return; 
-            PageCurrentText.Text = _activeTab.CurrentPage.ToString();
-            PageTotalText.Text = _activeTab.TotalPages.ToString();
-            PaginationPanel.Visibility = string.IsNullOrEmpty(_activeTab.PdfFilePath) ? Visibility.Visible : Visibility.Collapsed; 
+            CurrentPageText.Text = _activeTab.CurrentPage.ToString();
+            TotalPageText.Text = _activeTab.TotalPages.ToString();
+            
+            bool isPdf = !string.IsNullOrEmpty(_activeTab.PdfFilePath);
+            AddPageBtn.Visibility = isPdf ? Visibility.Collapsed : Visibility.Visible;
+            DeletePageBtn.Visibility = isPdf ? Visibility.Collapsed : Visibility.Visible;
+            PaginationPanel.Visibility = Visibility.Visible;
         }
 
         private void SaveCurrentPage() { if (_activeTab == null || !string.IsNullOrEmpty(_activeTab.PdfFilePath)) return; _activeTab.StrokesPerPage[_activeTab.CurrentPage] = MainInkCanvas.Strokes.Clone(); }
@@ -1446,7 +1451,6 @@ namespace TeachingAnnotator
             if (e.Key == Key.Right) { MainScroll.ScrollToHorizontalOffset(MainScroll.HorizontalOffset + 50); e.Handled = true; return; }
 
             if (e.Key == Key.V) { ToggleInkVisibility(); return; }
-
             if (e.Key == Key.Escape) { PointerBtn.IsChecked = true; return; }
             if (e.Key == Key.H) MainToolbar.Visibility = MainToolbar.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
             if (e.Key == Key.F) { ToggleFullScreen(); return; }
