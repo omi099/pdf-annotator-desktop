@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping Anydraw V27 (Vertical Pagination Fraction UI Edition)..."
+echo "🚀 Bootstrapping Anydraw V28 (Universal Vertical Pagination Edition)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -1265,7 +1265,7 @@ namespace TeachingAnnotator
             return new DrawingBrush { TileMode = TileMode.Tile, Viewport = new Rect(0, 0, 100, 100), ViewportUnits = BrushMappingMode.Absolute, Drawing = mainGroup };
         }
 
-        // ARCHITECT FIX: Vertical Math Fraction Pagination UI Update
+        // ARCHITECT FIX: Uncoupled Page Counter logic. Works universally for PDFs now.
         private void UpdatePageUI() 
         { 
             if (_activeTab == null) return; 
