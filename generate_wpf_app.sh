@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping Anydraw V26 (Enterprise PDF Pagination & Hardware Visibility Toggle)..."
+echo "🚀 Bootstrapping Anydraw V27 (Vertical Typographic Pagination Matrix)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -231,7 +231,13 @@ cat << 'EOF' > MainWindow.xaml
                     <Button Style="{StaticResource TailwindButton}" Click="PrevPage_Click" ToolTip="Previous Page" Padding="6,6">
                         <Path Data="M 15 4 L 7 12 L 15 20" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="2.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Height="14" Stretch="Uniform"/>
                     </Button>
-                    <TextBlock x:Name="PageCounterText" Text="1/1" Foreground="{DynamicResource Sky400}" VerticalAlignment="Center" FontWeight="Bold" Margin="4,0" Width="30" TextAlignment="Center"/>
+                    
+                    <StackPanel Margin="4,0" VerticalAlignment="Center" MinWidth="24">
+                        <TextBlock x:Name="PageCurrentText" Text="1" Foreground="{DynamicResource Sky400}" FontSize="12" FontWeight="Bold" TextAlignment="Center"/>
+                        <Rectangle Height="1" Fill="{DynamicResource BorderToolbar}" Margin="0,2"/>
+                        <TextBlock x:Name="PageTotalText" Text="1" Foreground="{DynamicResource TextSecondary}" FontSize="10" FontWeight="SemiBold" TextAlignment="Center"/>
+                    </StackPanel>
+
                     <Button Style="{StaticResource TailwindButton}" Click="NextPage_Click" ToolTip="Next Page" Padding="6,6">
                         <Path Data="M 9 4 L 17 12 L 9 20" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="2.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Height="14" Stretch="Uniform"/>
                     </Button>
@@ -473,8 +479,6 @@ namespace TeachingAnnotator
         public string CustomBgColor { get; set; } = "#15171B";
         
         public bool UnlockPdfCanvas { get; set; } = false;
-        
-        // ARCHITECT FIX: Memory State for Ink Visibility
         public bool IsInkVisible { get; set; } = true; 
 
         [JsonIgnore]
@@ -496,7 +500,6 @@ namespace TeachingAnnotator
         public bool PressureEnabled { get; set; } = true;
         public bool StrokeEraserEnabled { get; set; } = true;
         public bool UnlockPdfCanvas { get; set; } = false;
-        public bool IsInkVisible { get; set; } = true;
     }
 
     public partial class MainWindow : Window
@@ -604,7 +607,6 @@ namespace TeachingAnnotator
         {
             if (_activeTab == null || string.IsNullOrEmpty(_activeTab.PdfFilePath) || _activeTab.PdfRenderedPages.Count == 0 || _isZooming) return;
 
-            // ARCHITECT FIX: Dynamic Viewport Center Calculation for flawless PDF Page Tracking
             double unscaledOffset = MainScroll.VerticalOffset / _zoom;
             double viewportCenter = unscaledOffset + ((MainScroll.ViewportHeight > 0 ? MainScroll.ViewportHeight : 1080) / _zoom / 2.0);
 
@@ -621,7 +623,7 @@ namespace TeachingAnnotator
             if (_activeTab.CurrentPage != detectedPage)
             {
                 _activeTab.CurrentPage = detectedPage;
-                UpdatePageUI(); // Instantly updates PageCounterText without touching the Ink Array
+                UpdatePageUI();
             }
 
             _scrollDebounceTimer.Stop();
@@ -1045,7 +1047,6 @@ namespace TeachingAnnotator
             
             RenderTabsUI(); UpdatePageUI(); SyncToolToUI(); ApplyTheme();
             
-            // ARCHITECT FIX: Restore Ink Visibility State
             MainInkCanvas.Visibility = _activeTab.IsInkVisible ? Visibility.Visible : Visibility.Hidden;
             LaserInkCanvas.Visibility = _activeTab.IsInkVisible ? Visibility.Visible : Visibility.Hidden;
 
@@ -1264,16 +1265,12 @@ namespace TeachingAnnotator
             return new DrawingBrush { TileMode = TileMode.Tile, Viewport = new Rect(0, 0, 100, 100), ViewportUnits = BrushMappingMode.Absolute, Drawing = mainGroup };
         }
 
-        // ARCHITECT FIX: UpdatePageUI decoupled from button visibility
-        private void UpdatePageUI() 
-        { 
+        // ARCHITECT FIX: Dynamic Stacked Fraction UI logic
+        private void UpdatePageUI() { 
             if (_activeTab == null) return; 
-            PageCounterText.Text = $"{_activeTab.CurrentPage}/{_activeTab.TotalPages}"; 
-            
-            bool isPdf = !string.IsNullOrEmpty(_activeTab.PdfFilePath);
-            AddPageBtn.Visibility = isPdf ? Visibility.Collapsed : Visibility.Visible;
-            DeletePageBtn.Visibility = isPdf ? Visibility.Collapsed : Visibility.Visible;
-            PaginationPanel.Visibility = Visibility.Visible;
+            PageCurrentText.Text = _activeTab.CurrentPage.ToString();
+            PageTotalText.Text = _activeTab.TotalPages.ToString();
+            PaginationPanel.Visibility = string.IsNullOrEmpty(_activeTab.PdfFilePath) ? Visibility.Visible : Visibility.Collapsed; 
         }
 
         private void SaveCurrentPage() { if (_activeTab == null || !string.IsNullOrEmpty(_activeTab.PdfFilePath)) return; _activeTab.StrokesPerPage[_activeTab.CurrentPage] = MainInkCanvas.Strokes.Clone(); }
@@ -1415,7 +1412,6 @@ namespace TeachingAnnotator
             } 
         }
 
-        // ARCHITECT FIX: Added toggle method for Ink Visibility logic
         private void ToggleInk_Click(object sender, RoutedEventArgs e) => ToggleInkVisibility();
         private void ToggleInkVisibility()
         {
@@ -1449,7 +1445,6 @@ namespace TeachingAnnotator
             if (e.Key == Key.Left) { MainScroll.ScrollToHorizontalOffset(MainScroll.HorizontalOffset - 50); e.Handled = true; return; }
             if (e.Key == Key.Right) { MainScroll.ScrollToHorizontalOffset(MainScroll.HorizontalOffset + 50); e.Handled = true; return; }
 
-            // ARCHITECT FIX: Key.V mapped to Hardware Visibility Toggle
             if (e.Key == Key.V) { ToggleInkVisibility(); return; }
 
             if (e.Key == Key.Escape) { PointerBtn.IsChecked = true; return; }
