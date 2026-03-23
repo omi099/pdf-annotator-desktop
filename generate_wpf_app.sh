@@ -1,16 +1,17 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping Anydraw V29 (Modular Docking & UI Matrix Edition)..."
+echo "🚀 Bootstrapping Anydraw V30 (SQLite Enterprise Database Edition)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
 dotnet new wpf -n TeachingAnnotator -f net8.0 --force
 cd TeachingAnnotator
 
-# 2. Install Native PDF Writer Libraries
+# 2. Install Native PDF Writer & SQLite Libraries
 dotnet add package PdfSharp --version 6.1.1
 dotnet add package System.Text.Encoding.CodePages --version 8.0.0
+dotnet add package Microsoft.Data.Sqlite --version 8.0.0
 
 # 3. Overwrite .csproj
 cat << 'EOF' > TeachingAnnotator.csproj
@@ -26,6 +27,7 @@ cat << 'EOF' > TeachingAnnotator.csproj
   <ItemGroup>
     <PackageReference Include="PdfSharp" Version="6.1.1" />
     <PackageReference Include="System.Text.Encoding.CodePages" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.0" />
   </ItemGroup>
 </Project>
 EOF
@@ -191,7 +193,7 @@ cat << 'EOF' > MainWindow.xaml
                             <TextBlock x:Name="A4GuideText" Text="A4 Boundary" Foreground="{DynamicResource TextSecondary}" Opacity="0.6" Margin="12" VerticalAlignment="Bottom" HorizontalAlignment="Right" FontSize="14" FontWeight="SemiBold"/>
                         </Grid>
 
-                        <InkCanvas x:Name="MainInkCanvas" Background="Transparent" UseCustomCursor="True" Cursor="Arrow" Focusable="True"
+                        <InkCanvas x:Name="MainInkCanvas" Background="Transparent" UseCustomCursor="True" Cursor="Arrow" Focusable="True" AllowDrop="True" Drop="MainInkCanvas_Drop"
                                    PreviewMouseLeftButtonDown="MainInkCanvas_PreviewMouseLeftButtonDown"
                                    MouseMove="MainInkCanvas_MouseMove" MouseLeave="MainInkCanvas_MouseLeave" MouseEnter="MainInkCanvas_MouseEnter">
                         </InkCanvas>
@@ -212,6 +214,15 @@ cat << 'EOF' > MainWindow.xaml
                 </Canvas>
             </Grid>
         </ScrollViewer>
+
+        <Grid x:Name="ExportOverlay" Grid.Row="1" Background="#99000000" Panel.ZIndex="9999" Visibility="Collapsed">
+            <Border Background="{DynamicResource BgToolbar}" BorderBrush="{DynamicResource BorderToolbar}" BorderThickness="1" CornerRadius="12" Padding="30" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <StackPanel>
+                    <TextBlock Text="Exporting Document..." Foreground="{DynamicResource TextPrimary}" FontSize="18" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,0,0,15"/>
+                    <ProgressBar IsIndeterminate="True" Width="200" Height="4" Foreground="{DynamicResource Sky400}" Background="{DynamicResource BorderToolbar}" BorderThickness="0"/>
+                </StackPanel>
+            </Border>
+        </Grid>
 
         <Border Grid.Row="1" x:Name="MainToolbar" Background="{DynamicResource BgToolbar}" BorderBrush="{DynamicResource BorderToolbar}" BorderThickness="1" CornerRadius="16" Padding="5,8" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,30" Panel.ZIndex="100">
             <Border.RenderTransform>
@@ -431,6 +442,7 @@ using Windows.Storage.Streams;
 using PdfSharp.Pdf;
 using PdfSharp.Pdf.IO;
 using PdfSharp.Drawing;
+using Microsoft.Data.Sqlite;
 
 namespace TeachingAnnotator
 {
@@ -504,8 +516,6 @@ namespace TeachingAnnotator
         public bool PressureEnabled { get; set; } = true;
         public bool StrokeEraserEnabled { get; set; } = true;
         public bool UnlockPdfCanvas { get; set; } = false;
-        
-        // ARCHITECT FIX: Added Global Setting for Toolbar Orientation
         public bool IsToolbarVertical { get; set; } = false;
     }
 
@@ -527,6 +537,9 @@ namespace TeachingAnnotator
         private Point _panMouseStart;
         private double _panScrollStartX;
         private double _panScrollStartY;
+        
+        private double _lastScrollY = 0;
+        private DateTime _lastScrollTime = DateTime.Now;
 
         private DispatcherTimer _scrollDebounceTimer;
         private DispatcherTimer _autoSaveTimer;
@@ -554,6 +567,7 @@ namespace TeachingAnnotator
         private Point _toolbarDragStart;
 
         private readonly string _appDataFolder;
+        private readonly string _dbPath;
 
         public MainWindow()
         {
@@ -561,6 +575,9 @@ namespace TeachingAnnotator
 
             _appDataFolder = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Anydraw");
             if (!Directory.Exists(_appDataFolder)) Directory.CreateDirectory(_appDataFolder);
+            
+            _dbPath = System.IO.Path.Combine(_appDataFolder, "AnydrawData.db");
+            InitializeDatabase();
 
             System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
 
@@ -579,7 +596,7 @@ namespace TeachingAnnotator
                 _scrollDebounceTimer.Stop();
                 if (!_isRenderingMemory)
                 {
-                    await ManagePdfMemory();
+                    await ManagePdfMemory(0);
                 }
             };
             
@@ -595,6 +612,57 @@ namespace TeachingAnnotator
             UpdatePageUI();
             ApplyTheme();
             UpdateZoomUI();
+        }
+
+        // ARCHITECT FIX: Initialize Enterprise SQLite WAL Database
+        private void InitializeDatabase()
+        {
+            using (var conn = new SqliteConnection($"Data Source={_dbPath};Mode=ReadWriteCreate;Cache=Shared"))
+            {
+                conn.Open();
+                var cmd = conn.CreateCommand();
+                cmd.CommandText = @"
+                    PRAGMA journal_mode=WAL;
+                    CREATE TABLE IF NOT EXISTS Strokes (TabId TEXT, Page INT, InkData BLOB, PRIMARY KEY(TabId, Page));
+                    CREATE TABLE IF NOT EXISTS Settings (Id INT PRIMARY KEY, JsonData TEXT);
+                    CREATE TABLE IF NOT EXISTS Tabs (Id INT PRIMARY KEY, JsonData TEXT);
+                ";
+                cmd.ExecuteNonQuery();
+            }
+        }
+        
+        private void MainInkCanvas_Drop(object sender, DragEventArgs e)
+        {
+            if (e.Data.GetDataPresent(DataFormats.FileDrop))
+            {
+                string[] files = (string[])e.Data.GetData(DataFormats.FileDrop);
+                foreach (var file in files)
+                {
+                    if (file.EndsWith(".png", StringComparison.OrdinalIgnoreCase) || 
+                        file.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) || 
+                        file.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase))
+                    {
+                        try
+                        {
+                            var img = new Image { Width = 300, Stretch = Stretch.Uniform };
+                            var bmp = new BitmapImage();
+                            bmp.BeginInit();
+                            bmp.CacheOption = BitmapCacheOption.OnLoad;
+                            bmp.UriSource = new Uri(file);
+                            bmp.EndInit();
+                            img.Source = bmp;
+                            
+                            Point dropPosition = e.GetPosition(MainInkCanvas);
+                            InkCanvas.SetLeft(img, dropPosition.X);
+                            InkCanvas.SetTop(img, dropPosition.Y);
+                            
+                            MainInkCanvas.Children.Add(img);
+                            SaveUndoState();
+                        }
+                        catch { }
+                    }
+                }
+            }
         }
 
         private void LaserActivity_MouseDown(object sender, MouseButtonEventArgs e) { if (LaserBtn.IsChecked == true) _lastLaserActivityTime = DateTime.Now; }
@@ -617,6 +685,12 @@ namespace TeachingAnnotator
 
             double unscaledOffset = MainScroll.VerticalOffset / _zoom;
             double viewportCenter = unscaledOffset + ((MainScroll.ViewportHeight > 0 ? MainScroll.ViewportHeight : 1080) / _zoom / 2.0);
+            
+            double timeDelta = (DateTime.Now - _lastScrollTime).TotalSeconds;
+            double distanceDelta = MainScroll.VerticalOffset - _lastScrollY;
+            double velocity = timeDelta > 0 ? distanceDelta / timeDelta : 0;
+            _lastScrollTime = DateTime.Now;
+            _lastScrollY = MainScroll.VerticalOffset;
 
             int detectedPage = 1;
             for (int i = _activeTab.PdfRenderedPages.Count - 1; i >= 0; i--)
@@ -632,13 +706,18 @@ namespace TeachingAnnotator
             {
                 _activeTab.CurrentPage = detectedPage;
                 UpdatePageUI();
+                
+                if (Math.Abs(velocity) > 2000 && !_isRenderingMemory)
+                {
+                    _ = ManagePdfMemory(velocity);
+                }
             }
 
             _scrollDebounceTimer.Stop();
             _scrollDebounceTimer.Start();
         }
 
-        private async Task ManagePdfMemory()
+        private async Task ManagePdfMemory(double velocity = 0)
         {
             if (_activeTab == null || _activeTab.Document == null) return;
             
@@ -648,16 +727,14 @@ namespace TeachingAnnotator
             {
                 int centerPage = _activeTab.CurrentPage;
                 
-                double unscaledOffset = MainScroll.VerticalOffset / _zoom;
-                double viewportHeight = (MainScroll.ViewportHeight > 0 ? MainScroll.ViewportHeight : 1080) / _zoom;
-                double buffer = viewportHeight * 1.5; 
-                double topBound = unscaledOffset - buffer;
-                double bottomBound = unscaledOffset + viewportHeight + buffer;
+                int lookAheadBuffer = Math.Abs(velocity) > 2000 ? 4 : 2;
+                int minPage = centerPage - (velocity < -2000 ? lookAheadBuffer : 2);
+                int maxPage = centerPage + (velocity > 2000 ? lookAheadBuffer : 2);
 
                 for (int i = 0; i < _activeTab.PdfRenderedPages.Count; i++)
                 {
                     var pageModel = _activeTab.PdfRenderedPages[i];
-                    bool isVisible = Math.Abs((i + 1) - centerPage) <= 2; 
+                    bool isVisible = (i + 1) >= minPage && (i + 1) <= maxPage;
 
                     if (isVisible && pageModel.ImageSource == null)
                     {
@@ -707,12 +784,20 @@ namespace TeachingAnnotator
 
         private void LoadState()
         {
-            string settingsPath = System.IO.Path.Combine(_appDataFolder, "settings.json");
             AppSettings settings = new AppSettings();
-            if (File.Exists(settingsPath))
+            
+            try
             {
-                try { settings = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(settingsPath)) ?? new AppSettings(); } catch { }
+                using (var conn = new SqliteConnection($"Data Source={_dbPath}"))
+                {
+                    conn.Open();
+                    var cmd = conn.CreateCommand();
+                    cmd.CommandText = "SELECT JsonData FROM Settings WHERE Id = 1";
+                    var result = cmd.ExecuteScalar();
+                    if (result != null) settings = JsonSerializer.Deserialize<AppSettings>(result.ToString()) ?? new AppSettings();
+                }
             }
+            catch { }
 
             _laserCoreColor = (Color)ColorConverter.ConvertFromString(settings.LaserCoreColor);
             _laserFadeDelay = settings.LaserFadeDelay;
@@ -729,43 +814,52 @@ namespace TeachingAnnotator
 
             ApplyToolbarOrientation();
 
-            string tabsFile = System.IO.Path.Combine(_appDataFolder, "tabs.json");
-            if (File.Exists(tabsFile))
+            try
             {
-                try 
-                { 
-                    var savedTabs = JsonSerializer.Deserialize<List<WorkspaceTab>>(File.ReadAllText(tabsFile)); 
-                    if (savedTabs != null && savedTabs.Count > 0)
+                using (var conn = new SqliteConnection($"Data Source={_dbPath}"))
+                {
+                    conn.Open();
+                    var cmd = conn.CreateCommand();
+                    cmd.CommandText = "SELECT JsonData FROM Tabs WHERE Id = 1";
+                    var result = cmd.ExecuteScalar();
+                    if (result != null)
                     {
-                        foreach(var t in savedTabs)
+                        var savedTabs = JsonSerializer.Deserialize<List<WorkspaceTab>>(result.ToString());
+                        if (savedTabs != null && savedTabs.Count > 0)
                         {
-                            foreach(var file in Directory.GetFiles(_appDataFolder, $"ink_{t.Id}_*.isf"))
+                            foreach (var t in savedTabs)
                             {
-                                try
+                                var strokeCmd = conn.CreateCommand();
+                                strokeCmd.CommandText = "SELECT Page, InkData FROM Strokes WHERE TabId = @id";
+                                strokeCmd.Parameters.AddWithValue("@id", t.Id);
+                                using (var reader = strokeCmd.ExecuteReader())
                                 {
-                                    string safeFileName = System.IO.Path.GetFileNameWithoutExtension(file);
-                                    int pageNum = int.Parse(safeFileName.Split('_').Last());
-                                    
-                                    using (FileStream fs = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read))
+                                    while (reader.Read())
                                     {
-                                        t.StrokesPerPage[pageNum] = new StrokeCollection(fs);
+                                        int pageNum = reader.GetInt32(0);
+                                        if (!reader.IsDBNull(1))
+                                        {
+                                            byte[] blob = (byte[])reader["InkData"];
+                                            using (var ms = new MemoryStream(blob))
+                                            {
+                                                t.StrokesPerPage[pageNum] = new StrokeCollection(ms);
+                                            }
+                                        }
                                     }
                                 }
-                                catch { }
+                                _tabs.Add(t);
                             }
-                            _tabs.Add(t);
                         }
                     }
-                } 
-                catch { }
+                }
             }
+            catch { }
 
             if (_tabs.Count == 0) _tabs.Add(new WorkspaceTab());
             SwitchToTab(_tabs[0]);
             RenderTabsUI();
         }
 
-        // ARCHITECT FIX: Dynamic Matrix Switch for Toolbar Docking
         private void ToggleToolbar_Click(object sender, RoutedEventArgs e)
         {
             _isToolbarVertical = !_isToolbarVertical;
@@ -854,6 +948,7 @@ namespace TeachingAnnotator
             }
         }
 
+        // ARCHITECT FIX: True Enterprise Database Serialization
         private async Task ExecuteAutoSaveAsync()
         {
             SaveTabState(); 
@@ -869,19 +964,30 @@ namespace TeachingAnnotator
             };
             
             var tabsClone = _tabs.ToList();
-            var strokeVault = new Dictionary<string, Dictionary<int, StrokeCollection>>();
+            var strokeVault = new Dictionary<string, Dictionary<int, byte[]>>();
+            
             foreach (var t in tabsClone)
             {
-                var dict = new Dictionary<int, StrokeCollection>();
-                foreach (var kvp in t.StrokesPerPage) dict[kvp.Key] = kvp.Value.Clone();
+                var dict = new Dictionary<int, byte[]>();
+                foreach (var kvp in t.StrokesPerPage)
+                {
+                    if (kvp.Value.Count > 0)
+                    {
+                        using (var ms = new MemoryStream())
+                        {
+                            kvp.Value.Save(ms);
+                            dict[kvp.Key] = ms.ToArray();
+                        }
+                    }
+                }
                 strokeVault[t.Id] = dict;
             }
 
             var settingsJson = JsonSerializer.Serialize(settings);
             var tabsJson = JsonSerializer.Serialize(tabsClone);
-            var folder = _appDataFolder;
+            string dbPath = _dbPath;
 
-            await Task.Run(() => PerformDiskSave(settingsJson, tabsJson, folder, tabsClone, strokeVault));
+            await Task.Run(() => PerformDbSave(settingsJson, tabsJson, dbPath, tabsClone, strokeVault));
         }
 
         private void SaveStateSync()
@@ -899,67 +1005,75 @@ namespace TeachingAnnotator
             };
             
             var tabsClone = _tabs.ToList();
-            var strokeVault = new Dictionary<string, Dictionary<int, StrokeCollection>>();
+            var strokeVault = new Dictionary<string, Dictionary<int, byte[]>>();
+            
             foreach (var t in tabsClone)
             {
-                var dict = new Dictionary<int, StrokeCollection>();
-                foreach (var kvp in t.StrokesPerPage) dict[kvp.Key] = kvp.Value.Clone();
+                var dict = new Dictionary<int, byte[]>();
+                foreach (var kvp in t.StrokesPerPage)
+                {
+                    if (kvp.Value.Count > 0)
+                    {
+                        using (var ms = new MemoryStream())
+                        {
+                            kvp.Value.Save(ms);
+                            dict[kvp.Key] = ms.ToArray();
+                        }
+                    }
+                }
                 strokeVault[t.Id] = dict;
             }
 
             var settingsJson = JsonSerializer.Serialize(settings);
             var tabsJson = JsonSerializer.Serialize(tabsClone);
-            var folder = _appDataFolder;
+            string dbPath = _dbPath;
 
-            PerformDiskSave(settingsJson, tabsJson, folder, tabsClone, strokeVault);
+            PerformDbSave(settingsJson, tabsJson, dbPath, tabsClone, strokeVault);
         }
 
-        private void PerformDiskSave(string settingsJson, string tabsJson, string folder, List<WorkspaceTab> tabsClone, Dictionary<string, Dictionary<int, StrokeCollection>> strokeVault)
+        private void PerformDbSave(string settingsJson, string tabsJson, string dbPath, List<WorkspaceTab> tabsClone, Dictionary<string, Dictionary<int, byte[]>> strokeVault)
         {
-            try { File.WriteAllText(System.IO.Path.Combine(folder, "settings.json"), settingsJson); } catch { }
-
-            HashSet<string> validFiles = new HashSet<string>();
-
-            foreach(var tab in tabsClone)
+            try
             {
-                if (strokeVault.ContainsKey(tab.Id))
+                using (var conn = new SqliteConnection($"Data Source={dbPath}"))
                 {
-                    foreach(var kvp in strokeVault[tab.Id])
+                    conn.Open();
+                    using (var transaction = conn.BeginTransaction())
                     {
-                        if (kvp.Value.Count > 0)
-                        {
-                            string finalFile = System.IO.Path.Combine(folder, $"ink_{tab.Id}_{kvp.Key}.isf");
-                            string tempFile = finalFile + ".tmp";
-                            validFiles.Add(finalFile);
+                        var cmdSettings = conn.CreateCommand();
+                        cmdSettings.CommandText = "INSERT OR REPLACE INTO Settings (Id, JsonData) VALUES (1, @data)";
+                        cmdSettings.Parameters.AddWithValue("@data", settingsJson);
+                        cmdSettings.ExecuteNonQuery();
 
-                            try 
+                        var cmdTabs = conn.CreateCommand();
+                        cmdTabs.CommandText = "INSERT OR REPLACE INTO Tabs (Id, JsonData) VALUES (1, @data)";
+                        cmdTabs.Parameters.AddWithValue("@data", tabsJson);
+                        cmdTabs.ExecuteNonQuery();
+
+                        var cmdDeleteOld = conn.CreateCommand();
+                        cmdDeleteOld.CommandText = "DELETE FROM Strokes";
+                        cmdDeleteOld.ExecuteNonQuery();
+
+                        foreach(var tab in tabsClone)
+                        {
+                            if (strokeVault.ContainsKey(tab.Id))
                             {
-                                using (FileStream fs = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None))
+                                foreach(var kvp in strokeVault[tab.Id])
                                 {
-                                    kvp.Value.Save(fs);
-                                    fs.Flush(true); 
+                                    var cmdStroke = conn.CreateCommand();
+                                    cmdStroke.CommandText = "INSERT INTO Strokes (TabId, Page, InkData) VALUES (@tabId, @page, @ink)";
+                                    cmdStroke.Parameters.AddWithValue("@tabId", tab.Id);
+                                    cmdStroke.Parameters.AddWithValue("@page", kvp.Key);
+                                    cmdStroke.Parameters.AddWithValue("@ink", kvp.Value);
+                                    cmdStroke.ExecuteNonQuery();
                                 }
-                                if (File.Exists(finalFile)) File.Delete(finalFile);
-                                File.Move(tempFile, finalFile);
-                            } 
-                            catch { }
+                            }
                         }
+                        transaction.Commit();
                     }
                 }
             }
-
-            try 
-            {
-                foreach(var file in Directory.GetFiles(folder, "*.isf")) {
-                    if (!validFiles.Contains(file)) { try { File.Delete(file); } catch { } }
-                }
-                foreach(var file in Directory.GetFiles(folder, "*.tmp")) {
-                    try { File.Delete(file); } catch { }
-                }
-            } 
             catch { }
-
-            try { File.WriteAllText(System.IO.Path.Combine(folder, "tabs.json"), tabsJson); } catch { }
         }
 
         private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e) 
@@ -1336,6 +1450,7 @@ namespace TeachingAnnotator
         }
 
         private void UpdatePageUI() { if (_activeTab == null) return; CurrentPageText.Text = _activeTab.CurrentPage.ToString(); TotalPageText.Text = _activeTab.TotalPages.ToString(); bool isPdf = !string.IsNullOrEmpty(_activeTab.PdfFilePath); AddPageBtn.Visibility = isPdf ? Visibility.Collapsed : Visibility.Visible; DeletePageBtn.Visibility = isPdf ? Visibility.Collapsed : Visibility.Visible; PaginationPanel.Visibility = Visibility.Visible; }
+        
         private void SaveCurrentPage() { if (_activeTab == null || !string.IsNullOrEmpty(_activeTab.PdfFilePath)) return; _activeTab.StrokesPerPage[_activeTab.CurrentPage] = MainInkCanvas.Strokes.Clone(); }
         
         private void LoadPage(int page)
@@ -1611,7 +1726,7 @@ namespace TeachingAnnotator
             }
         }
 
-        private void ExportAnnotated_Click(object sender, RoutedEventArgs e)
+        private async void ExportAnnotated_Click(object sender, RoutedEventArgs e)
         {
             MessageBoxResult exportType = MessageBox.Show("Do you want to include your ink annotations in the exported PDF?\n\nYes = Export Annotated PDF\nNo = Export Clean Original Document/Grid", "Export Options", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
             if (exportType == MessageBoxResult.Cancel) return;
@@ -1622,86 +1737,104 @@ namespace TeachingAnnotator
                 SaveFileDialog wbdlg = new SaveFileDialog { Filter = "PDF (*.pdf)|*.pdf", FileName = "Anydraw_Whiteboard.pdf" };
                 if (wbdlg.ShowDialog() == true)
                 {
-                    try
+                    ExportOverlay.Visibility = Visibility.Visible;
+                    
+                    var strokesClone = MainInkCanvas.Strokes.Clone();
+                    double w = Workspace.Width;
+                    double h = Workspace.Height;
+                    int totalPages = _activeTab.TotalPages;
+                    int current = _activeTab.CurrentPage;
+                    var strokesDict = new Dictionary<int, StrokeCollection>();
+                    foreach (var kvp in _activeTab.StrokesPerPage) strokesDict[kvp.Key] = kvp.Value.Clone();
+                    
+                    Color bgCol = _customBgColor;
+                    bool dark = _isDarkTheme;
+                    int pattern = _gridPattern;
+
+                    await Task.Run(() => 
                     {
-                        SaveCurrentPage();
-                        PdfSharp.Pdf.PdfDocument wbDoc = new PdfSharp.Pdf.PdfDocument();
-                        XColor bgColor = XColor.FromArgb(255, _customBgColor.R, _customBgColor.G, _customBgColor.B);
-                        XColor gridColor = _isDarkTheme ? XColor.FromArgb(255, 42, 45, 53) : XColor.FromArgb(255, 209, 213, 219);
-                        XColor minorGridColor = XColor.FromArgb(100, gridColor.R, gridColor.G, gridColor.B);
-
-                        for (int i = 1; i <= _activeTab.TotalPages; i++)
+                        try
                         {
-                            StrokeCollection pageStrokes = (i == _activeTab.CurrentPage) ? MainInkCanvas.Strokes : (_activeTab.StrokesPerPage.ContainsKey(i) ? _activeTab.StrokesPerPage[i] : new StrokeCollection());
-                            
-                            double actualW = Workspace.Width; 
-                            double actualH = Workspace.Height;  
-                            
-                            if (actualW >= 10000) {
-                                actualW = 1123; actualH = 794; 
-                                Rect inkBounds = Rect.Empty;
-                                foreach (Stroke s in pageStrokes) { inkBounds.Union(s.GetBounds()); }
-                                if (inkBounds != Rect.Empty) {
-                                    if (inkBounds.Right > actualW) actualW = inkBounds.Right + 50;
-                                    if (inkBounds.Bottom > actualH) actualH = inkBounds.Bottom + 50;
-                                }
-                            }
+                            PdfSharp.Pdf.PdfDocument wbDoc = new PdfSharp.Pdf.PdfDocument();
+                            XColor bgColor = XColor.FromArgb(255, bgCol.R, bgCol.G, bgCol.B);
+                            XColor gridColor = dark ? XColor.FromArgb(255, 42, 45, 53) : XColor.FromArgb(255, 209, 213, 219);
+                            XColor minorGridColor = XColor.FromArgb(100, gridColor.R, gridColor.G, gridColor.B);
 
-                            PdfSharp.Pdf.PdfPage wbPage = wbDoc.AddPage(); 
-                            wbPage.Width = XUnit.FromPresentation(actualW); 
-                            wbPage.Height = XUnit.FromPresentation(actualH);
-                            XGraphics gfx = XGraphics.FromPdfPage(wbPage);
-                            gfx.ScaleTransform(72.0 / 96.0, 72.0 / 96.0); 
-
-                            gfx.DrawRectangle(new XSolidBrush(bgColor), 0, 0, actualW, actualH);
-                            
-                            if (_gridPattern == 1) {
-                                XPen minorPen = new XPen(minorGridColor, 0.5); XPen majorPen = new XPen(gridColor, 1.5);
-                                for (double x = 0; x < actualW; x += 20) { XPen p = (x % 100 == 0) ? majorPen : minorPen; gfx.DrawLine(p, x, 0, x, actualH); }
-                                for (double y = 0; y < actualH; y += 20) { XPen p = (y % 100 == 0) ? majorPen : minorPen; gfx.DrawLine(p, 0, y, actualW, y); }
-                            } else if (_gridPattern == 2) {
-                                XSolidBrush dotBrush = new XSolidBrush(gridColor);
-                                for (double x = 20; x < actualW; x += 40) for (double y = 20; y < actualH; y += 40) gfx.DrawEllipse(dotBrush, x - 1.5, y - 1.5, 3, 3);
-                            } else if (_gridPattern == 3) {
-                                XPen gridPen = new XPen(gridColor, 1.0);
-                                for (double y = 40; y < actualH; y += 40) gfx.DrawLine(gridPen, 0, y, actualW, y);
-                            }
-
-                            if (exportAnnotations)
+                            for (int i = 1; i <= totalPages; i++)
                             {
-                                foreach (Stroke stroke in pageStrokes)
-                                {
-                                    XColor color = XColor.FromArgb(stroke.DrawingAttributes.Color.A, stroke.DrawingAttributes.Color.R, stroke.DrawingAttributes.Color.G, stroke.DrawingAttributes.Color.B);
-                                    double baseThickness = stroke.DrawingAttributes.Width;
-                                    StylusPointCollection points = stroke.StylusPoints;
+                                StrokeCollection pageStrokes = (i == current) ? strokesClone : (strokesDict.ContainsKey(i) ? strokesDict[i] : new StrokeCollection());
+                                
+                                double actualW = w; 
+                                double actualH = h;  
+                                
+                                if (actualW >= 10000) {
+                                    actualW = 1123; actualH = 794; 
+                                    Rect inkBounds = Rect.Empty;
+                                    foreach (Stroke s in pageStrokes) { inkBounds.Union(s.GetBounds()); }
+                                    if (inkBounds != Rect.Empty) {
+                                        if (inkBounds.Right > actualW) actualW = inkBounds.Right + 50;
+                                        if (inkBounds.Bottom > actualH) actualH = inkBounds.Bottom + 50;
+                                    }
+                                }
 
-                                    if (points.Count > 1)
+                                PdfSharp.Pdf.PdfPage wbPage = wbDoc.AddPage(); 
+                                wbPage.Width = XUnit.FromPresentation(actualW); 
+                                wbPage.Height = XUnit.FromPresentation(actualH);
+                                XGraphics gfx = XGraphics.FromPdfPage(wbPage);
+                                gfx.ScaleTransform(72.0 / 96.0, 72.0 / 96.0); 
+
+                                gfx.DrawRectangle(new XSolidBrush(bgColor), 0, 0, actualW, actualH);
+                                
+                                if (pattern == 1) {
+                                    XPen minorPen = new XPen(minorGridColor, 0.5); XPen majorPen = new XPen(gridColor, 1.5);
+                                    for (double x = 0; x < actualW; x += 20) { XPen p = (x % 100 == 0) ? majorPen : minorPen; gfx.DrawLine(p, x, 0, x, actualH); }
+                                    for (double y = 0; y < actualH; y += 20) { XPen p = (y % 100 == 0) ? majorPen : minorPen; gfx.DrawLine(p, 0, y, actualW, y); }
+                                } else if (pattern == 2) {
+                                    XSolidBrush dotBrush = new XSolidBrush(gridColor);
+                                    for (double x = 20; x < actualW; x += 40) for (double y = 20; y < actualH; y += 40) gfx.DrawEllipse(dotBrush, x - 1.5, y - 1.5, 3, 3);
+                                } else if (pattern == 3) {
+                                    XPen gridPen = new XPen(gridColor, 1.0);
+                                    for (double y = 40; y < actualH; y += 40) gfx.DrawLine(gridPen, 0, y, actualW, y);
+                                }
+
+                                if (exportAnnotations)
+                                {
+                                    foreach (Stroke stroke in pageStrokes)
                                     {
-                                        if (stroke.DrawingAttributes.IsHighlighter || stroke.DrawingAttributes.IgnorePressure)
+                                        XColor color = XColor.FromArgb(stroke.DrawingAttributes.Color.A, stroke.DrawingAttributes.Color.R, stroke.DrawingAttributes.Color.G, stroke.DrawingAttributes.Color.B);
+                                        double baseThickness = stroke.DrawingAttributes.Width;
+                                        StylusPointCollection points = stroke.StylusPoints;
+
+                                        if (points.Count > 1)
                                         {
-                                            XGraphicsPath path = new XGraphicsPath(); XPoint[] xPoints = new XPoint[points.Count];
-                                            for (int j = 0; j < points.Count; j++) { xPoints[j] = new XPoint(points[j].X, points[j].Y); }
-                                            path.AddLines(xPoints);
-                                            XLineCap cap = stroke.DrawingAttributes.IsHighlighter ? XLineCap.Square : XLineCap.Round;
-                                            XPen pathPen = new XPen(color, baseThickness) { LineCap = cap, LineJoin = XLineJoin.Round };
-                                            gfx.DrawPath(pathPen, path);
-                                        }
-                                        else
-                                        {
-                                            for (int j = 0; j < points.Count - 1; j++)
+                                            if (stroke.DrawingAttributes.IsHighlighter || stroke.DrawingAttributes.IgnorePressure)
                                             {
-                                                var p1 = points[j]; var p2 = points[j + 1];
-                                                XPen segmentPen = new XPen(color, baseThickness * (p1.PressureFactor * 2.0)) { LineCap = XLineCap.Round };
-                                                gfx.DrawLine(segmentPen, p1.X, p1.Y, p2.X, p2.Y);
+                                                XGraphicsPath path = new XGraphicsPath(); XPoint[] xPoints = new XPoint[points.Count];
+                                                for (int j = 0; j < points.Count; j++) { xPoints[j] = new XPoint(points[j].X, points[j].Y); }
+                                                path.AddLines(xPoints);
+                                                XLineCap cap = stroke.DrawingAttributes.IsHighlighter ? XLineCap.Square : XLineCap.Round;
+                                                XPen pathPen = new XPen(color, baseThickness) { LineCap = cap, LineJoin = XLineJoin.Round };
+                                                gfx.DrawPath(pathPen, path);
+                                            }
+                                            else
+                                            {
+                                                for (int j = 0; j < points.Count - 1; j++)
+                                                {
+                                                    var p1 = points[j]; var p2 = points[j + 1];
+                                                    XPen segmentPen = new XPen(color, baseThickness * (p1.PressureFactor * 2.0)) { LineCap = XLineCap.Round };
+                                                    gfx.DrawLine(segmentPen, p1.X, p1.Y, p2.X, p2.Y);
+                                                }
                                             }
                                         }
                                     }
                                 }
                             }
+                            wbDoc.Save(wbdlg.FileName); 
+                            Dispatcher.Invoke(() => MessageBox.Show("Anydraw Whiteboard Exported!"));
                         }
-                        wbDoc.Save(wbdlg.FileName); MessageBox.Show("Anydraw Whiteboard Exported!");
-                    }
-                    catch (Exception ex) { MessageBox.Show("Export failed: " + ex.Message); }
+                        catch (Exception ex) { Dispatcher.Invoke(() => MessageBox.Show("Export failed: " + ex.Message)); }
+                    });
+                    ExportOverlay.Visibility = Visibility.Collapsed;
                 }
                 return;
             }
@@ -1709,60 +1842,66 @@ namespace TeachingAnnotator
             SaveFileDialog annotatedDlg = new SaveFileDialog { Filter = "PDF (*.pdf)|*.pdf", FileName = exportAnnotations ? "Anydraw_Annotated_Document.pdf" : "Anydraw_Clean_Document.pdf" };
             if (annotatedDlg.ShowDialog() == true)
             {
-                try
+                ExportOverlay.Visibility = Visibility.Visible;
+                string filePath = _activeTab.PdfFilePath;
+                var strokesClone = MainInkCanvas.Strokes.Clone();
+                var pagesMeta = _activeTab.PdfRenderedPages.ToList();
+
+                await Task.Run(() => 
                 {
-                    PdfSharp.Pdf.PdfDocument document = PdfReader.Open(_activeTab.PdfFilePath, PdfDocumentOpenMode.Modify);
-                    if (exportAnnotations)
+                    try
                     {
-                        double workspaceWidth = Workspace.Width;
-                        
-                        StrokeCollection allPdfStrokes = MainInkCanvas.Strokes;
-
-                        for (int i = 0; i < document.Pages.Count; i++)
+                        PdfSharp.Pdf.PdfDocument document = PdfReader.Open(filePath, PdfDocumentOpenMode.Modify);
+                        if (exportAnnotations)
                         {
-                            if (i >= _activeTab.PdfRenderedPages.Count) break;
-                            PdfSharp.Pdf.PdfPage pdfPage = document.Pages[i]; XGraphics gfx = XGraphics.FromPdfPage(pdfPage); PdfPageModel uiPage = _activeTab.PdfRenderedPages[i];
-                            
-                            double scaleX = pdfPage.Width.Point / uiPage.Width; 
-                            double scaleY = pdfPage.Height.Point / uiPage.Height;
-
-                            foreach (Stroke stroke in allPdfStrokes)
+                            for (int i = 0; i < document.Pages.Count; i++)
                             {
-                                Rect bounds = stroke.GetBounds();
-                                if (bounds.Bottom >= uiPage.StartY && bounds.Top <= (uiPage.StartY + uiPage.Height))
-                                {
-                                    XColor color = XColor.FromArgb(stroke.DrawingAttributes.Color.A, stroke.DrawingAttributes.Color.R, stroke.DrawingAttributes.Color.G, stroke.DrawingAttributes.Color.B);
-                                    double baseThickness = stroke.DrawingAttributes.Width * scaleX;
-                                    StylusPointCollection points = stroke.StylusPoints;
+                                if (i >= pagesMeta.Count) break;
+                                PdfSharp.Pdf.PdfPage pdfPage = document.Pages[i]; XGraphics gfx = XGraphics.FromPdfPage(pdfPage); PdfPageModel uiPage = pagesMeta[i];
+                                
+                                double scaleX = pdfPage.Width.Point / uiPage.Width; 
+                                double scaleY = pdfPage.Height.Point / uiPage.Height;
 
-                                    if (points.Count > 1)
+                                foreach (Stroke stroke in strokesClone)
+                                {
+                                    Rect bounds = stroke.GetBounds();
+                                    if (bounds.Bottom >= uiPage.StartY && bounds.Top <= (uiPage.StartY + uiPage.Height))
                                     {
-                                        if (stroke.DrawingAttributes.IsHighlighter || stroke.DrawingAttributes.IgnorePressure)
+                                        XColor color = XColor.FromArgb(stroke.DrawingAttributes.Color.A, stroke.DrawingAttributes.Color.R, stroke.DrawingAttributes.Color.G, stroke.DrawingAttributes.Color.B);
+                                        double baseThickness = stroke.DrawingAttributes.Width * scaleX;
+                                        StylusPointCollection points = stroke.StylusPoints;
+
+                                        if (points.Count > 1)
                                         {
-                                            XGraphicsPath path = new XGraphicsPath(); XPoint[] xPoints = new XPoint[points.Count];
-                                            for (int j = 0; j < points.Count; j++) { xPoints[j] = new XPoint(points[j].X * scaleX, (points[j].Y - uiPage.StartY) * scaleY); }
-                                            path.AddLines(xPoints);
-                                            XLineCap cap = stroke.DrawingAttributes.IsHighlighter ? XLineCap.Square : XLineCap.Round;
-                                            XPen pathPen = new XPen(color, baseThickness) { LineCap = cap, LineJoin = XLineJoin.Round };
-                                            gfx.DrawPath(pathPen, path);
-                                        }
-                                        else
-                                        {
-                                            for (int j = 0; j < points.Count - 1; j++)
+                                            if (stroke.DrawingAttributes.IsHighlighter || stroke.DrawingAttributes.IgnorePressure)
                                             {
-                                                var p1 = points[j]; var p2 = points[j + 1];
-                                                XPen segmentPen = new XPen(color, baseThickness * (p1.PressureFactor * 2.0)) { LineCap = XLineCap.Round };
-                                                gfx.DrawLine(segmentPen, p1.X * scaleX, (p1.Y - uiPage.StartY) * scaleY, p2.X * scaleX, (p2.Y - uiPage.StartY) * scaleY);
+                                                XGraphicsPath path = new XGraphicsPath(); XPoint[] xPoints = new XPoint[points.Count];
+                                                for (int j = 0; j < points.Count; j++) { xPoints[j] = new XPoint(points[j].X * scaleX, (points[j].Y - uiPage.StartY) * scaleY); }
+                                                path.AddLines(xPoints);
+                                                XLineCap cap = stroke.DrawingAttributes.IsHighlighter ? XLineCap.Square : XLineCap.Round;
+                                                XPen pathPen = new XPen(color, baseThickness) { LineCap = cap, LineJoin = XLineJoin.Round };
+                                                gfx.DrawPath(pathPen, path);
+                                            }
+                                            else
+                                            {
+                                                for (int j = 0; j < points.Count - 1; j++)
+                                                {
+                                                    var p1 = points[j]; var p2 = points[j + 1];
+                                                    XPen segmentPen = new XPen(color, baseThickness * (p1.PressureFactor * 2.0)) { LineCap = XLineCap.Round };
+                                                    gfx.DrawLine(segmentPen, p1.X * scaleX, (p1.Y - uiPage.StartY) * scaleY, p2.X * scaleX, (p2.Y - uiPage.StartY) * scaleY);
+                                                }
                                             }
                                         }
                                     }
                                 }
                             }
                         }
+                        document.Save(annotatedDlg.FileName); 
+                        Dispatcher.Invoke(() => MessageBox.Show("Vector PDF Exported Successfully!"));
                     }
-                    document.Save(annotatedDlg.FileName); MessageBox.Show("Vector PDF Exported Successfully!");
-                }
-                catch (Exception ex) { MessageBox.Show("Export failed: " + ex.Message); }
+                    catch (Exception ex) { Dispatcher.Invoke(() => MessageBox.Show("Export failed: " + ex.Message)); }
+                });
+                ExportOverlay.Visibility = Visibility.Collapsed;
             }
         }
 
