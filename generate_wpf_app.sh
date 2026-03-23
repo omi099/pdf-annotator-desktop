@@ -1,14 +1,14 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping Anydraw V30 (SQLite Enterprise Database Edition)..."
+echo "🚀 Bootstrapping Anydraw V31 (Maximized WPF Virtualization Edition)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
 dotnet new wpf -n TeachingAnnotator -f net8.0 --force
 cd TeachingAnnotator
 
-# 2. Install Native PDF Writer & SQLite Libraries
+# 2. Install Native PDF Writer Libraries
 dotnet add package PdfSharp --version 6.1.1
 dotnet add package System.Text.Encoding.CodePages --version 8.0.0
 dotnet add package Microsoft.Data.Sqlite --version 8.0.0
@@ -167,7 +167,7 @@ cat << 'EOF' > MainWindow.xaml
                     <ScaleTransform x:Name="ZoomTransform" ScaleX="1" ScaleY="1"/>
                 </Grid.LayoutTransform>
                 
-                <ItemsControl x:Name="PdfItemsControl" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" ScrollViewer.CanContentScroll="True">
+                <ItemsControl x:Name="PdfItemsControl" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" VirtualizingPanel.ScrollUnit="Pixel" VirtualizingPanel.CacheLength="2,2" VirtualizingPanel.CacheLengthUnit="Page" ScrollViewer.CanContentScroll="True">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
                             <VirtualizingStackPanel Orientation="Vertical"/>
@@ -175,7 +175,7 @@ cat << 'EOF' > MainWindow.xaml
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Border Background="White" Margin="0,0,0,25" CornerRadius="0" HorizontalAlignment="Left" Width="{Binding Width}" Height="{Binding Height}">
+                            <Border Background="White" Margin="0,0,0,25" CornerRadius="0" HorizontalAlignment="Left" Width="{Binding Width}" Height="{Binding Height}" RenderOptions.EdgeMode="Aliased">
                                 <Border.Effect>
                                     <DropShadowEffect Color="Black" BlurRadius="15" Opacity="0.5" Direction="270" ShadowDepth="5"/>
                                 </Border.Effect>
@@ -614,7 +614,6 @@ namespace TeachingAnnotator
             UpdateZoomUI();
         }
 
-        // ARCHITECT FIX: Initialize Enterprise SQLite WAL Database
         private void InitializeDatabase()
         {
             using (var conn = new SqliteConnection($"Data Source={_dbPath};Mode=ReadWriteCreate;Cache=Shared"))
@@ -916,6 +915,7 @@ namespace TeachingAnnotator
             }
         }
 
+        // ARCHITECT FIX: Only clone ink if there is actual ink to clone, skipping memory bloat
         private void SaveTabState()
         {
             if (_activeTab == null || MainInkCanvas == null) return;
@@ -941,14 +941,16 @@ namespace TeachingAnnotator
             else if (EraserBtn.IsChecked == true) _activeTab.ActiveTool = "Eraser";
             else _activeTab.ActiveTool = "Pen";
             
-            if (!string.IsNullOrEmpty(_activeTab.PdfFilePath)) {
-                _activeTab.StrokesPerPage[1] = MainInkCanvas.Strokes.Clone();
-            } else {
-                _activeTab.StrokesPerPage[_activeTab.CurrentPage] = MainInkCanvas.Strokes.Clone();
+            if (MainInkCanvas.Strokes.Count > 0 || _activeTab.StrokesPerPage.Count > 0)
+            {
+                if (!string.IsNullOrEmpty(_activeTab.PdfFilePath)) {
+                    _activeTab.StrokesPerPage[1] = MainInkCanvas.Strokes.Clone();
+                } else {
+                    _activeTab.StrokesPerPage[_activeTab.CurrentPage] = MainInkCanvas.Strokes.Clone();
+                }
             }
         }
 
-        // ARCHITECT FIX: True Enterprise Database Serialization
         private async Task ExecuteAutoSaveAsync()
         {
             SaveTabState(); 
@@ -1631,7 +1633,7 @@ namespace TeachingAnnotator
             if (e.Key == Key.G) { GridToggle_Click(null, null); return; }
             if (e.Key == Key.T) { Theme_Click(this, new RoutedEventArgs()); return; }
             if (e.Key == Key.OemComma) SizeSlider.Value = Math.Max(SizeSlider.Minimum, SizeSlider.Value - 1.0);
-            if (e.Key == Key.OemPeriod) SizeSlider.Value = Math.Min(SizeSlider.Maximum, SizeSlider.Value + 1.0);
+            if (e.Key == Key.OemPeriod) SizeSlider.Value = Math.Min(SizeSlider.Maximum, SizeSlider.Value - 1.0);
             if (e.Key == Key.P) PenBtn.IsChecked = true; else if (e.Key == Key.M) HighlightBtn.IsChecked = true; else if (e.Key == Key.E) EraserBtn.IsChecked = true; else if (e.Key == Key.S) SelectBtn.IsChecked = true; else if (e.Key == Key.L) LaserBtn.IsChecked = true;
         }
 
