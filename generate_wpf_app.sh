@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping Anydraw V33 (Persistent Expanding Screenshot & Precision Paste Edition)..."
+echo "🚀 Bootstrapping Anydraw V34 (Dedicated Screenshot Tool & PDF Void Fix Edition)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -80,11 +80,11 @@ cat << 'EOF' > MainWindow.xaml
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Foreground" Value="{DynamicResource TextSecondary}"/>
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Margin" Value="4,0"/>
+            <Setter Property="Margin" Value="2,0"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="RadioButton">
-                        <Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="8" Padding="12,8">
+                        <Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="8" Padding="10,8">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
@@ -165,10 +165,10 @@ cat << 'EOF' > MainWindow.xaml
                     <ScaleTransform x:Name="ZoomTransform" ScaleX="1" ScaleY="1"/>
                 </Grid.LayoutTransform>
                 
-                <ItemsControl x:Name="PdfItemsControl" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" ScrollViewer.CanContentScroll="True">
+                <ItemsControl x:Name="PdfItemsControl" ScrollViewer.CanContentScroll="True">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
-                            <VirtualizingStackPanel Orientation="Vertical"/>
+                            <StackPanel Orientation="Vertical"/>
                         </ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
@@ -265,9 +265,13 @@ cat << 'EOF' > MainWindow.xaml
                     <Path Data="M 12 16 L 12 3 M 8 7 L 12 3 L 16 7 M 4 16 L 4 20 C 4 21.1 4.9 22 6 22 L 18 22 C 19.1 22 20 21.1 20 20 L 20 16" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Height="18" Stretch="Uniform"/>
                 </Button>
 
-                <Rectangle Width="1" Fill="{DynamicResource BorderToolbar}" Margin="12,4"/>
+                <Rectangle Width="1" Fill="{DynamicResource BorderToolbar}" Margin="8,4"/>
 
-                <RadioButton Style="{StaticResource TailwindTool}" x:Name="PointerBtn" Checked="Tool_Checked" ToolTip="Mouse Pointer (Esc) | Tip: Shift+Drag to screenshot, then ENTER">
+                <RadioButton Style="{StaticResource TailwindTool}" x:Name="CropBtn" Checked="Tool_Checked" ToolTip="Screenshot Tool (C) | Drag to select, Shift+Click to expand">
+                    <Path Data="M7 17V7h10V5H5v12h2zm12-2V5h-2v10H7v2h10v10h2V15z" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" Height="20" Stretch="Uniform"/>
+                </RadioButton>
+
+                <RadioButton Style="{StaticResource TailwindTool}" x:Name="PointerBtn" Checked="Tool_Checked" ToolTip="Mouse Pointer (Esc)">
                     <Path Data="M 6 4 L 14 24 L 17 17 L 24 14 Z" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Height="22" Stretch="Uniform"/>
                 </RadioButton>
                 <RadioButton Style="{StaticResource TailwindTool}" x:Name="SelectBtn" Checked="Tool_Checked" ToolTip="Lasso Select (S) | Tip: Ctrl+C / Ctrl+V to copy/paste strokes">
@@ -533,7 +537,6 @@ namespace TeachingAnnotator
         private double _panScrollStartX;
         private double _panScrollStartY;
 
-        // Screenshot & Copy/Paste states
         private bool _isTakingScreenshot = false;
         private Point _screenshotStartPoint;
         private StrokeCollection _copiedStrokes = new StrokeCollection();
@@ -664,10 +667,26 @@ namespace TeachingAnnotator
                 double topBound = unscaledOffset - buffer;
                 double bottomBound = unscaledOffset + viewportHeight + buffer;
 
+                // ARCHITECT FIX: Force load pages that are inside the active screenshot box!
+                double cropTop = 0, cropBottom = 0;
+                bool isCropping = ScreenshotCanvas.Visibility == Visibility.Visible;
+                if (isCropping)
+                {
+                    cropTop = Canvas.GetTop(ScreenshotRect);
+                    cropBottom = cropTop + ScreenshotRect.Height;
+                }
+
                 for (int i = 0; i < _activeTab.PdfRenderedPages.Count; i++)
                 {
                     var pageModel = _activeTab.PdfRenderedPages[i];
                     bool isVisible = Math.Abs((i + 1) - centerPage) <= 2; 
+
+                    if (isCropping)
+                    {
+                        double pageTop = pageModel.StartY;
+                        double pageBottom = pageTop + pageModel.Height;
+                        if (pageBottom >= cropTop && pageTop <= cropBottom) isVisible = true;
+                    }
 
                     if (isVisible && pageModel.ImageSource == null)
                     {
@@ -854,6 +873,7 @@ namespace TeachingAnnotator
             else if (HighlightBtn.IsChecked == true) _activeTab.ActiveTool = "Highlight";
             else if (LaserBtn.IsChecked == true) _activeTab.ActiveTool = "Laser";
             else if (EraserBtn.IsChecked == true) _activeTab.ActiveTool = "Eraser";
+            else if (CropBtn.IsChecked == true) _activeTab.ActiveTool = "Crop";
             else _activeTab.ActiveTool = "Pen";
             
             if (!string.IsNullOrEmpty(_activeTab.PdfFilePath)) {
@@ -1105,6 +1125,7 @@ namespace TeachingAnnotator
                 case "Highlight": HighlightBtn.IsChecked = true; break;
                 case "Laser": LaserBtn.IsChecked = true; break;
                 case "Eraser": EraserBtn.IsChecked = true; break;
+                case "Crop": CropBtn.IsChecked = true; break;
                 default: PenBtn.IsChecked = true; break;
             }
             _isUpdatingUI = false;
@@ -1182,7 +1203,7 @@ namespace TeachingAnnotator
                 newTab.HighlightSize = _highlightSize; newTab.HighlightColor = _highlightColor.ToString();
                 newTab.LaserSize = _laserSize; newTab.LaserColor = _laserColor.ToString();
                 newTab.GridPattern = _gridPattern; newTab.CustomBgColor = _customBgColor.ToString();
-                newTab.ActiveTool = PointerBtn.IsChecked == true ? "Pointer" : (SelectBtn.IsChecked == true ? "Select" : (HighlightBtn.IsChecked == true ? "Highlight" : (LaserBtn.IsChecked == true ? "Laser" : (EraserBtn.IsChecked == true ? "Eraser" : "Pen"))));
+                newTab.ActiveTool = PointerBtn.IsChecked == true ? "Pointer" : (SelectBtn.IsChecked == true ? "Select" : (HighlightBtn.IsChecked == true ? "Highlight" : (LaserBtn.IsChecked == true ? "Laser" : (EraserBtn.IsChecked == true ? "Eraser" : (CropBtn.IsChecked == true ? "Crop" : "Pen")))));
             }
             _tabs.Add(newTab); SwitchToTab(newTab);
         }
@@ -1429,17 +1450,17 @@ namespace TeachingAnnotator
         private void ZoomIn_Click(object sender, RoutedEventArgs e) => PerformZoom(0.25);
         private void ZoomReset_Click(object sender, MouseButtonEventArgs e) => PerformZoom(1.0 - _zoom);
 
-        // ----------- THE V33 SCREENSHOT INTERCEPTOR -----------
+        // ----------- THE V34 DEDICATED SCREENSHOT TOOL -----------
         private void MainScroll_PreviewMouseDown(object sender, MouseButtonEventArgs e)
         {
-            // Screenshot Trigger: Shift + Left Click 
-            if (Keyboard.Modifiers == ModifierKeys.Shift && e.LeftButton == MouseButtonState.Pressed)
+            // Screenshot Trigger: Crop Button Selected + Left Click 
+            if (CropBtn.IsChecked == true && e.LeftButton == MouseButtonState.Pressed)
             {
                 _isTakingScreenshot = true;
                 Point clickedPoint = e.GetPosition(Workspace);
 
-                // Draw entirely new box if it's hidden
-                if (ScreenshotCanvas.Visibility != Visibility.Visible)
+                // Draw entirely new box if it's hidden OR Shift is NOT held
+                if (ScreenshotCanvas.Visibility != Visibility.Visible || Keyboard.Modifiers != ModifierKeys.Shift)
                 {
                     ScreenshotCanvas.Visibility = Visibility.Visible;
                     _screenshotStartPoint = clickedPoint;
@@ -1450,7 +1471,7 @@ namespace TeachingAnnotator
                 }
                 else
                 {
-                    // Expand existing box to encompass the newly clicked point
+                    // Expand existing box to encompass the newly clicked point (Shift is Held)
                     double currentLeft = Canvas.GetLeft(ScreenshotRect);
                     double currentTop = Canvas.GetTop(ScreenshotRect);
                     Rect currentRect = new Rect(currentLeft, currentTop, ScreenshotRect.Width, ScreenshotRect.Height);
@@ -1464,13 +1485,17 @@ namespace TeachingAnnotator
                         ScreenshotRect.Height = currentRect.Height;
                     }
 
-                    // Dynamically reset the start point to the opposite corner so if they drag, it scales perfectly
+                    // Dynamically reset the start point to the opposite corner so dragging scales perfectly
                     double startX = Math.Abs(clickedPoint.X - currentRect.Left) > Math.Abs(clickedPoint.X - currentRect.Right) ? currentRect.Left : currentRect.Right;
                     double startY = Math.Abs(clickedPoint.Y - currentRect.Top) > Math.Abs(clickedPoint.Y - currentRect.Bottom) ? currentRect.Top : currentRect.Bottom;
                     _screenshotStartPoint = new Point(startX, startY);
                 }
 
                 UpdateScreenshotPrompt();
+                
+                // ARCHITECT FIX: Force Memory Manager to instantly load pages intersected by the new box!
+                ManagePdfMemory().ConfigureAwait(false);
+
                 MainScroll.CaptureMouse();
                 e.Handled = true;
                 return;
@@ -1530,6 +1555,10 @@ namespace TeachingAnnotator
             {
                 _isTakingScreenshot = false;
                 MainScroll.ReleaseMouseCapture();
+                
+                // Trigger memory loading one last time to be totally safe
+                ManagePdfMemory().ConfigureAwait(false);
+
                 e.Handled = true;
                 return;
             }
@@ -1577,6 +1606,11 @@ namespace TeachingAnnotator
                 DrawingVisual dv = new DrawingVisual();
                 using (DrawingContext ctx = dv.RenderOpen())
                 {
+                    // ARCHITECT FIX: Force a solid background before drawing the matrix to prevent black clipboards!
+                    Color bgCol = _customBgColor;
+                    if (!string.IsNullOrEmpty(_activeTab.PdfFilePath)) bgCol = Colors.White;
+                    ctx.DrawRectangle(new SolidColorBrush(bgCol), null, new Rect(0, 0, scaledW, scaledH));
+
                     VisualBrush vb = new VisualBrush(Workspace)
                     {
                         Stretch = Stretch.None,
@@ -1592,7 +1626,9 @@ namespace TeachingAnnotator
 
                 CursorCanvas.Visibility = Visibility.Visible;
                 if (_activeTab.CanvasSizeIndex != 0) A4GuideContainer.Visibility = Visibility.Visible;
-                // Leave ScreenshotCanvas hidden until the next trigger
+                
+                PointerBtn.IsChecked = true; // Auto-exit crop tool after success
+                MessageBox.Show("Screenshot successfully copied to clipboard!", "Anydraw Capture", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
@@ -1639,6 +1675,7 @@ namespace TeachingAnnotator
                 if (e.Key == Key.Escape)
                 {
                     ScreenshotCanvas.Visibility = Visibility.Hidden;
+                    PointerBtn.IsChecked = true;
                     e.Handled = true;
                     return;
                 }
@@ -1675,12 +1712,12 @@ namespace TeachingAnnotator
             if (e.Key == Key.F) { ToggleFullScreen(); return; }
             if (e.Key == Key.G) { GridToggle_Click(null, null); return; }
             if (e.Key == Key.T) { Theme_Click(this, new RoutedEventArgs()); return; }
+            if (e.Key == Key.C) { CropBtn.IsChecked = true; return; }
             if (e.Key == Key.OemComma) SizeSlider.Value = Math.Max(SizeSlider.Minimum, SizeSlider.Value - 1.0);
             if (e.Key == Key.OemPeriod) SizeSlider.Value = Math.Min(SizeSlider.Maximum, SizeSlider.Value + 1.0);
             if (e.Key == Key.P) PenBtn.IsChecked = true; else if (e.Key == Key.M) HighlightBtn.IsChecked = true; else if (e.Key == Key.E) EraserBtn.IsChecked = true; else if (e.Key == Key.S) SelectBtn.IsChecked = true; else if (e.Key == Key.L) LaserBtn.IsChecked = true;
         }
 
-        // ----------- ACCURATE STROKE COPY / PASTE ALGORITHM -----------
         private void CopySelectedStrokes()
         {
             StrokeCollection selected = MainInkCanvas.GetSelectedStrokes();
@@ -1716,7 +1753,20 @@ namespace TeachingAnnotator
         }
 
         private void Tool_Checked(object sender, RoutedEventArgs e) { if (!_appLoaded || _isUpdatingUI || MainInkCanvas == null) return; SyncToolToUI(); }
-        private void SyncToolToUI() { _isUpdatingUI = true; if (PenBtn.IsChecked == true) { SizeSlider.Value = _penSize; HexInput.Text = _penColor.ToString(); } else if (HighlightBtn.IsChecked == true) { SizeSlider.Value = _highlightSize; HexInput.Text = _highlightColor.ToString(); } else if (LaserBtn.IsChecked == true) { SizeSlider.Value = _laserSize; HexInput.Text = _laserColor.ToString(); } _isUpdatingUI = false; ApplyPenAttributes(); }
+        private void SyncToolToUI() 
+        { 
+            _isUpdatingUI = true; 
+            if (PenBtn.IsChecked == true) { SizeSlider.Value = _penSize; HexInput.Text = _penColor.ToString(); } 
+            else if (HighlightBtn.IsChecked == true) { SizeSlider.Value = _highlightSize; HexInput.Text = _highlightColor.ToString(); } 
+            else if (LaserBtn.IsChecked == true) { SizeSlider.Value = _laserSize; HexInput.Text = _laserColor.ToString(); } 
+            
+            // Clean up crop UI if switching off it
+            if (CropBtn.IsChecked != true && ScreenshotCanvas.Visibility == Visibility.Visible) ScreenshotCanvas.Visibility = Visibility.Hidden;
+
+            _isUpdatingUI = false; 
+            ApplyPenAttributes(); 
+        }
+
         private void Size_Changed(object sender, RoutedPropertyChangedEventArgs<double> e) { if (!_appLoaded || _isUpdatingUI) return; double s = SizeSlider.Value; if (PenBtn.IsChecked == true) _penSize = s; else if (HighlightBtn.IsChecked == true) _highlightSize = s; else if (LaserBtn.IsChecked == true) _laserSize = s; ApplyPenAttributes(); }
         private void Pressure_Changed(object sender, RoutedEventArgs e) { if (!_appLoaded) return; ApplyPenAttributes(); }
         private void EraserMode_Changed(object sender, RoutedEventArgs e) { if (!_appLoaded) return; ApplyPenAttributes(); }
@@ -1726,7 +1776,7 @@ namespace TeachingAnnotator
             if (MainInkCanvas == null || LaserInkCanvas == null || ActiveColorIndicator == null || SizeSlider == null || LaserGlowSlider == null) return;
             bool ignorePressure = PressureToggle.IsChecked == false; Color activeColor = ((SolidColorBrush)ActiveColorIndicator.Fill).Color; double activeSize = SizeSlider.Value;
 
-            if (PointerBtn.IsChecked == true)
+            if (PointerBtn.IsChecked == true || CropBtn.IsChecked == true)
             {
                 MainInkCanvas.IsHitTestVisible = true; LaserInkCanvas.IsHitTestVisible = false;
                 MainInkCanvas.EditingMode = InkCanvasEditingMode.None;
@@ -1750,7 +1800,7 @@ namespace TeachingAnnotator
 
         private void UpdateCustomCursorAppearance()
         {
-            if (SelectBtn.IsChecked == true || PointerBtn.IsChecked == true) { CustomDotCursor.Visibility = Visibility.Hidden; return; }
+            if (SelectBtn.IsChecked == true || PointerBtn.IsChecked == true || CropBtn.IsChecked == true) { CustomDotCursor.Visibility = Visibility.Hidden; return; }
             double size = SizeSlider.Value; Color c = ((SolidColorBrush)ActiveColorIndicator.Fill).Color;
             if (HighlightBtn.IsChecked == true) { size *= 4; c = Color.FromArgb(120, c.R, c.G, c.B); }
             
@@ -1762,12 +1812,12 @@ namespace TeachingAnnotator
 
         private void MainInkCanvas_MouseMove(object sender, MouseEventArgs e)
         {
-            if (SelectBtn.IsChecked == true || PointerBtn.IsChecked == true) return;
+            if (SelectBtn.IsChecked == true || PointerBtn.IsChecked == true || CropBtn.IsChecked == true) return;
             CustomDotCursor.Visibility = Visibility.Visible; Point p = e.GetPosition(CursorCanvas); Canvas.SetLeft(CustomDotCursor, p.X - (CustomDotCursor.Width / 2)); Canvas.SetTop(CustomDotCursor, p.Y - (CustomDotCursor.Height / 2));
         }
 
         private void MainInkCanvas_MouseLeave(object sender, MouseEventArgs e) => CustomDotCursor.Visibility = Visibility.Hidden;
-        private void MainInkCanvas_MouseEnter(object sender, MouseEventArgs e) { if (SelectBtn.IsChecked != true && PointerBtn.IsChecked != true) CustomDotCursor.Visibility = Visibility.Visible; }
+        private void MainInkCanvas_MouseEnter(object sender, MouseEventArgs e) { if (SelectBtn.IsChecked != true && PointerBtn.IsChecked != true && CropBtn.IsChecked != true) CustomDotCursor.Visibility = Visibility.Visible; }
 
         private void LaserTimer_Tick(object sender, EventArgs e)
         {
