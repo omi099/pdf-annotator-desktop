@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping Anydraw V30 (Modular Docking, Matrix Screenshot & Clipboard Edition)..."
+echo "🚀 Bootstrapping Anydraw V31 (Zero-Error Compile Edition)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -530,7 +530,6 @@ namespace TeachingAnnotator
         private double _panScrollStartX;
         private double _panScrollStartY;
 
-        // NEW: Screenshot & Copy/Paste states
         private bool _isTakingScreenshot = false;
         private Point _screenshotStartPoint;
         private StrokeCollection _copiedStrokes = new StrokeCollection();
@@ -1426,7 +1425,6 @@ namespace TeachingAnnotator
         private void ZoomIn_Click(object sender, RoutedEventArgs e) => PerformZoom(0.25);
         private void ZoomReset_Click(object sender, MouseButtonEventArgs e) => PerformZoom(1.0 - _zoom);
 
-        // --- NEW: SCREENSHOT INTERCEPTION IN MAINSCROLL ---
         private void MainScroll_PreviewMouseDown(object sender, MouseButtonEventArgs e)
         {
             // Screenshot Trigger
@@ -1513,7 +1511,7 @@ namespace TeachingAnnotator
             }
         }
 
-        // --- NEW: MATRICIZED SCREENSHOT RENDERING ---
+        // --- MATRICIZED SCREENSHOT RENDERING ---
         private void CaptureScreenshot(double unscaledX, double unscaledY, double unscaledWidth, double unscaledHeight)
         {
             if (unscaledWidth < 5 || unscaledHeight < 5) return; 
@@ -1523,7 +1521,9 @@ namespace TeachingAnnotator
                 CursorCanvas.Visibility = Visibility.Hidden;
                 ScreenshotCanvas.Visibility = Visibility.Hidden;
                 if (A4GuideContainer != null) A4GuideContainer.Visibility = Visibility.Hidden;
-                MainInkCanvas.ClearSelection(); 
+                
+                // ARCHITECT FIX: Select an empty collection to effectively "ClearSelection"
+                MainInkCanvas.Select(new StrokeCollection()); 
 
                 double scaledW = unscaledWidth * _zoom;
                 double scaledH = unscaledHeight * _zoom;
@@ -1619,7 +1619,6 @@ namespace TeachingAnnotator
             if (e.Key == Key.P) PenBtn.IsChecked = true; else if (e.Key == Key.M) HighlightBtn.IsChecked = true; else if (e.Key == Key.E) EraserBtn.IsChecked = true; else if (e.Key == Key.S) SelectBtn.IsChecked = true; else if (e.Key == Key.L) LaserBtn.IsChecked = true;
         }
 
-        // --- NEW: STROKE COPY/PASTE LOGIC ---
         private void CopySelectedStrokes()
         {
             StrokeCollection selected = MainInkCanvas.GetSelectedStrokes();
@@ -1648,7 +1647,6 @@ namespace TeachingAnnotator
 
             MainInkCanvas.Strokes.Add(newStrokes);
             
-            // Auto-select so user can immediately micro-adjust
             SelectBtn.IsChecked = true;
             MainInkCanvas.Select(newStrokes);
         }
