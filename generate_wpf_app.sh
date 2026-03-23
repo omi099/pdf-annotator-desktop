@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping Anydraw V34 (Dedicated Screenshot Tool & PDF Void Fix Edition)..."
+echo "🚀 Bootstrapping Anydraw V35 (Precision Screenshot Matrix & Full Render Sync)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -267,7 +267,7 @@ cat << 'EOF' > MainWindow.xaml
 
                 <Rectangle Width="1" Fill="{DynamicResource BorderToolbar}" Margin="8,4"/>
 
-                <RadioButton Style="{StaticResource TailwindTool}" x:Name="CropBtn" Checked="Tool_Checked" ToolTip="Screenshot Tool (C) | Drag to select, Shift+Click to expand">
+                <RadioButton Style="{StaticResource TailwindTool}" x:Name="CropBtn" Checked="Tool_Checked" ToolTip="Screenshot Tool (C) | Drag to select, Shift+Click anywhere to expand">
                     <Path Data="M7 17V7h10V5H5v12h2zm12-2V5h-2v10H7v2h10v10h2V15z" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" Height="20" Stretch="Uniform"/>
                 </RadioButton>
 
@@ -537,6 +537,7 @@ namespace TeachingAnnotator
         private double _panScrollStartX;
         private double _panScrollStartY;
 
+        // Screenshot & Copy/Paste states
         private bool _isTakingScreenshot = false;
         private Point _screenshotStartPoint;
         private StrokeCollection _copiedStrokes = new StrokeCollection();
@@ -667,7 +668,7 @@ namespace TeachingAnnotator
                 double topBound = unscaledOffset - buffer;
                 double bottomBound = unscaledOffset + viewportHeight + buffer;
 
-                // ARCHITECT FIX: Force load pages that are inside the active screenshot box!
+                // Force load pages that are inside the active screenshot box so they don't clip out
                 double cropTop = 0, cropBottom = 0;
                 bool isCropping = ScreenshotCanvas.Visibility == Visibility.Visible;
                 if (isCropping)
@@ -1450,16 +1451,14 @@ namespace TeachingAnnotator
         private void ZoomIn_Click(object sender, RoutedEventArgs e) => PerformZoom(0.25);
         private void ZoomReset_Click(object sender, MouseButtonEventArgs e) => PerformZoom(1.0 - _zoom);
 
-        // ----------- THE V34 DEDICATED SCREENSHOT TOOL -----------
+        // ----------- THE V35 DEDICATED SCREENSHOT TOOL -----------
         private void MainScroll_PreviewMouseDown(object sender, MouseButtonEventArgs e)
         {
-            // Screenshot Trigger: Crop Button Selected + Left Click 
             if (CropBtn.IsChecked == true && e.LeftButton == MouseButtonState.Pressed)
             {
                 _isTakingScreenshot = true;
                 Point clickedPoint = e.GetPosition(Workspace);
 
-                // Draw entirely new box if it's hidden OR Shift is NOT held
                 if (ScreenshotCanvas.Visibility != Visibility.Visible || Keyboard.Modifiers != ModifierKeys.Shift)
                 {
                     ScreenshotCanvas.Visibility = Visibility.Visible;
@@ -1471,7 +1470,6 @@ namespace TeachingAnnotator
                 }
                 else
                 {
-                    // Expand existing box to encompass the newly clicked point (Shift is Held)
                     double currentLeft = Canvas.GetLeft(ScreenshotRect);
                     double currentTop = Canvas.GetTop(ScreenshotRect);
                     Rect currentRect = new Rect(currentLeft, currentTop, ScreenshotRect.Width, ScreenshotRect.Height);
@@ -1485,7 +1483,6 @@ namespace TeachingAnnotator
                         ScreenshotRect.Height = currentRect.Height;
                     }
 
-                    // Dynamically reset the start point to the opposite corner so dragging scales perfectly
                     double startX = Math.Abs(clickedPoint.X - currentRect.Left) > Math.Abs(clickedPoint.X - currentRect.Right) ? currentRect.Left : currentRect.Right;
                     double startY = Math.Abs(clickedPoint.Y - currentRect.Top) > Math.Abs(clickedPoint.Y - currentRect.Bottom) ? currentRect.Top : currentRect.Bottom;
                     _screenshotStartPoint = new Point(startX, startY);
@@ -1493,7 +1490,7 @@ namespace TeachingAnnotator
 
                 UpdateScreenshotPrompt();
                 
-                // ARCHITECT FIX: Force Memory Manager to instantly load pages intersected by the new box!
+                // Pre-warm the renderer by loading any PDF chunks interacting with crop area
                 ManagePdfMemory().ConfigureAwait(false);
 
                 MainScroll.CaptureMouse();
@@ -1501,7 +1498,6 @@ namespace TeachingAnnotator
                 return;
             }
 
-            // Panning Trigger: Middle Mouse Button
             if (e.MiddleButton == MouseButtonState.Pressed)
             {
                 _isPanningCanvas = true;
@@ -1516,7 +1512,6 @@ namespace TeachingAnnotator
 
         private void MainScroll_PreviewMouseMove(object sender, MouseEventArgs e)
         {
-            // Update Screenshot Bounding Box Drag
             if (_isTakingScreenshot)
             {
                 Point current = e.GetPosition(Workspace);
@@ -1535,7 +1530,6 @@ namespace TeachingAnnotator
                 return;
             }
 
-            // Update Panning
             if (_isPanningCanvas)
             {
                 Point current = e.GetPosition(this);
@@ -1550,20 +1544,17 @@ namespace TeachingAnnotator
 
         private void MainScroll_PreviewMouseUp(object sender, MouseButtonEventArgs e)
         {
-            // Finish Screenshot Drag (But Keep Prompt Open)
             if (e.LeftButton == MouseButtonState.Released && _isTakingScreenshot)
             {
                 _isTakingScreenshot = false;
                 MainScroll.ReleaseMouseCapture();
                 
-                // Trigger memory loading one last time to be totally safe
                 ManagePdfMemory().ConfigureAwait(false);
 
                 e.Handled = true;
                 return;
             }
 
-            // Finalize Panning
             if (e.MiddleButton == MouseButtonState.Released && _isPanningCanvas)
             {
                 _isPanningCanvas = false;
@@ -1582,7 +1573,7 @@ namespace TeachingAnnotator
             Canvas.SetTop(ScreenshotPrompt, top);
         }
 
-        // --- MATRICIZED SCREENSHOT RENDERING ---
+        // --- MATRICIZED ZERO-VOID SCREENSHOT RENDERING ---
         private void CaptureScreenshot(double unscaledX, double unscaledY, double unscaledWidth, double unscaledHeight)
         {
             if (unscaledWidth < 5 || unscaledHeight < 5) 
@@ -1598,7 +1589,12 @@ namespace TeachingAnnotator
                 if (A4GuideContainer != null) A4GuideContainer.Visibility = Visibility.Hidden;
                 
                 MainInkCanvas.Select(new StrokeCollection()); 
+                
+                // ARCHITECT FIX: Force Visual Tree to process visibility changes before mapping visual buffer
+                Workspace.UpdateLayout();
 
+                double scaledX = unscaledX * _zoom;
+                double scaledY = unscaledY * _zoom;
                 double scaledW = unscaledWidth * _zoom;
                 double scaledH = unscaledHeight * _zoom;
 
@@ -1606,18 +1602,17 @@ namespace TeachingAnnotator
                 DrawingVisual dv = new DrawingVisual();
                 using (DrawingContext ctx = dv.RenderOpen())
                 {
-                    // ARCHITECT FIX: Force a solid background before drawing the matrix to prevent black clipboards!
                     Color bgCol = _customBgColor;
                     if (!string.IsNullOrEmpty(_activeTab.PdfFilePath)) bgCol = Colors.White;
                     ctx.DrawRectangle(new SolidColorBrush(bgCol), null, new Rect(0, 0, scaledW, scaledH));
 
                     VisualBrush vb = new VisualBrush(Workspace)
                     {
-                        Stretch = Stretch.None,
-                        AlignmentX = AlignmentX.Left,
-                        AlignmentY = AlignmentY.Top,
                         ViewboxUnits = BrushMappingMode.Absolute,
-                        Viewbox = new Rect(unscaledX, unscaledY, unscaledWidth, unscaledHeight)
+                        Viewbox = new Rect(scaledX, scaledY, scaledW, scaledH),
+                        ViewportUnits = BrushMappingMode.Absolute,
+                        Viewport = new Rect(0, 0, scaledW, scaledH),
+                        Stretch = Stretch.Fill
                     };
                     ctx.DrawRectangle(vb, null, new Rect(0, 0, scaledW, scaledH));
                 }
@@ -1627,8 +1622,8 @@ namespace TeachingAnnotator
                 CursorCanvas.Visibility = Visibility.Visible;
                 if (_activeTab.CanvasSizeIndex != 0) A4GuideContainer.Visibility = Visibility.Visible;
                 
-                PointerBtn.IsChecked = true; // Auto-exit crop tool after success
-                MessageBox.Show("Screenshot successfully copied to clipboard!", "Anydraw Capture", MessageBoxButton.OK, MessageBoxImage.Information);
+                PointerBtn.IsChecked = true; 
+                MessageBox.Show("Screenshot perfectly copied to clipboard!", "Anydraw Capture", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
@@ -1760,7 +1755,6 @@ namespace TeachingAnnotator
             else if (HighlightBtn.IsChecked == true) { SizeSlider.Value = _highlightSize; HexInput.Text = _highlightColor.ToString(); } 
             else if (LaserBtn.IsChecked == true) { SizeSlider.Value = _laserSize; HexInput.Text = _laserColor.ToString(); } 
             
-            // Clean up crop UI if switching off it
             if (CropBtn.IsChecked != true && ScreenshotCanvas.Visibility == Visibility.Visible) ScreenshotCanvas.Visibility = Visibility.Hidden;
 
             _isUpdatingUI = false; 
