@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping Anydraw V31 (Zero-Error Compile Edition)..."
+echo "🚀 Bootstrapping Anydraw V33 (Persistent Expanding Screenshot & Precision Paste Edition)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -211,8 +211,11 @@ cat << 'EOF' > MainWindow.xaml
                     </Ellipse>
                 </Canvas>
 
-                <Canvas x:Name="ScreenshotCanvas" IsHitTestVisible="False" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Panel.ZIndex="1000">
-                    <Rectangle x:Name="ScreenshotRect" Stroke="{DynamicResource Sky400}" StrokeThickness="2" StrokeDashArray="4 4" Fill="#2038BDF8" Visibility="Hidden"/>
+                <Canvas x:Name="ScreenshotCanvas" IsHitTestVisible="False" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Panel.ZIndex="1000" Visibility="Hidden">
+                    <Rectangle x:Name="ScreenshotRect" Stroke="{DynamicResource Sky400}" StrokeThickness="2" StrokeDashArray="4 4" Fill="#2038BDF8"/>
+                    <Border x:Name="ScreenshotPrompt" Background="{DynamicResource BgToolbar}" BorderBrush="{DynamicResource Sky400}" BorderThickness="1" CornerRadius="4" Padding="8,4">
+                        <TextBlock Text="Press ENTER to Copy, ESC to Cancel" Foreground="{DynamicResource Sky400}" FontWeight="Bold" FontSize="12"/>
+                    </Border>
                 </Canvas>
             </Grid>
         </ScrollViewer>
@@ -264,10 +267,10 @@ cat << 'EOF' > MainWindow.xaml
 
                 <Rectangle Width="1" Fill="{DynamicResource BorderToolbar}" Margin="12,4"/>
 
-                <RadioButton Style="{StaticResource TailwindTool}" x:Name="PointerBtn" Checked="Tool_Checked" ToolTip="Mouse Pointer (Esc) | Tip: Shift+Drag for Screenshot">
+                <RadioButton Style="{StaticResource TailwindTool}" x:Name="PointerBtn" Checked="Tool_Checked" ToolTip="Mouse Pointer (Esc) | Tip: Shift+Drag to screenshot, then ENTER">
                     <Path Data="M 6 4 L 14 24 L 17 17 L 24 14 Z" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Height="22" Stretch="Uniform"/>
                 </RadioButton>
-                <RadioButton Style="{StaticResource TailwindTool}" x:Name="SelectBtn" Checked="Tool_Checked" ToolTip="Lasso Select (S) | Tip: Ctrl+C / Ctrl+V to copy/paste">
+                <RadioButton Style="{StaticResource TailwindTool}" x:Name="SelectBtn" Checked="Tool_Checked" ToolTip="Lasso Select (S) | Tip: Ctrl+C / Ctrl+V to copy/paste strokes">
                     <Path Data="M 4 10 C 6 4, 12 6, 18 8 C 22 10, 16 20, 10 18 C 4 16, 2 16, 4 10 Z M 13 13 L 20 20 M 13 13 L 13 20 M 13 13 L 20 13" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" StrokeThickness="2" StrokeDashArray="2,2" StrokeLineJoin="Round" Fill="Transparent" Height="22" Stretch="Uniform"/>
                 </RadioButton>
                 <RadioButton Style="{StaticResource TailwindTool}" x:Name="PenBtn" IsChecked="True" Checked="Tool_Checked" ToolTip="Pen (P)">
@@ -530,6 +533,7 @@ namespace TeachingAnnotator
         private double _panScrollStartX;
         private double _panScrollStartY;
 
+        // Screenshot & Copy/Paste states
         private bool _isTakingScreenshot = false;
         private Point _screenshotStartPoint;
         private StrokeCollection _copiedStrokes = new StrokeCollection();
@@ -1425,24 +1429,54 @@ namespace TeachingAnnotator
         private void ZoomIn_Click(object sender, RoutedEventArgs e) => PerformZoom(0.25);
         private void ZoomReset_Click(object sender, MouseButtonEventArgs e) => PerformZoom(1.0 - _zoom);
 
+        // ----------- THE V33 SCREENSHOT INTERCEPTOR -----------
         private void MainScroll_PreviewMouseDown(object sender, MouseButtonEventArgs e)
         {
-            // Screenshot Trigger
+            // Screenshot Trigger: Shift + Left Click 
             if (Keyboard.Modifiers == ModifierKeys.Shift && e.LeftButton == MouseButtonState.Pressed)
             {
                 _isTakingScreenshot = true;
-                _screenshotStartPoint = e.GetPosition(Workspace);
-                ScreenshotRect.Visibility = Visibility.Visible;
-                Canvas.SetLeft(ScreenshotRect, _screenshotStartPoint.X);
-                Canvas.SetTop(ScreenshotRect, _screenshotStartPoint.Y);
-                ScreenshotRect.Width = 0;
-                ScreenshotRect.Height = 0;
+                Point clickedPoint = e.GetPosition(Workspace);
+
+                // Draw entirely new box if it's hidden
+                if (ScreenshotCanvas.Visibility != Visibility.Visible)
+                {
+                    ScreenshotCanvas.Visibility = Visibility.Visible;
+                    _screenshotStartPoint = clickedPoint;
+                    Canvas.SetLeft(ScreenshotRect, clickedPoint.X);
+                    Canvas.SetTop(ScreenshotRect, clickedPoint.Y);
+                    ScreenshotRect.Width = 0;
+                    ScreenshotRect.Height = 0;
+                }
+                else
+                {
+                    // Expand existing box to encompass the newly clicked point
+                    double currentLeft = Canvas.GetLeft(ScreenshotRect);
+                    double currentTop = Canvas.GetTop(ScreenshotRect);
+                    Rect currentRect = new Rect(currentLeft, currentTop, ScreenshotRect.Width, ScreenshotRect.Height);
+                    
+                    if (!currentRect.Contains(clickedPoint))
+                    {
+                        currentRect.Union(clickedPoint);
+                        Canvas.SetLeft(ScreenshotRect, currentRect.Left);
+                        Canvas.SetTop(ScreenshotRect, currentRect.Top);
+                        ScreenshotRect.Width = currentRect.Width;
+                        ScreenshotRect.Height = currentRect.Height;
+                    }
+
+                    // Dynamically reset the start point to the opposite corner so if they drag, it scales perfectly
+                    double startX = Math.Abs(clickedPoint.X - currentRect.Left) > Math.Abs(clickedPoint.X - currentRect.Right) ? currentRect.Left : currentRect.Right;
+                    double startY = Math.Abs(clickedPoint.Y - currentRect.Top) > Math.Abs(clickedPoint.Y - currentRect.Bottom) ? currentRect.Top : currentRect.Bottom;
+                    _screenshotStartPoint = new Point(startX, startY);
+                }
+
+                UpdateScreenshotPrompt();
                 MainScroll.CaptureMouse();
                 e.Handled = true;
                 return;
             }
 
-            // Panning Trigger
+            // Panning Trigger: Middle Mouse Button
             if (e.MiddleButton == MouseButtonState.Pressed)
             {
                 _isPanningCanvas = true;
@@ -1457,7 +1491,7 @@ namespace TeachingAnnotator
 
         private void MainScroll_PreviewMouseMove(object sender, MouseEventArgs e)
         {
-            // Screenshot dragging
+            // Update Screenshot Bounding Box Drag
             if (_isTakingScreenshot)
             {
                 Point current = e.GetPosition(Workspace);
@@ -1470,11 +1504,13 @@ namespace TeachingAnnotator
                 Canvas.SetTop(ScreenshotRect, y);
                 ScreenshotRect.Width = w;
                 ScreenshotRect.Height = h;
+                
+                UpdateScreenshotPrompt();
                 e.Handled = true;
                 return;
             }
 
-            // Panning dragging
+            // Update Panning
             if (_isPanningCanvas)
             {
                 Point current = e.GetPosition(this);
@@ -1489,14 +1525,11 @@ namespace TeachingAnnotator
 
         private void MainScroll_PreviewMouseUp(object sender, MouseButtonEventArgs e)
         {
-            // Finalize Screenshot
+            // Finish Screenshot Drag (But Keep Prompt Open)
             if (e.LeftButton == MouseButtonState.Released && _isTakingScreenshot)
             {
                 _isTakingScreenshot = false;
                 MainScroll.ReleaseMouseCapture();
-                ScreenshotRect.Visibility = Visibility.Hidden;
-
-                CaptureScreenshot(Canvas.GetLeft(ScreenshotRect), Canvas.GetTop(ScreenshotRect), ScreenshotRect.Width, ScreenshotRect.Height);
                 e.Handled = true;
                 return;
             }
@@ -1511,10 +1544,23 @@ namespace TeachingAnnotator
             }
         }
 
+        private void UpdateScreenshotPrompt()
+        {
+            double left = Canvas.GetLeft(ScreenshotRect);
+            double top = Canvas.GetTop(ScreenshotRect) - 30;
+            if (top < 0) top = Canvas.GetTop(ScreenshotRect) + ScreenshotRect.Height + 5; 
+            Canvas.SetLeft(ScreenshotPrompt, left);
+            Canvas.SetTop(ScreenshotPrompt, top);
+        }
+
         // --- MATRICIZED SCREENSHOT RENDERING ---
         private void CaptureScreenshot(double unscaledX, double unscaledY, double unscaledWidth, double unscaledHeight)
         {
-            if (unscaledWidth < 5 || unscaledHeight < 5) return; 
+            if (unscaledWidth < 5 || unscaledHeight < 5) 
+            {
+                ScreenshotCanvas.Visibility = Visibility.Hidden;
+                return; 
+            }
 
             try
             {
@@ -1522,7 +1568,6 @@ namespace TeachingAnnotator
                 ScreenshotCanvas.Visibility = Visibility.Hidden;
                 if (A4GuideContainer != null) A4GuideContainer.Visibility = Visibility.Hidden;
                 
-                // ARCHITECT FIX: Select an empty collection to effectively "ClearSelection"
                 MainInkCanvas.Select(new StrokeCollection()); 
 
                 double scaledW = unscaledWidth * _zoom;
@@ -1546,9 +1591,8 @@ namespace TeachingAnnotator
                 Clipboard.SetImage(rtb);
 
                 CursorCanvas.Visibility = Visibility.Visible;
-                ScreenshotCanvas.Visibility = Visibility.Visible;
                 if (_activeTab.CanvasSizeIndex != 0) A4GuideContainer.Visibility = Visibility.Visible;
-
+                // Leave ScreenshotCanvas hidden until the next trigger
             }
             catch (Exception ex)
             {
@@ -1583,6 +1627,23 @@ namespace TeachingAnnotator
 
         private void Window_KeyDown(object sender, KeyEventArgs e)
         {
+            // Screenshot Finalizers
+            if (ScreenshotCanvas.Visibility == Visibility.Visible)
+            {
+                if (e.Key == Key.Enter)
+                {
+                    CaptureScreenshot(Canvas.GetLeft(ScreenshotRect), Canvas.GetTop(ScreenshotRect), ScreenshotRect.Width, ScreenshotRect.Height);
+                    e.Handled = true;
+                    return;
+                }
+                if (e.Key == Key.Escape)
+                {
+                    ScreenshotCanvas.Visibility = Visibility.Hidden;
+                    e.Handled = true;
+                    return;
+                }
+            }
+
             if ((Keyboard.Modifiers & ModifierKeys.Alt) == ModifierKeys.Alt)
             {
                 if (e.SystemKey == Key.Z) { int idx = _tabs.IndexOf(_activeTab) - 1; if (idx < 0) idx = _tabs.Count - 1; SwitchToTab(_tabs[idx]); e.Handled = true; return; }
@@ -1619,6 +1680,7 @@ namespace TeachingAnnotator
             if (e.Key == Key.P) PenBtn.IsChecked = true; else if (e.Key == Key.M) HighlightBtn.IsChecked = true; else if (e.Key == Key.E) EraserBtn.IsChecked = true; else if (e.Key == Key.S) SelectBtn.IsChecked = true; else if (e.Key == Key.L) LaserBtn.IsChecked = true;
         }
 
+        // ----------- ACCURATE STROKE COPY / PASTE ALGORITHM -----------
         private void CopySelectedStrokes()
         {
             StrokeCollection selected = MainInkCanvas.GetSelectedStrokes();
@@ -1635,6 +1697,8 @@ namespace TeachingAnnotator
             SaveUndoState();
             StrokeCollection newStrokes = _copiedStrokes.Clone();
             Rect bounds = newStrokes.GetBounds();
+            
+            if (bounds.IsEmpty) return;
 
             Point mousePos = Mouse.GetPosition(MainInkCanvas);
             
