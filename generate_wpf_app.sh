@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping Anydraw V37 (Infinite Multi-Page Screenshot Engine)..."
+echo "🚀 Bootstrapping Anydraw V38 (Zero-Lag Background Auto-Save & Pure Performance Edition)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -165,10 +165,10 @@ cat << 'EOF' > MainWindow.xaml
                     <ScaleTransform x:Name="ZoomTransform" ScaleX="1" ScaleY="1"/>
                 </Grid.LayoutTransform>
                 
-                <ItemsControl x:Name="PdfItemsControl" ScrollViewer.CanContentScroll="True">
+                <ItemsControl x:Name="PdfItemsControl" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" ScrollViewer.CanContentScroll="True">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
-                            <StackPanel Orientation="Vertical"/>
+                            <VirtualizingStackPanel Orientation="Vertical"/>
                         </ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
@@ -209,13 +209,6 @@ cat << 'EOF' > MainWindow.xaml
                             <DropShadowEffect x:Name="CursorGlow" BlurRadius="4" ShadowDepth="1" Opacity="0.6" />
                         </Ellipse.Effect>
                     </Ellipse>
-                </Canvas>
-
-                <Canvas x:Name="ScreenshotCanvas" IsHitTestVisible="False" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Panel.ZIndex="1000" Visibility="Hidden">
-                    <Rectangle x:Name="ScreenshotRect" Stroke="{DynamicResource Sky400}" StrokeThickness="2" StrokeDashArray="4 4" Fill="#2038BDF8"/>
-                    <Border x:Name="ScreenshotPrompt" Background="{DynamicResource BgToolbar}" BorderBrush="{DynamicResource Sky400}" BorderThickness="1" CornerRadius="4" Padding="8,4">
-                        <TextBlock Text="Press ENTER to Capture Screen, ESC to Cancel" Foreground="{DynamicResource Sky400}" FontWeight="Bold" FontSize="12"/>
-                    </Border>
                 </Canvas>
             </Grid>
         </ScrollViewer>
@@ -266,10 +259,6 @@ cat << 'EOF' > MainWindow.xaml
                 </Button>
 
                 <Rectangle Width="1" Fill="{DynamicResource BorderToolbar}" Margin="8,4"/>
-
-                <RadioButton Style="{StaticResource TailwindTool}" x:Name="CropBtn" Checked="Tool_Checked" ToolTip="High-Res Screenshot Tool (C) | Drag to select, Shift+Click anywhere to expand">
-                    <Path Data="M7 17V7h10V5H5v12h2zm12-2V5h-2v10H7v2h10v10h2V15z" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" Height="20" Stretch="Uniform"/>
-                </RadioButton>
 
                 <RadioButton Style="{StaticResource TailwindTool}" x:Name="PointerBtn" Checked="Tool_Checked" ToolTip="Mouse Pointer (Esc)">
                     <Path Data="M 6 4 L 14 24 L 17 17 L 24 14 Z" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Height="22" Stretch="Uniform"/>
@@ -537,9 +526,6 @@ namespace TeachingAnnotator
         private double _panScrollStartX;
         private double _panScrollStartY;
 
-        // Screenshot & Copy/Paste states
-        private bool _isTakingScreenshot = false;
-        private Point _screenshotStartPoint;
         private StrokeCollection _copiedStrokes = new StrokeCollection();
 
         private DispatcherTimer _scrollDebounceTimer;
@@ -652,8 +638,7 @@ namespace TeachingAnnotator
             _scrollDebounceTimer.Start();
         }
 
-        // ARCHITECT UPGRADE: Force memory loading for screenshot boundaries
-        private async Task ManagePdfMemory(bool forceCroppingArea = false, double cropTop = 0, double cropBottom = 0)
+        private async Task ManagePdfMemory()
         {
             if (_activeTab == null || _activeTab.Document == null) return;
             
@@ -662,20 +647,17 @@ namespace TeachingAnnotator
             try
             {
                 int centerPage = _activeTab.CurrentPage;
+                
                 double unscaledOffset = MainScroll.VerticalOffset / _zoom;
                 double viewportHeight = (MainScroll.ViewportHeight > 0 ? MainScroll.ViewportHeight : 1080) / _zoom;
-                
+                double buffer = viewportHeight * 1.5; 
+                double topBound = unscaledOffset - buffer;
+                double bottomBound = unscaledOffset + viewportHeight + buffer;
+
                 for (int i = 0; i < _activeTab.PdfRenderedPages.Count; i++)
                 {
                     var pageModel = _activeTab.PdfRenderedPages[i];
                     bool isVisible = Math.Abs((i + 1) - centerPage) <= 2; 
-
-                    if (forceCroppingArea)
-                    {
-                        double pageTop = pageModel.StartY;
-                        double pageBottom = pageTop + pageModel.Height;
-                        if (pageBottom >= cropTop && pageTop <= cropBottom) isVisible = true;
-                    }
 
                     if (isVisible && pageModel.ImageSource == null)
                     {
@@ -862,7 +844,6 @@ namespace TeachingAnnotator
             else if (HighlightBtn.IsChecked == true) _activeTab.ActiveTool = "Highlight";
             else if (LaserBtn.IsChecked == true) _activeTab.ActiveTool = "Laser";
             else if (EraserBtn.IsChecked == true) _activeTab.ActiveTool = "Eraser";
-            else if (CropBtn.IsChecked == true) _activeTab.ActiveTool = "Crop";
             else _activeTab.ActiveTool = "Pen";
             
             if (!string.IsNullOrEmpty(_activeTab.PdfFilePath)) {
@@ -872,10 +853,13 @@ namespace TeachingAnnotator
             }
         }
 
+        // ARCHITECT ZERO-LAG AUTOSAVE: Decoupled MemoryStream Byte Extraction
         private async Task ExecuteAutoSaveAsync()
         {
-            SaveTabState(); 
-            
+            // 1. Sync UI state to active tab (UI Thread)
+            SaveTabState();
+
+            // 2. Prepare lightweight settings snapshot (UI Thread)
             AppSettings settings = new AppSettings
             {
                 LaserCoreColor = _laserCoreColor.ToString(),
@@ -886,20 +870,30 @@ namespace TeachingAnnotator
                 IsToolbarVertical = _isToolbarVertical
             };
             
-            var tabsClone = _tabs.ToList();
-            var strokeVault = new Dictionary<string, Dictionary<int, StrokeCollection>>();
-            foreach (var t in tabsClone)
+            // 3. Prepare Tabs snapshot (UI Thread - Extremely fast because huge strokes are [JsonIgnore])
+            string tabsSnapshot = JsonSerializer.Serialize(_tabs);
+            
+            // 4. Extract ISF bytes for all strokes instantly on UI thread to bypass thread-affinity locks
+            var strokeVaultBytes = new Dictionary<string, Dictionary<int, byte[]>>();
+            foreach (var tab in _tabs)
             {
-                var dict = new Dictionary<int, StrokeCollection>();
-                foreach (var kvp in t.StrokesPerPage) dict[kvp.Key] = kvp.Value.Clone();
-                strokeVault[t.Id] = dict;
+                var pageBytes = new Dictionary<int, byte[]>();
+                foreach (var kvp in tab.StrokesPerPage)
+                {
+                    using (var ms = new MemoryStream())
+                    {
+                        kvp.Value.Save(ms);
+                        pageBytes[kvp.Key] = ms.ToArray();
+                    }
+                }
+                strokeVaultBytes[tab.Id] = pageBytes;
             }
 
-            var settingsJson = JsonSerializer.Serialize(settings);
-            var tabsJson = JsonSerializer.Serialize(tabsClone);
+            var settingsSnapshot = JsonSerializer.Serialize(settings);
             var folder = _appDataFolder;
 
-            await Task.Run(() => PerformDiskSave(settingsJson, tabsJson, folder, tabsClone, strokeVault));
+            // 5. PURE FIRE-AND-FORGET BACKGROUND THREAD FOR DISK I/O
+            await Task.Run(() => PerformDiskSave(settingsSnapshot, tabsSnapshot, folder, strokeVaultBytes));
         }
 
         private void SaveStateSync()
@@ -915,53 +909,53 @@ namespace TeachingAnnotator
                 UnlockPdfCanvas = PdfCanvasToggle.IsChecked == true,
                 IsToolbarVertical = _isToolbarVertical
             };
+
+            string tabsSnapshot = JsonSerializer.Serialize(_tabs);
             
-            var tabsClone = _tabs.ToList();
-            var strokeVault = new Dictionary<string, Dictionary<int, StrokeCollection>>();
-            foreach (var t in tabsClone)
+            var strokeVaultBytes = new Dictionary<string, Dictionary<int, byte[]>>();
+            foreach (var tab in _tabs)
             {
-                var dict = new Dictionary<int, StrokeCollection>();
-                foreach (var kvp in t.StrokesPerPage) dict[kvp.Key] = kvp.Value.Clone();
-                strokeVault[t.Id] = dict;
+                var pageBytes = new Dictionary<int, byte[]>();
+                foreach (var kvp in tab.StrokesPerPage)
+                {
+                    using (var ms = new MemoryStream())
+                    {
+                        kvp.Value.Save(ms);
+                        pageBytes[kvp.Key] = ms.ToArray();
+                    }
+                }
+                strokeVaultBytes[tab.Id] = pageBytes;
             }
 
-            var settingsJson = JsonSerializer.Serialize(settings);
-            var tabsJson = JsonSerializer.Serialize(tabsClone);
+            var settingsSnapshot = JsonSerializer.Serialize(settings);
             var folder = _appDataFolder;
 
-            PerformDiskSave(settingsJson, tabsJson, folder, tabsClone, strokeVault);
+            PerformDiskSave(settingsSnapshot, tabsSnapshot, folder, strokeVaultBytes);
         }
 
-        private void PerformDiskSave(string settingsJson, string tabsJson, string folder, List<WorkspaceTab> tabsClone, Dictionary<string, Dictionary<int, StrokeCollection>> strokeVault)
+        private void PerformDiskSave(string settingsJson, string tabsJson, string folder, Dictionary<string, Dictionary<int, byte[]>> strokeVaultBytes)
         {
             try { File.WriteAllText(System.IO.Path.Combine(folder, "settings.json"), settingsJson); } catch { }
 
             HashSet<string> validFiles = new HashSet<string>();
 
-            foreach(var tab in tabsClone)
+            foreach(var tabId in strokeVaultBytes.Keys)
             {
-                if (strokeVault.ContainsKey(tab.Id))
+                foreach(var page in strokeVaultBytes[tabId])
                 {
-                    foreach(var kvp in strokeVault[tab.Id])
+                    if (page.Value.Length > 0)
                     {
-                        if (kvp.Value.Count > 0)
-                        {
-                            string finalFile = System.IO.Path.Combine(folder, $"ink_{tab.Id}_{kvp.Key}.isf");
-                            string tempFile = finalFile + ".tmp";
-                            validFiles.Add(finalFile);
+                        string finalFile = System.IO.Path.Combine(folder, $"ink_{tabId}_{page.Key}.isf");
+                        string tempFile = finalFile + ".tmp";
+                        validFiles.Add(finalFile);
 
-                            try 
-                            {
-                                using (FileStream fs = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None))
-                                {
-                                    kvp.Value.Save(fs);
-                                    fs.Flush(true); 
-                                }
-                                if (File.Exists(finalFile)) File.Delete(finalFile);
-                                File.Move(tempFile, finalFile);
-                            } 
-                            catch { }
-                        }
+                        try 
+                        {
+                            File.WriteAllBytes(tempFile, page.Value);
+                            if (File.Exists(finalFile)) File.Delete(finalFile);
+                            File.Move(tempFile, finalFile);
+                        } 
+                        catch { }
                     }
                 }
             }
@@ -1114,7 +1108,6 @@ namespace TeachingAnnotator
                 case "Highlight": HighlightBtn.IsChecked = true; break;
                 case "Laser": LaserBtn.IsChecked = true; break;
                 case "Eraser": EraserBtn.IsChecked = true; break;
-                case "Crop": CropBtn.IsChecked = true; break;
                 default: PenBtn.IsChecked = true; break;
             }
             _isUpdatingUI = false;
@@ -1192,7 +1185,7 @@ namespace TeachingAnnotator
                 newTab.HighlightSize = _highlightSize; newTab.HighlightColor = _highlightColor.ToString();
                 newTab.LaserSize = _laserSize; newTab.LaserColor = _laserColor.ToString();
                 newTab.GridPattern = _gridPattern; newTab.CustomBgColor = _customBgColor.ToString();
-                newTab.ActiveTool = PointerBtn.IsChecked == true ? "Pointer" : (SelectBtn.IsChecked == true ? "Select" : (HighlightBtn.IsChecked == true ? "Highlight" : (LaserBtn.IsChecked == true ? "Laser" : (EraserBtn.IsChecked == true ? "Eraser" : (CropBtn.IsChecked == true ? "Crop" : "Pen")))));
+                newTab.ActiveTool = PointerBtn.IsChecked == true ? "Pointer" : (SelectBtn.IsChecked == true ? "Select" : (HighlightBtn.IsChecked == true ? "Highlight" : (LaserBtn.IsChecked == true ? "Laser" : (EraserBtn.IsChecked == true ? "Eraser" : "Pen"))));
             }
             _tabs.Add(newTab); SwitchToTab(newTab);
         }
@@ -1439,49 +1432,8 @@ namespace TeachingAnnotator
         private void ZoomIn_Click(object sender, RoutedEventArgs e) => PerformZoom(0.25);
         private void ZoomReset_Click(object sender, MouseButtonEventArgs e) => PerformZoom(1.0 - _zoom);
 
-        // ----------- THE V37 PERFECT SCREENSHOT INTERCEPTOR -----------
         private void MainScroll_PreviewMouseDown(object sender, MouseButtonEventArgs e)
         {
-            if (CropBtn.IsChecked == true && e.LeftButton == MouseButtonState.Pressed)
-            {
-                _isTakingScreenshot = true;
-                Point clickedPoint = e.GetPosition(Workspace);
-
-                if (ScreenshotCanvas.Visibility != Visibility.Visible || Keyboard.Modifiers != ModifierKeys.Shift)
-                {
-                    ScreenshotCanvas.Visibility = Visibility.Visible;
-                    _screenshotStartPoint = clickedPoint;
-                    Canvas.SetLeft(ScreenshotRect, clickedPoint.X);
-                    Canvas.SetTop(ScreenshotRect, clickedPoint.Y);
-                    ScreenshotRect.Width = 0;
-                    ScreenshotRect.Height = 0;
-                }
-                else
-                {
-                    double currentLeft = Canvas.GetLeft(ScreenshotRect);
-                    double currentTop = Canvas.GetTop(ScreenshotRect);
-                    Rect currentRect = new Rect(currentLeft, currentTop, ScreenshotRect.Width, ScreenshotRect.Height);
-                    
-                    if (!currentRect.Contains(clickedPoint))
-                    {
-                        currentRect.Union(clickedPoint);
-                        Canvas.SetLeft(ScreenshotRect, currentRect.Left);
-                        Canvas.SetTop(ScreenshotRect, currentRect.Top);
-                        ScreenshotRect.Width = currentRect.Width;
-                        ScreenshotRect.Height = currentRect.Height;
-                    }
-
-                    double startX = Math.Abs(clickedPoint.X - currentRect.Left) > Math.Abs(clickedPoint.X - currentRect.Right) ? currentRect.Left : currentRect.Right;
-                    double startY = Math.Abs(clickedPoint.Y - currentRect.Top) > Math.Abs(clickedPoint.Y - currentRect.Bottom) ? currentRect.Top : currentRect.Bottom;
-                    _screenshotStartPoint = new Point(startX, startY);
-                }
-
-                UpdateScreenshotPrompt();
-                MainScroll.CaptureMouse();
-                e.Handled = true;
-                return;
-            }
-
             if (e.MiddleButton == MouseButtonState.Pressed)
             {
                 _isPanningCanvas = true;
@@ -1496,24 +1448,6 @@ namespace TeachingAnnotator
 
         private void MainScroll_PreviewMouseMove(object sender, MouseEventArgs e)
         {
-            if (_isTakingScreenshot)
-            {
-                Point current = e.GetPosition(Workspace);
-                double x = Math.Min(_screenshotStartPoint.X, current.X);
-                double y = Math.Min(_screenshotStartPoint.Y, current.Y);
-                double w = Math.Abs(current.X - _screenshotStartPoint.X);
-                double h = Math.Abs(current.Y - _screenshotStartPoint.Y);
-
-                Canvas.SetLeft(ScreenshotRect, x);
-                Canvas.SetTop(ScreenshotRect, y);
-                ScreenshotRect.Width = w;
-                ScreenshotRect.Height = h;
-                
-                UpdateScreenshotPrompt();
-                e.Handled = true;
-                return;
-            }
-
             if (_isPanningCanvas)
             {
                 Point current = e.GetPosition(this);
@@ -1528,121 +1462,12 @@ namespace TeachingAnnotator
 
         private void MainScroll_PreviewMouseUp(object sender, MouseButtonEventArgs e)
         {
-            if (e.LeftButton == MouseButtonState.Released && _isTakingScreenshot)
-            {
-                _isTakingScreenshot = false;
-                MainScroll.ReleaseMouseCapture();
-                e.Handled = true;
-                return;
-            }
-
             if (e.MiddleButton == MouseButtonState.Released && _isPanningCanvas)
             {
                 _isPanningCanvas = false;
                 MainScroll.ReleaseMouseCapture();
                 MainScroll.Cursor = Cursors.Arrow;
                 e.Handled = true;
-            }
-        }
-
-        private void UpdateScreenshotPrompt()
-        {
-            double left = Canvas.GetLeft(ScreenshotRect);
-            double top = Canvas.GetTop(ScreenshotRect) - 30;
-            if (top < 0) top = Canvas.GetTop(ScreenshotRect) + ScreenshotRect.Height + 5; 
-            Canvas.SetLeft(ScreenshotPrompt, left);
-            Canvas.SetTop(ScreenshotPrompt, top);
-        }
-
-        // --- V37: ASYNCHRONOUS MULTI-PAGE SCREENSHOT CORE ---
-        private async void CaptureScreenshotAsync(double unscaledX, double unscaledY, double unscaledWidth, double unscaledHeight)
-        {
-            if (unscaledWidth < 5 || unscaledHeight < 5) 
-            {
-                ScreenshotCanvas.Visibility = Visibility.Hidden;
-                return; 
-            }
-
-            try
-            {
-                // 1. Hide Visual Crap
-                CursorCanvas.Visibility = Visibility.Hidden;
-                ScreenshotCanvas.Visibility = Visibility.Hidden;
-                if (A4GuideContainer != null) A4GuideContainer.Visibility = Visibility.Hidden;
-                MainInkCanvas.Select(new StrokeCollection()); 
-                
-                // 2. EXPLICITLY LOAD EVERYTHING IN THE RECTANGLE INTO RAM
-                await ManagePdfMemory(true, unscaledY, unscaledY + unscaledHeight);
-
-                // 3. FORCE WPF TO RENDER THE RAM IMAGES TO THE VISUAL TREE
-                Workspace.UpdateLayout();
-                await Dispatcher.Yield(DispatcherPriority.Render);
-                await Task.Delay(100); 
-
-                // 4. Calculate exact scaled dimensions
-                double scaledX = unscaledX * _zoom;
-                double scaledY = unscaledY * _zoom;
-                double scaledW = unscaledWidth * _zoom;
-                double scaledH = unscaledHeight * _zoom;
-
-                // 5. Protect against 5-page DirectX overflow crash (max ~16k pixels)
-                double maxDim = 16000;
-                double renderScale = 1.0;
-                if (scaledW > maxDim || scaledH > maxDim)
-                {
-                    renderScale = maxDim / Math.Max(scaledW, scaledH);
-                    scaledW *= renderScale;
-                    scaledH *= renderScale;
-                    scaledX *= renderScale;
-                    scaledY *= renderScale;
-                }
-
-                // 6. Draw directly into a high-fidelity visual brush
-                RenderTargetBitmap rtb = new RenderTargetBitmap((int)Math.Max(1, scaledW), (int)Math.Max(1, scaledH), 96, 96, PixelFormats.Pbgra32);
-                DrawingVisual dv = new DrawingVisual();
-                using (DrawingContext ctx = dv.RenderOpen())
-                {
-                    Color bgCol = _customBgColor;
-                    if (!string.IsNullOrEmpty(_activeTab.PdfFilePath)) bgCol = Colors.White;
-                    ctx.DrawRectangle(new SolidColorBrush(bgCol), null, new Rect(0, 0, scaledW, scaledH));
-
-                    VisualBrush vb = new VisualBrush(Workspace)
-                    {
-                        Stretch = Stretch.None,
-                        AlignmentX = AlignmentX.Left,
-                        AlignmentY = AlignmentY.Top,
-                        ViewboxUnits = BrushMappingMode.Absolute,
-                        Viewbox = new Rect(unscaledX, unscaledY, unscaledWidth, unscaledHeight)
-                    };
-
-                    if (renderScale != 1.0)
-                    {
-                        ctx.PushTransform(new ScaleTransform(renderScale, renderScale));
-                        ctx.DrawRectangle(vb, null, new Rect(0, 0, unscaledWidth * _zoom, unscaledHeight * _zoom));
-                        ctx.Pop();
-                    }
-                    else
-                    {
-                        ctx.DrawRectangle(vb, null, new Rect(0, 0, scaledW, scaledH));
-                    }
-                }
-                
-                rtb.Render(dv);
-                Clipboard.SetImage(rtb);
-
-                CursorCanvas.Visibility = Visibility.Visible;
-                if (_activeTab.CanvasSizeIndex != 0) A4GuideContainer.Visibility = Visibility.Visible;
-                
-                PointerBtn.IsChecked = true; 
-                MessageBox.Show("Long multi-page screenshot accurately copied to clipboard!", "Anydraw Pro Capture", MessageBoxButton.OK, MessageBoxImage.Information);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show("Capture failed. If selecting 10+ pages, try zooming out first to save RAM. Error: " + ex.Message, "Capture Error");
-            }
-            finally
-            {
-                CursorCanvas.Visibility = Visibility.Visible;
             }
         }
 
@@ -1673,24 +1498,6 @@ namespace TeachingAnnotator
 
         private void Window_KeyDown(object sender, KeyEventArgs e)
         {
-            // V37 Screenshot Finalizers
-            if (ScreenshotCanvas.Visibility == Visibility.Visible)
-            {
-                if (e.Key == Key.Enter)
-                {
-                    CaptureScreenshotAsync(Canvas.GetLeft(ScreenshotRect), Canvas.GetTop(ScreenshotRect), ScreenshotRect.Width, ScreenshotRect.Height);
-                    e.Handled = true;
-                    return;
-                }
-                if (e.Key == Key.Escape)
-                {
-                    ScreenshotCanvas.Visibility = Visibility.Hidden;
-                    PointerBtn.IsChecked = true;
-                    e.Handled = true;
-                    return;
-                }
-            }
-
             if ((Keyboard.Modifiers & ModifierKeys.Alt) == ModifierKeys.Alt)
             {
                 if (e.SystemKey == Key.Z) { int idx = _tabs.IndexOf(_activeTab) - 1; if (idx < 0) idx = _tabs.Count - 1; SwitchToTab(_tabs[idx]); e.Handled = true; return; }
@@ -1722,7 +1529,6 @@ namespace TeachingAnnotator
             if (e.Key == Key.F) { ToggleFullScreen(); return; }
             if (e.Key == Key.G) { GridToggle_Click(null, null); return; }
             if (e.Key == Key.T) { Theme_Click(this, new RoutedEventArgs()); return; }
-            if (e.Key == Key.C) { CropBtn.IsChecked = true; return; }
             if (e.Key == Key.OemComma) SizeSlider.Value = Math.Max(SizeSlider.Minimum, SizeSlider.Value - 1.0);
             if (e.Key == Key.OemPeriod) SizeSlider.Value = Math.Min(SizeSlider.Maximum, SizeSlider.Value + 1.0);
             if (e.Key == Key.P) PenBtn.IsChecked = true; else if (e.Key == Key.M) HighlightBtn.IsChecked = true; else if (e.Key == Key.E) EraserBtn.IsChecked = true; else if (e.Key == Key.S) SelectBtn.IsChecked = true; else if (e.Key == Key.L) LaserBtn.IsChecked = true;
@@ -1770,8 +1576,6 @@ namespace TeachingAnnotator
             else if (HighlightBtn.IsChecked == true) { SizeSlider.Value = _highlightSize; HexInput.Text = _highlightColor.ToString(); } 
             else if (LaserBtn.IsChecked == true) { SizeSlider.Value = _laserSize; HexInput.Text = _laserColor.ToString(); } 
             
-            if (CropBtn.IsChecked != true && ScreenshotCanvas.Visibility == Visibility.Visible) ScreenshotCanvas.Visibility = Visibility.Hidden;
-
             _isUpdatingUI = false; 
             ApplyPenAttributes(); 
         }
@@ -1785,7 +1589,7 @@ namespace TeachingAnnotator
             if (MainInkCanvas == null || LaserInkCanvas == null || ActiveColorIndicator == null || SizeSlider == null || LaserGlowSlider == null) return;
             bool ignorePressure = PressureToggle.IsChecked == false; Color activeColor = ((SolidColorBrush)ActiveColorIndicator.Fill).Color; double activeSize = SizeSlider.Value;
 
-            if (PointerBtn.IsChecked == true || CropBtn.IsChecked == true)
+            if (PointerBtn.IsChecked == true)
             {
                 MainInkCanvas.IsHitTestVisible = true; LaserInkCanvas.IsHitTestVisible = false;
                 MainInkCanvas.EditingMode = InkCanvasEditingMode.None;
@@ -1809,7 +1613,7 @@ namespace TeachingAnnotator
 
         private void UpdateCustomCursorAppearance()
         {
-            if (SelectBtn.IsChecked == true || PointerBtn.IsChecked == true || CropBtn.IsChecked == true) { CustomDotCursor.Visibility = Visibility.Hidden; return; }
+            if (SelectBtn.IsChecked == true || PointerBtn.IsChecked == true) { CustomDotCursor.Visibility = Visibility.Hidden; return; }
             double size = SizeSlider.Value; Color c = ((SolidColorBrush)ActiveColorIndicator.Fill).Color;
             if (HighlightBtn.IsChecked == true) { size *= 4; c = Color.FromArgb(120, c.R, c.G, c.B); }
             
@@ -1821,12 +1625,12 @@ namespace TeachingAnnotator
 
         private void MainInkCanvas_MouseMove(object sender, MouseEventArgs e)
         {
-            if (SelectBtn.IsChecked == true || PointerBtn.IsChecked == true || CropBtn.IsChecked == true) return;
+            if (SelectBtn.IsChecked == true || PointerBtn.IsChecked == true) return;
             CustomDotCursor.Visibility = Visibility.Visible; Point p = e.GetPosition(CursorCanvas); Canvas.SetLeft(CustomDotCursor, p.X - (CustomDotCursor.Width / 2)); Canvas.SetTop(CustomDotCursor, p.Y - (CustomDotCursor.Height / 2));
         }
 
         private void MainInkCanvas_MouseLeave(object sender, MouseEventArgs e) => CustomDotCursor.Visibility = Visibility.Hidden;
-        private void MainInkCanvas_MouseEnter(object sender, MouseEventArgs e) { if (SelectBtn.IsChecked != true && PointerBtn.IsChecked != true && CropBtn.IsChecked != true) CustomDotCursor.Visibility = Visibility.Visible; }
+        private void MainInkCanvas_MouseEnter(object sender, MouseEventArgs e) { if (SelectBtn.IsChecked != true && PointerBtn.IsChecked != true) CustomDotCursor.Visibility = Visibility.Visible; }
 
         private void LaserTimer_Tick(object sender, EventArgs e)
         {
