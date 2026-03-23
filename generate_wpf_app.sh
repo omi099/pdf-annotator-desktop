@@ -1,16 +1,17 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping Anydraw V35 (Precision Screenshot Matrix & Full Render Sync)..."
+echo "🚀 Bootstrapping Anydraw V36 (True Hardware Screen Capture Edition)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
 dotnet new wpf -n TeachingAnnotator -f net8.0 --force
 cd TeachingAnnotator
 
-# 2. Install Native PDF Writer Libraries
+# 2. Install Native PDF & Drawing Libraries
 dotnet add package PdfSharp --version 6.1.1
 dotnet add package System.Text.Encoding.CodePages --version 8.0.0
+dotnet add package System.Drawing.Common --version 8.0.0
 
 # 3. Overwrite .csproj
 cat << 'EOF' > TeachingAnnotator.csproj
@@ -26,6 +27,7 @@ cat << 'EOF' > TeachingAnnotator.csproj
   <ItemGroup>
     <PackageReference Include="PdfSharp" Version="6.1.1" />
     <PackageReference Include="System.Text.Encoding.CodePages" Version="8.0.0" />
+    <PackageReference Include="System.Drawing.Common" Version="8.0.0" />
   </ItemGroup>
 </Project>
 EOF
@@ -214,7 +216,7 @@ cat << 'EOF' > MainWindow.xaml
                 <Canvas x:Name="ScreenshotCanvas" IsHitTestVisible="False" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Panel.ZIndex="1000" Visibility="Hidden">
                     <Rectangle x:Name="ScreenshotRect" Stroke="{DynamicResource Sky400}" StrokeThickness="2" StrokeDashArray="4 4" Fill="#2038BDF8"/>
                     <Border x:Name="ScreenshotPrompt" Background="{DynamicResource BgToolbar}" BorderBrush="{DynamicResource Sky400}" BorderThickness="1" CornerRadius="4" Padding="8,4">
-                        <TextBlock Text="Press ENTER to Copy, ESC to Cancel" Foreground="{DynamicResource Sky400}" FontWeight="Bold" FontSize="12"/>
+                        <TextBlock Text="Press ENTER to Capture Screen, ESC to Cancel" Foreground="{DynamicResource Sky400}" FontWeight="Bold" FontSize="12"/>
                     </Border>
                 </Canvas>
             </Grid>
@@ -267,7 +269,7 @@ cat << 'EOF' > MainWindow.xaml
 
                 <Rectangle Width="1" Fill="{DynamicResource BorderToolbar}" Margin="8,4"/>
 
-                <RadioButton Style="{StaticResource TailwindTool}" x:Name="CropBtn" Checked="Tool_Checked" ToolTip="Screenshot Tool (C) | Drag to select, Shift+Click anywhere to expand">
+                <RadioButton Style="{StaticResource TailwindTool}" x:Name="CropBtn" Checked="Tool_Checked" ToolTip="Hardware Screenshot Tool (C) | Drag to select, Shift+Click anywhere to expand">
                     <Path Data="M7 17V7h10V5H5v12h2zm12-2V5h-2v10H7v2h10v10h2V15z" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" Height="20" Stretch="Uniform"/>
                 </RadioButton>
 
@@ -533,13 +535,12 @@ namespace TeachingAnnotator
         private bool _isToolbarVertical = false; 
 
         private bool _isPanningCanvas = false;
-        private Point _panMouseStart;
+        private System.Windows.Point _panMouseStart;
         private double _panScrollStartX;
         private double _panScrollStartY;
 
-        // Screenshot & Copy/Paste states
         private bool _isTakingScreenshot = false;
-        private Point _screenshotStartPoint;
+        private System.Windows.Point _screenshotStartPoint;
         private StrokeCollection _copiedStrokes = new StrokeCollection();
 
         private DispatcherTimer _scrollDebounceTimer;
@@ -565,7 +566,7 @@ namespace TeachingAnnotator
         private Stack<StrokeCollection> _redoStack = new Stack<StrokeCollection>();
 
         private bool _isDraggingToolbar = false;
-        private Point _toolbarDragStart;
+        private System.Windows.Point _toolbarDragStart;
 
         private readonly string _appDataFolder;
 
@@ -668,7 +669,6 @@ namespace TeachingAnnotator
                 double topBound = unscaledOffset - buffer;
                 double bottomBound = unscaledOffset + viewportHeight + buffer;
 
-                // Force load pages that are inside the active screenshot box so they don't clip out
                 double cropTop = 0, cropBottom = 0;
                 bool isCropping = ScreenshotCanvas.Visibility == Visibility.Visible;
                 if (isCropping)
@@ -1247,7 +1247,7 @@ namespace TeachingAnnotator
         }
 
         private void ToolbarDrag_MouseDown(object sender, MouseButtonEventArgs e) { _isDraggingToolbar = true; _toolbarDragStart = e.GetPosition(this); ((UIElement)sender).CaptureMouse(); }
-        private void ToolbarDrag_MouseMove(object sender, MouseEventArgs e) { if (_isDraggingToolbar) { Point current = e.GetPosition(this); ToolbarTransform.X += current.X - _toolbarDragStart.X; ToolbarTransform.Y += current.Y - _toolbarDragStart.Y; _toolbarDragStart = current; } }
+        private void ToolbarDrag_MouseMove(object sender, MouseEventArgs e) { if (_isDraggingToolbar) { System.Windows.Point current = e.GetPosition(this); ToolbarTransform.X += current.X - _toolbarDragStart.X; ToolbarTransform.Y += current.Y - _toolbarDragStart.Y; _toolbarDragStart = current; } }
         private void ToolbarDrag_MouseUp(object sender, MouseButtonEventArgs e) { _isDraggingToolbar = false; ((UIElement)sender).ReleaseMouseCapture(); }
 
         private void BuildPaletteGrid()
@@ -1338,27 +1338,27 @@ namespace TeachingAnnotator
                 GeometryGroup minorGroup = new GeometryGroup();
                 for (int i = 20; i < 100; i += 20)
                 {
-                    minorGroup.Children.Add(new LineGeometry(new Point(i, 0), new Point(i, 100)));
-                    minorGroup.Children.Add(new LineGeometry(new Point(0, i), new Point(100, i)));
+                    minorGroup.Children.Add(new LineGeometry(new System.Windows.Point(i, 0), new System.Windows.Point(i, 100)));
+                    minorGroup.Children.Add(new LineGeometry(new System.Windows.Point(0, i), new System.Windows.Point(100, i)));
                 }
                 mainGroup.Children.Add(new GeometryDrawing { Pen = minorPen, Geometry = minorGroup });
 
                 GeometryGroup majorGroup = new GeometryGroup();
-                majorGroup.Children.Add(new LineGeometry(new Point(0, 0), new Point(0, 100)));
-                majorGroup.Children.Add(new LineGeometry(new Point(0, 0), new Point(100, 0)));
+                majorGroup.Children.Add(new LineGeometry(new System.Windows.Point(0, 0), new System.Windows.Point(0, 100)));
+                majorGroup.Children.Add(new LineGeometry(new System.Windows.Point(0, 0), new System.Windows.Point(100, 0)));
                 mainGroup.Children.Add(new GeometryDrawing { Pen = majorPen, Geometry = majorGroup });
 
                 return new DrawingBrush { TileMode = TileMode.Tile, Viewport = new Rect(0, 0, 100, 100), ViewportUnits = BrushMappingMode.Absolute, Drawing = mainGroup };
             }
             else if (_gridPattern == 2) 
             {
-                mainGroup.Children.Add(new GeometryDrawing { Brush = new SolidColorBrush(lineColor), Geometry = new EllipseGeometry(new Point(20, 20), 1.5, 1.5) });
+                mainGroup.Children.Add(new GeometryDrawing { Brush = new SolidColorBrush(lineColor), Geometry = new EllipseGeometry(new System.Windows.Point(20, 20), 1.5, 1.5) });
                 return new DrawingBrush { TileMode = TileMode.Tile, Viewport = new Rect(0, 0, 40, 40), ViewportUnits = BrushMappingMode.Absolute, Drawing = mainGroup };
             }
             else if (_gridPattern == 3) 
             {
                 GeometryGroup ruledGroup = new GeometryGroup();
-                ruledGroup.Children.Add(new LineGeometry(new Point(0, 40), new Point(40, 40)));
+                ruledGroup.Children.Add(new LineGeometry(new System.Windows.Point(0, 40), new System.Windows.Point(40, 40)));
                 mainGroup.Children.Add(new GeometryDrawing { Pen = new Pen(new SolidColorBrush(lineColor), 1.0), Geometry = ruledGroup });
                 return new DrawingBrush { TileMode = TileMode.Tile, Viewport = new Rect(0, 0, 40, 40), ViewportUnits = BrushMappingMode.Absolute, Drawing = mainGroup };
             }
@@ -1422,7 +1422,7 @@ namespace TeachingAnnotator
                 ZoomPercentText.Text = $"{Math.Round(_zoom * 100)}%";
         }
 
-        private void PerformZoom(double zoomDelta, Point? mousePos = null)
+        private void PerformZoom(double zoomDelta, System.Windows.Point? mousePos = null)
         {
             double oldZoom = _zoom;
             double newZoom = Math.Max(0.25, Math.Min(_zoom + zoomDelta, 10.0));
@@ -1430,7 +1430,7 @@ namespace TeachingAnnotator
 
             _isZooming = true; 
 
-            Point targetPos = mousePos ?? new Point(MainScroll.ViewportWidth / 2.0, MainScroll.ViewportHeight / 2.0);
+            System.Windows.Point targetPos = mousePos ?? new System.Windows.Point(MainScroll.ViewportWidth / 2.0, MainScroll.ViewportHeight / 2.0);
             double unscaledX = (MainScroll.HorizontalOffset + targetPos.X) / oldZoom;
             double unscaledY = (MainScroll.VerticalOffset + targetPos.Y) / oldZoom;
 
@@ -1451,13 +1451,13 @@ namespace TeachingAnnotator
         private void ZoomIn_Click(object sender, RoutedEventArgs e) => PerformZoom(0.25);
         private void ZoomReset_Click(object sender, MouseButtonEventArgs e) => PerformZoom(1.0 - _zoom);
 
-        // ----------- THE V35 DEDICATED SCREENSHOT TOOL -----------
+        // ----------- THE V36 DEDICATED SCREENSHOT TOOL -----------
         private void MainScroll_PreviewMouseDown(object sender, MouseButtonEventArgs e)
         {
             if (CropBtn.IsChecked == true && e.LeftButton == MouseButtonState.Pressed)
             {
                 _isTakingScreenshot = true;
-                Point clickedPoint = e.GetPosition(Workspace);
+                System.Windows.Point clickedPoint = e.GetPosition(Workspace);
 
                 if (ScreenshotCanvas.Visibility != Visibility.Visible || Keyboard.Modifiers != ModifierKeys.Shift)
                 {
@@ -1485,12 +1485,10 @@ namespace TeachingAnnotator
 
                     double startX = Math.Abs(clickedPoint.X - currentRect.Left) > Math.Abs(clickedPoint.X - currentRect.Right) ? currentRect.Left : currentRect.Right;
                     double startY = Math.Abs(clickedPoint.Y - currentRect.Top) > Math.Abs(clickedPoint.Y - currentRect.Bottom) ? currentRect.Top : currentRect.Bottom;
-                    _screenshotStartPoint = new Point(startX, startY);
+                    _screenshotStartPoint = new System.Windows.Point(startX, startY);
                 }
 
                 UpdateScreenshotPrompt();
-                
-                // Pre-warm the renderer by loading any PDF chunks interacting with crop area
                 ManagePdfMemory().ConfigureAwait(false);
 
                 MainScroll.CaptureMouse();
@@ -1514,7 +1512,7 @@ namespace TeachingAnnotator
         {
             if (_isTakingScreenshot)
             {
-                Point current = e.GetPosition(Workspace);
+                System.Windows.Point current = e.GetPosition(Workspace);
                 double x = Math.Min(_screenshotStartPoint.X, current.X);
                 double y = Math.Min(_screenshotStartPoint.Y, current.Y);
                 double w = Math.Abs(current.X - _screenshotStartPoint.X);
@@ -1532,7 +1530,7 @@ namespace TeachingAnnotator
 
             if (_isPanningCanvas)
             {
-                Point current = e.GetPosition(this);
+                System.Windows.Point current = e.GetPosition(this);
                 double deltaX = current.X - _panMouseStart.X;
                 double deltaY = current.Y - _panMouseStart.Y;
                 
@@ -1548,9 +1546,7 @@ namespace TeachingAnnotator
             {
                 _isTakingScreenshot = false;
                 MainScroll.ReleaseMouseCapture();
-                
                 ManagePdfMemory().ConfigureAwait(false);
-
                 e.Handled = true;
                 return;
             }
@@ -1573,10 +1569,14 @@ namespace TeachingAnnotator
             Canvas.SetTop(ScreenshotPrompt, top);
         }
 
-        // --- MATRICIZED ZERO-VOID SCREENSHOT RENDERING ---
-        private void CaptureScreenshot(double unscaledX, double unscaledY, double unscaledWidth, double unscaledHeight)
+        // --- V36 HARDWARE SCREEN CAPTURE API ---
+        [System.Runtime.InteropServices.DllImport("gdi32.dll")]
+        [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+        internal static extern bool DeleteObject(IntPtr hObject);
+
+        private async void CaptureScreenshotAsync()
         {
-            if (unscaledWidth < 5 || unscaledHeight < 5) 
+            if (ScreenshotRect.Width < 5 || ScreenshotRect.Height < 5) 
             {
                 ScreenshotCanvas.Visibility = Visibility.Hidden;
                 return; 
@@ -1584,50 +1584,63 @@ namespace TeachingAnnotator
 
             try
             {
+                // 1. Calculate the exact physical bounds of the blue box on the user's monitor
+                System.Windows.Point topLeft = ScreenshotRect.PointToScreen(new System.Windows.Point(0, 0));
+                System.Windows.Point bottomRight = ScreenshotRect.PointToScreen(new System.Windows.Point(ScreenshotRect.Width, ScreenshotRect.Height));
+
+                int x = (int)Math.Round(topLeft.X);
+                int y = (int)Math.Round(topLeft.Y);
+                int width = (int)Math.Round(bottomRight.X - topLeft.X);
+                int height = (int)Math.Round(bottomRight.Y - topLeft.Y);
+
+                // 2. Hide the UI overlays we don't want in the screenshot
                 CursorCanvas.Visibility = Visibility.Hidden;
                 ScreenshotCanvas.Visibility = Visibility.Hidden;
-                if (A4GuideContainer != null) A4GuideContainer.Visibility = Visibility.Hidden;
-                
                 MainInkCanvas.Select(new StrokeCollection()); 
                 
-                // ARCHITECT FIX: Force Visual Tree to process visibility changes before mapping visual buffer
-                Workspace.UpdateLayout();
+                // 3. Force WPF to process the visibility changes and give the OS a split second to repaint the screen
+                await Dispatcher.Yield(DispatcherPriority.Render);
+                await Task.Delay(100); 
 
-                double scaledX = unscaledX * _zoom;
-                double scaledY = unscaledY * _zoom;
-                double scaledW = unscaledWidth * _zoom;
-                double scaledH = unscaledHeight * _zoom;
-
-                RenderTargetBitmap rtb = new RenderTargetBitmap((int)Math.Max(1, scaledW), (int)Math.Max(1, scaledH), 96, 96, PixelFormats.Pbgra32);
-                DrawingVisual dv = new DrawingVisual();
-                using (DrawingContext ctx = dv.RenderOpen())
+                // 4. Capture the actual monitor pixels using GDI+
+                if (width > 0 && height > 0)
                 {
-                    Color bgCol = _customBgColor;
-                    if (!string.IsNullOrEmpty(_activeTab.PdfFilePath)) bgCol = Colors.White;
-                    ctx.DrawRectangle(new SolidColorBrush(bgCol), null, new Rect(0, 0, scaledW, scaledH));
-
-                    VisualBrush vb = new VisualBrush(Workspace)
+                    using (var bmp = new System.Drawing.Bitmap(width, height))
                     {
-                        ViewboxUnits = BrushMappingMode.Absolute,
-                        Viewbox = new Rect(scaledX, scaledY, scaledW, scaledH),
-                        ViewportUnits = BrushMappingMode.Absolute,
-                        Viewport = new Rect(0, 0, scaledW, scaledH),
-                        Stretch = Stretch.Fill
-                    };
-                    ctx.DrawRectangle(vb, null, new Rect(0, 0, scaledW, scaledH));
+                        using (var gfx = System.Drawing.Graphics.FromImage(bmp))
+                        {
+                            gfx.CopyFromScreen(x, y, 0, 0, new System.Drawing.Size(width, height), System.Drawing.CopyPixelOperation.SourceCopy);
+                        }
+                        
+                        // Convert to WPF BitmapSource for Clipboard compatibility
+                        IntPtr hBitmap = bmp.GetHbitmap();
+                        try
+                        {
+                            BitmapSource bitmapSource = System.Windows.Interop.Imaging.CreateBitmapSourceFromHBitmap(
+                                hBitmap,
+                                IntPtr.Zero,
+                                Int32Rect.Empty,
+                                BitmapSizeOptions.FromEmptyOptions());
+                            
+                            Clipboard.SetImage(bitmapSource);
+                        }
+                        finally
+                        {
+                            DeleteObject(hBitmap);
+                        }
+                    }
+                    
+                    PointerBtn.IsChecked = true; 
+                    MessageBox.Show("Exact Screen captured and copied to clipboard!", "Anydraw Capture", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
-                rtb.Render(dv);
-                Clipboard.SetImage(rtb);
-
-                CursorCanvas.Visibility = Visibility.Visible;
-                if (_activeTab.CanvasSizeIndex != 0) A4GuideContainer.Visibility = Visibility.Visible;
-                
-                PointerBtn.IsChecked = true; 
-                MessageBox.Show("Screenshot perfectly copied to clipboard!", "Anydraw Capture", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Failed to map region buffer: " + ex.Message, "Capture Error");
+                MessageBox.Show("Hardware capture failed: " + ex.Message, "Capture Error");
+            }
+            finally
+            {
+                CursorCanvas.Visibility = Visibility.Visible;
             }
         }
 
@@ -1656,14 +1669,14 @@ namespace TeachingAnnotator
             LaserInkCanvas.Visibility = _activeTab.IsInkVisible ? Visibility.Visible : Visibility.Hidden;
         }
 
-        private void Window_KeyDown(object sender, KeyEventArgs e)
+        private async void Window_KeyDown(object sender, KeyEventArgs e)
         {
             // Screenshot Finalizers
             if (ScreenshotCanvas.Visibility == Visibility.Visible)
             {
                 if (e.Key == Key.Enter)
                 {
-                    CaptureScreenshot(Canvas.GetLeft(ScreenshotRect), Canvas.GetTop(ScreenshotRect), ScreenshotRect.Width, ScreenshotRect.Height);
+                    CaptureScreenshotAsync();
                     e.Handled = true;
                     return;
                 }
@@ -1732,7 +1745,7 @@ namespace TeachingAnnotator
             
             if (bounds.IsEmpty) return;
 
-            Point mousePos = Mouse.GetPosition(MainInkCanvas);
+            System.Windows.Point mousePos = Mouse.GetPosition(MainInkCanvas);
             
             double offsetX = mousePos.X - (bounds.Left + bounds.Width / 2);
             double offsetY = mousePos.Y - (bounds.Top + bounds.Height / 2);
@@ -1807,7 +1820,7 @@ namespace TeachingAnnotator
         private void MainInkCanvas_MouseMove(object sender, MouseEventArgs e)
         {
             if (SelectBtn.IsChecked == true || PointerBtn.IsChecked == true || CropBtn.IsChecked == true) return;
-            CustomDotCursor.Visibility = Visibility.Visible; Point p = e.GetPosition(CursorCanvas); Canvas.SetLeft(CustomDotCursor, p.X - (CustomDotCursor.Width / 2)); Canvas.SetTop(CustomDotCursor, p.Y - (CustomDotCursor.Height / 2));
+            CustomDotCursor.Visibility = Visibility.Visible; System.Windows.Point p = e.GetPosition(CursorCanvas); Canvas.SetLeft(CustomDotCursor, p.X - (CustomDotCursor.Width / 2)); Canvas.SetTop(CustomDotCursor, p.Y - (CustomDotCursor.Height / 2));
         }
 
         private void MainInkCanvas_MouseLeave(object sender, MouseEventArgs e) => CustomDotCursor.Visibility = Visibility.Hidden;
