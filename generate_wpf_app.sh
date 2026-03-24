@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Bootstrapping Anydraw V40 (Zero-Leak Bare-Metal Optimization Edition)..."
+echo "🚀 Bootstrapping Anydraw V41 (Zero-Drift Coordinates & Delta Undo Edition)..."
 
 # 1. Clean environment
 rm -rf TeachingAnnotator
@@ -165,10 +165,10 @@ cat << 'EOF' > MainWindow.xaml
                     <ScaleTransform x:Name="ZoomTransform" ScaleX="1" ScaleY="1"/>
                 </Grid.LayoutTransform>
                 
-                <ItemsControl x:Name="PdfItemsControl" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" ScrollViewer.CanContentScroll="True">
+                <ItemsControl x:Name="PdfItemsControl" ScrollViewer.CanContentScroll="True">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
-                            <VirtualizingStackPanel Orientation="Vertical"/>
+                            <StackPanel Orientation="Vertical"/>
                         </ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
@@ -247,6 +247,12 @@ cat << 'EOF' > MainWindow.xaml
                         <Path Data="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" Fill="{DynamicResource Rose500}" Height="16" Stretch="Uniform"/>
                     </Button>
                 </StackPanel>
+
+                <Rectangle Width="1" Fill="{DynamicResource BorderToolbar}" Margin="4,4"/>
+                <Button x:Name="ManualSaveBtn" Style="{StaticResource TailwindButton}" Click="ManualSave_Click" ToolTip="Manual Save (Ctrl+S)">
+                    <Path Data="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z" Fill="{DynamicResource Sky400}" Height="16" Stretch="Uniform"/>
+                </Button>
+                <TextBlock x:Name="SaveStatusText" Text="" Foreground="{DynamicResource Sky400}" VerticalAlignment="Center" Margin="0,0,8,0" FontSize="11" FontWeight="SemiBold"/>
 
                 <Rectangle Width="1" Fill="{DynamicResource BorderToolbar}" Margin="4,4"/>
 
@@ -458,6 +464,13 @@ namespace TeachingAnnotator
         public LaserStrokeData(System.Windows.Ink.Stroke s) { Stroke = s; }
     }
 
+    // ARCHITECT FIX: Ultra-lightweight Delta Undo class
+    public class UndoAction
+    {
+        public StrokeCollection AddedStrokes { get; set; }
+        public StrokeCollection RemovedStrokes { get; set; }
+    }
+
     public class WorkspaceTab
     {
         public string Id { get; set; } = Guid.NewGuid().ToString();
@@ -546,6 +559,11 @@ namespace TeachingAnnotator
         private DispatcherTimer _laserTimer;
         private DateTime _lastLaserActivityTime = DateTime.Now;
 
+        // ARCHITECT FIX: Delta Undo Engine References
+        private Stack<UndoAction> _undoStack = new Stack<UndoAction>();
+        private Stack<UndoAction> _redoStack = new Stack<UndoAction>();
+        private bool _isUndoRedoActive = false;
+
         private bool _isDraggingToolbar = false;
         private Point _toolbarDragStart;
 
@@ -563,6 +581,7 @@ namespace TeachingAnnotator
             MainInkCanvas.Cursor = Cursors.Arrow;
             LaserInkCanvas.Cursor = Cursors.Arrow;
 
+            MainInkCanvas.Strokes.StrokesChanged += MainInkCanvas_StrokesChanged;
             LaserInkCanvas.Strokes.StrokesChanged += LaserInkCanvas_StrokesChanged;
 
             _laserTimer = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(33) };
@@ -578,7 +597,6 @@ namespace TeachingAnnotator
                 }
             };
             
-            // ARCHITECT FIX: 7 Minute Auto-Save Interval
             _autoSaveTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(7) };
             _autoSaveTimer.Tick += async (s, e) => { await ExecuteAutoSaveAsync(); };
             _autoSaveTimer.Start();
@@ -593,6 +611,46 @@ namespace TeachingAnnotator
             UpdateZoomUI();
         }
 
+        // ARCHITECT FIX: Zero-RAM Delta Undo Tracker
+        private void MainInkCanvas_StrokesChanged(object sender, StrokeCollectionChangedEventArgs e)
+        {
+            if (_isUndoRedoActive || _isUpdatingUI) return;
+
+            var action = new UndoAction 
+            { 
+                AddedStrokes = new StrokeCollection(e.Added), 
+                RemovedStrokes = new StrokeCollection(e.Removed) 
+            };
+
+            if (action.AddedStrokes.Count > 0 || action.RemovedStrokes.Count > 0) 
+            {
+                _undoStack.Push(action);
+                _redoStack.Clear();
+            }
+        }
+
+        private void PerformUndo()
+        {
+            if (_undoStack.Count == 0) return;
+            _isUndoRedoActive = true;
+            var action = _undoStack.Pop();
+            if (action.AddedStrokes.Count > 0) MainInkCanvas.Strokes.Remove(action.AddedStrokes);
+            if (action.RemovedStrokes.Count > 0) MainInkCanvas.Strokes.Add(action.RemovedStrokes);
+            _redoStack.Push(action);
+            _isUndoRedoActive = false;
+        }
+
+        private void PerformRedo()
+        {
+            if (_redoStack.Count == 0) return;
+            _isUndoRedoActive = true;
+            var action = _redoStack.Pop();
+            if (action.RemovedStrokes.Count > 0) MainInkCanvas.Strokes.Remove(action.RemovedStrokes);
+            if (action.AddedStrokes.Count > 0) MainInkCanvas.Strokes.Add(action.AddedStrokes);
+            _undoStack.Push(action);
+            _isUndoRedoActive = false;
+        }
+
         private void LaserActivity_MouseDown(object sender, MouseButtonEventArgs e) { if (LaserBtn.IsChecked == true) _lastLaserActivityTime = DateTime.Now; }
         private void LaserActivity_StylusDown(object sender, StylusDownEventArgs e) { if (LaserBtn.IsChecked == true) _lastLaserActivityTime = DateTime.Now; }
         private void LaserActivity_StylusMove(object sender, StylusEventArgs e) { if (LaserBtn.IsChecked == true && !e.InAir) _lastLaserActivityTime = DateTime.Now; }
@@ -604,8 +662,6 @@ namespace TeachingAnnotator
             {
                 foreach (var stroke in e.Added) _laserStrokes.Add(new LaserStrokeData(stroke));
                 _lastLaserActivityTime = DateTime.Now;
-                
-                // ARCHITECT FIX: Only run laser timer when there is actually something to fade
                 if (!_laserTimer.IsEnabled) _laserTimer.Start();
             }
         }
@@ -637,7 +693,6 @@ namespace TeachingAnnotator
             _scrollDebounceTimer.Start();
         }
 
-        // ARCHITECT FIX: Memory Leak Purge
         private async Task ManagePdfMemory()
         {
             if (_activeTab == null || _activeTab.Document == null) return;
@@ -648,7 +703,6 @@ namespace TeachingAnnotator
             try
             {
                 int centerPage = _activeTab.CurrentPage;
-                
                 double unscaledOffset = MainScroll.VerticalOffset / _zoom;
                 double viewportHeight = (MainScroll.ViewportHeight > 0 ? MainScroll.ViewportHeight : 1080) / _zoom;
                 double buffer = viewportHeight * 1.5; 
@@ -667,8 +721,6 @@ namespace TeachingAnnotator
                             using (var page = _activeTab.Document.GetPage((uint)i))
                             using (var stream = new InMemoryRandomAccessStream())
                             {
-                                // ARCHITECT FIX: Dropped Render Multiplier from 3.0 to 2.0. 
-                                // This saves nearly 55% of your RAM per loaded page without hurting visual fidelity.
                                 var options = new Windows.Data.Pdf.PdfPageRenderOptions { 
                                     DestinationWidth = (uint)(page.Size.Width * 2.0), 
                                     DestinationHeight = (uint)(page.Size.Height * 2.0) 
@@ -706,12 +758,7 @@ namespace TeachingAnnotator
             finally
             {
                 _isRenderingMemory = false;
-                
-                // ARCHITECT FIX: Evict "Ghost" Bitmaps immediately from the Large Object Heap
-                if (memoryFreed) 
-                {
-                    GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, false);
-                }
+                if (memoryFreed) GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, false);
             }
         }
 
@@ -863,9 +910,19 @@ namespace TeachingAnnotator
             }
         }
 
+        // ARCHITECT FIX: Manual Save Button integration
+        private async void ManualSave_Click(object sender, RoutedEventArgs e)
+        {
+            SaveStatusText.Text = "Saving...";
+            await ExecuteAutoSaveAsync();
+            SaveStatusText.Text = "Saved!";
+            await Task.Delay(2000);
+            SaveStatusText.Text = "";
+        }
+
         private async Task ExecuteAutoSaveAsync()
         {
-            SaveTabState(); 
+            SaveTabState();
             
             AppSettings settings = new AppSettings
             {
@@ -1087,6 +1144,9 @@ namespace TeachingAnnotator
             SaveTabState();
 
             _activeTab = targetTab;
+            
+            // Clear undos on tab switch
+            _undoStack.Clear(); _redoStack.Clear();
             LaserInkCanvas.Strokes.Clear(); _laserStrokes.Clear();
 
             _zoom = _activeTab.Zoom;
@@ -1125,11 +1185,13 @@ namespace TeachingAnnotator
             
             RefreshWorkspaceBounds();
 
+            _isUpdatingUI = true; // Supress StrokesChanged during load
             if (!string.IsNullOrEmpty(_activeTab.PdfFilePath)) {
                 MainInkCanvas.Strokes = _activeTab.StrokesPerPage.ContainsKey(1) ? _activeTab.StrokesPerPage[1].Clone() : new StrokeCollection();
             } else {
                 MainInkCanvas.Strokes = _activeTab.StrokesPerPage.ContainsKey(_activeTab.CurrentPage) ? _activeTab.StrokesPerPage[_activeTab.CurrentPage].Clone() : new StrokeCollection();
             }
+            _isUpdatingUI = false;
             
             RenderTabsUI(); UpdatePageUI(); SyncToolToUI(); ApplyTheme();
             
@@ -1169,7 +1231,6 @@ namespace TeachingAnnotator
                         targetTab.PdfRenderedPages.Add(new PdfPageModel 
                         { 
                             ImageSource = null, 
-                            // ARCHITECT FIX: Width & Height natively scaled to 2.0x for UI calculation
                             Width = page.Size.Width * 2.0, 
                             Height = page.Size.Height * 2.0, 
                             StartY = currentY 
@@ -1358,9 +1419,13 @@ namespace TeachingAnnotator
         private void LoadPage(int page)
         {
             if (_activeTab == null) return;
+            
+            _isUpdatingUI = true; // Supress Undo Tracker
             if (_activeTab.StrokesPerPage.ContainsKey(page)) MainInkCanvas.Strokes = _activeTab.StrokesPerPage[page].Clone();
             else MainInkCanvas.Strokes.Clear();
-            LaserInkCanvas.Strokes.Clear(); _laserStrokes.Clear();
+            _isUpdatingUI = false;
+
+            _undoStack.Clear(); _redoStack.Clear(); LaserInkCanvas.Strokes.Clear(); _laserStrokes.Clear();
         }
 
         private void PrevPage_Click(object sender, RoutedEventArgs e) 
@@ -1395,8 +1460,6 @@ namespace TeachingAnnotator
             _activeTab.TotalPages--; if (_activeTab.CurrentPage > _activeTab.TotalPages) _activeTab.CurrentPage = _activeTab.TotalPages;
             LoadPage(_activeTab.CurrentPage); UpdatePageUI();
         }
-
-        private void MainInkCanvas_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e) { } // Architect: Deliberately blank to prevent stroke history bloat
 
         private void UpdateZoomUI()
         {
@@ -1506,8 +1569,11 @@ namespace TeachingAnnotator
             }
 
             if (Keyboard.Modifiers == ModifierKeys.Control) { 
+                if (e.Key == Key.Z) { PerformUndo(); return; } 
+                if (e.Key == Key.Y) { PerformRedo(); return; } 
                 if (e.Key == Key.C) { CopySelectedStrokes(); return; } 
                 if (e.Key == Key.V) { PasteStrokesAtMouse(); return; } 
+                if (e.Key == Key.S) { ManualSave_Click(null, null); return; }
                 if (e.Key == Key.OemPlus || e.Key == Key.Add) { PerformZoom(0.25); return; }
                 if (e.Key == Key.OemMinus || e.Key == Key.Subtract) { PerformZoom(-0.25); return; }
                 if (e.Key == Key.D0 || e.Key == Key.NumPad0) { PerformZoom(1.0 - _zoom); return; }
@@ -1630,7 +1696,6 @@ namespace TeachingAnnotator
         private void MainInkCanvas_MouseLeave(object sender, MouseEventArgs e) => CustomDotCursor.Visibility = Visibility.Hidden;
         private void MainInkCanvas_MouseEnter(object sender, MouseEventArgs e) { if (SelectBtn.IsChecked != true && PointerBtn.IsChecked != true) CustomDotCursor.Visibility = Visibility.Visible; }
 
-        // ARCHITECT FIX: CPU Cycle Saver - Timer pauses itself when idle
         private void LaserTimer_Tick(object sender, EventArgs e)
         {
             if (_laserStrokes.Count == 0) 
